@@ -3,7 +3,7 @@ submodule(options_interface) options_implementation
     use icar_constants,             only : kMAINTAIN_LON, MAXFILELENGTH, MAXVARLENGTH, MAX_NUMBER_FILES, MAXLEVELS, kNO_STOCHASTIC, kVERSION_STRING, pi
     use options_types,              only : parameter_options_type, physics_type, mp_options_type, lt_options_type,      &
                                            block_options_type, adv_options_type, lsm_options_type, bias_options_type,   &
-                                           cu_options_type
+                                           cu_options_type, wind_type
     use io_routines,                only : io_newunit
     use time_io,                    only : find_timestep_in_file
     use time_delta_object,          only : time_delta_t
@@ -52,6 +52,7 @@ contains
 
         call version_check(         options_filename,   this%parameters)
         call physics_namelist(      options_filename,   this)
+        call wind_namelist(         options_filename,   this)
         call var_namelist(          options_filename,   this%parameters)
         call parameters_namelist(   options_filename,   this%parameters)
         call model_levels_namelist( options_filename,   this%parameters)
@@ -1861,6 +1862,47 @@ contains
             deallocate(ext_wind_files)
         endif
     end subroutine filename_namelist
+    
+    
+    subroutine wind_namelist(filename, options)
+        implicit none
+        character(len=*),             intent(in)    :: filename
+        type(options_t),    intent(inout) :: options
+        
+        integer :: name_unit                            ! logical unit number for namelist
+        !Define parameters
+        integer :: solver, roughness
+        logical :: terr_diff, Sx
+        real    :: Sx_dmax
+        
+        !Make name-list
+        namelist /wind/ solver, terr_diff, Sx, Sx_dmax, roughness
+        
+        !Set defaults
+        solver = 0 ! 0 = Simple kinematic method (balance uvw),
+                   ! 1 = O'brien method, forcing winds to 0 at model top and back-itterating
+        terr_diff = .False.
+        Sx = .False.
+        roughness = 0 ! No roughness correction, the only one implemented so far
+        Sx_dmax = 300.0
+        
+        !Read namelist file
+        open(io_newunit(name_unit), file=filename)
+        read(name_unit,nml=wind)
+        close(name_unit)
+        
+        !Perform checks
+        
+        
+        !Store into options object
+        options%wind%solver = solver
+        options%wind%terr_diff = terr_diff
+        options%wind%Sx = Sx
+        options%wind%Sx_dmax = Sx_dmax
+        options%wind%roughness = roughness
+
+    
+    end subroutine wind_namelist
 
 
 end submodule

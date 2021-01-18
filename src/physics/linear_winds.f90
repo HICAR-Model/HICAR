@@ -760,9 +760,9 @@ contains
             ! $omp do
 
             if (this_image()==1) print*, "Starting"
-            if (this_image()==1) print*, maxval(domain%z_interface%data_3d(:,nz,:)), maxval(domain%global_terrain), maxval(domain%z_interface%data_3d(:,nz,:)-domain%global_terrain)
-            if (this_image()==1) print*, minval(domain%z_interface%data_3d(:,nz,:)), minval(domain%global_terrain), minval(domain%z_interface%data_3d(:,nz,:)-domain%global_terrain)
-            if (this_image()==1) print*, shape(domain%z_interface%data_3d), shape(domain%global_terrain)
+            !if (this_image()==1) print*, maxval(domain%z_interface%data_3d(:,nz,:)), maxval(domain%global_terrain), maxval(domain%z_interface%data_3d(:,nz,:)-domain%global_terrain)
+            !if (this_image()==1) print*, minval(domain%z_interface%data_3d(:,nz,:)), minval(domain%global_terrain), minval(domain%z_interface%data_3d(:,nz,:)-domain%global_terrain)
+            !if (this_image()==1) print*, shape(domain%z_interface%data_3d), shape(domain%global_terrain)
 
             do ijk = start_pos, stop_pos
                 ! loop over the combined ijk space to improve parallelization (more granular parallelization)

@@ -17,6 +17,7 @@ submodule(domain_interface) domain_implementation
     use geo,                  only : geo_lut, geo_interp, geo_interp2d, standardize_coordinates
     use array_utilities,      only : array_offset_x, array_offset_y, smooth_array, smooth_array_2d, array_offset_x_2d, array_offset_y_2d
     use vertical_interpolation,only : vinterp, vLUT
+    use wind_surf,            only : calc_Sx, calc_TPI
 
     implicit none
 
@@ -1107,6 +1108,11 @@ contains
         deallocate(temp)
 
         call setup_geo(this%geo,   this%latitude%data_2d,   this%longitude%data_2d,   this%z%data_3d, options%parameters%longitude_system)
+        
+        ! Setup variables applicable to near-surface wind modifications
+        if (options%wind%Sx) then
+            call setup_Sx(this, options)
+        endif
 
 
     end subroutine initialize_core_variables
@@ -1327,6 +1333,39 @@ contains
     end subroutine
 
 
+    subroutine setup_Sx(this, options)
+        implicit none
+        class(domain_t), intent(inout)  :: this
+        type(options_t), intent(in)     :: options
+        
+        character(len=(len(trim(options%parameters%init_conditions_file))+3)) :: filename
+        logical          :: fexist
+        real, allocatable :: temporary_data(:,:,:,:)
+        
+        filename = trim(options%parameters%init_conditions_file)
+        filename = filename(1:(len(filename)-6))//'_Sx.nc'
+        !Check if we already have an Sx file
+        inquire(file=filename,exist=fexist)
+        
+        !If we don't have an Sx file saved, build one
+        !if (.not.(fexist)) then
+        if (this_image()==1) write(*,*) "    Calculating Sx and TPI for wind modification"
+        call calc_Sx(this, options, filename)
+        call calc_TPI(this)
+        !endif
+    
+        !Load Sx from file into domain_array
+        !Assume 8 wind-directions for Sx
+        !allocate(this%Sx( 1:72, this%grid2d% ims : this%grid2d% ime, 1:30,&
+        !                       this%grid2d% jms : this%grid2d% jme) )        
+
+        !call io_read(filename, 'Sx', temporary_data)
+
+        !this%Sx = temporary_data(:,this%grid%ims:this%grid%ime, 1:30, this%grid%jms:this%grid%jme)
+        
+        !deallocate(temporary_data)
+        
+    end subroutine setup_Sx
     
     
     !>------------------------------------------------------------

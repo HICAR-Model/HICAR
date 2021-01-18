@@ -3,7 +3,7 @@ module options_interface
     use icar_constants,             only : kMAX_STRING_LENGTH, kMAX_STORAGE_VARS
     use options_types,              only : parameter_options_type, physics_type, mp_options_type, lt_options_type,      &
                                            block_options_type, adv_options_type, lsm_options_type, bias_options_type,   &
-                                           cu_options_type
+                                           cu_options_type, wind_type
 
     implicit none
 
@@ -29,6 +29,8 @@ module options_interface
 
         ! defines which physics package to be used.
         type(physics_type)              :: physics
+
+        type(wind_type)                 :: wind
 
         ! physics parameterization options
         type(mp_options_type)           :: mp_options
