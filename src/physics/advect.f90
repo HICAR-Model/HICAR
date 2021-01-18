@@ -100,13 +100,13 @@ contains
 !
 !     end subroutine flux2
 
-    subroutine advect3d(q,u,v,w,rho,dz,dx,nx,nz,ny,jaco,options)
+    subroutine advect3d(q,u,v,w,rho_in,dz,dx,nx,nz,ny,jaco,options)
         implicit none
         real, dimension(1:nx,  1:nz,1:ny),  intent(inout)   :: q
         real, dimension(1:nx,  1:nz,1:ny),  intent(in)      :: w
         real, dimension(1:nx-1,1:nz,1:ny),  intent(in)      :: u
         real, dimension(1:nx,  1:nz,1:ny-1),intent(in)      :: v
-        real, dimension(:, :, :),           intent(in)      :: rho
+        real, dimension(1:nx,  1:nz,1:ny),  intent(in)      :: rho_in
         real, dimension(:, :, :),           intent(in)      :: dz
         real,                               intent(in)      :: dx
         integer,                            intent(in)      :: ny, nz, nx
@@ -119,6 +119,11 @@ contains
         real, dimension(1:nx-1,1:nz)    :: f1   ! historical note, there used to be an f2 to store f[x+1]
         real, dimension(1:nx-2,1:nz)    :: f3,f4
         real, dimension(1:nx-2,1:nz-1)  :: f5
+        real, dimension(1:nx,1:nz,1:ny) :: rho
+        
+        rho = 1
+        if (options%parameters%advect_density) rho = rho_in
+        
         
         ! Multiply dz by jacobian so that all advection terms will be divided by mass-centered jacobian
 
@@ -127,6 +132,7 @@ contains
         do i=1,ny
             qin(:,:,i)=q(:,:,i)
         enddo
+        
         !$omp end do
         !$omp barrier
         !$omp do schedule(static)
@@ -138,17 +144,17 @@ contains
             ! call flux2(qin(2:nx-1,:,i),     qin(2:nx-1,:,i+1), v(2:nx-1,:,i),     nx-2,nz,  1,f3)  ! f3 = Vy1
             ! call flux2(qin(2:nx-1,:,i-1),   qin(2:nx-1,:,i),   v(2:nx-1,:,i-1),   nx-2,nz,  1,f4)  ! f4 = Vy0
             ! call flux2(qin(2:nx-1,1:nz-1,i),qin(2:nx-1,2:nz,i),w(2:nx-1,1:nz-1,i),nx-2,nz-1,1,f5)  ! f5 = Wz0 and Wz1
-            f1= ((u(1:nx-1,:,i)      + ABS(u(1:nx-1,:,i)))      * qin(1:nx-1,:,i)    + &
-                 (u(1:nx-1,:,i)      - ABS(u(1:nx-1,:,i)))      * qin(2:nx,:,i))     / 2
+            f1= ((u(1:nx-1,:,i)      + ABS(u(1:nx-1,:,i)))      * qin(1:nx-1,:,i) * rho(1:nx-1,:,i)    + &
+                 (u(1:nx-1,:,i)      - ABS(u(1:nx-1,:,i)))      * qin(2:nx,:,i) * rho(2:nx,:,i))     / 2
 
-            f3= ((v(2:nx-1,:,i)      + ABS(v(2:nx-1,:,i)))      * qin(2:nx-1,:,i)    + &
-                 (v(2:nx-1,:,i)      - ABS(v(2:nx-1,:,i)))      * qin(2:nx-1,:,i+1)) / 2
+            f3= ((v(2:nx-1,:,i)      + ABS(v(2:nx-1,:,i)))      * qin(2:nx-1,:,i) * rho(2:nx-1,:,i)    + &
+                 (v(2:nx-1,:,i)      - ABS(v(2:nx-1,:,i)))      * qin(2:nx-1,:,i+1) * rho(2:nx-1,:,i+1)) / 2
 
-            f4= ((v(2:nx-1,:,i-1)    + ABS(v(2:nx-1,:,i-1)))    * qin(2:nx-1,:,i-1)  + &
-                 (v(2:nx-1,:,i-1)    - ABS(v(2:nx-1,:,i-1)))    * qin(2:nx-1,:,i))   / 2
+            f4= ((v(2:nx-1,:,i-1)    + ABS(v(2:nx-1,:,i-1)))    * qin(2:nx-1,:,i-1) * rho(2:nx-1,:,i-1)  + &
+                 (v(2:nx-1,:,i-1)    - ABS(v(2:nx-1,:,i-1)))    * qin(2:nx-1,:,i) * rho(2:nx-1,:,i))   / 2
 
-            f5= ((w(2:nx-1,1:nz-1,i) + ABS(w(2:nx-1,1:nz-1,i))) * qin(2:nx-1,1:nz-1,i) + &
-                 (w(2:nx-1,1:nz-1,i) - ABS(w(2:nx-1,1:nz-1,i))) * qin(2:nx-1,2:nz,i))  / 2
+            f5= ((w(2:nx-1,1:nz-1,i) + ABS(w(2:nx-1,1:nz-1,i))) * qin(2:nx-1,1:nz-1,i) * rho(2:nx-1,1:nz-1,i) + &
+                 (w(2:nx-1,1:nz-1,i) - ABS(w(2:nx-1,1:nz-1,i))) * qin(2:nx-1,2:nz,i) * rho(2:nx-1,2:nz,i))  / 2
 
            ! if (options%parameters%advect_density) then
            !     ! perform horizontal advection
@@ -167,14 +173,14 @@ contains
            !                          / rho(2:nx-1,nz,i) / dz(2:nx-1,nz,i)
            ! else
                ! perform horizontal advection, from difference terms
-               q(2:nx-1,:,i)      = q(2:nx-1,:,i)       - ((f1(2:nx-1,:) - f1(1:nx-2,:)) + (f3 - f4)) /(dx*dz(2:nx-1,:,i)*jaco(2:nx-1,:,i))                      
+               q(2:nx-1,:,i)      = q(2:nx-1,:,i)       - ((f1(2:nx-1,:) - f1(1:nx-2,:)) + (f3 - f4)) /(dx*dz(2:nx-1,:,i)*jaco(2:nx-1,:,i)*rho(2:nx-1,:,i))                      
                ! then vertical (order doesn't matter because fluxes f1-6 are calculated before applying them)
                ! add fluxes to middle layers
-               q(2:nx-1,2:nz-1,i) = q(2:nx-1,2:nz-1,i)  - (f5(:,2:nz-1) - f5(:,1:nz-2)) / (dz(2:nx-1,2:nz-1,i)*jaco(2:nx-1,2:nz-1,i))
+               q(2:nx-1,2:nz-1,i) = q(2:nx-1,2:nz-1,i)  - (f5(:,2:nz-1) - f5(:,1:nz-2)) / (dz(2:nx-1,2:nz-1,i)*jaco(2:nx-1,2:nz-1,i)*rho(2:nx-1,2:nz-1,i))
                ! add fluxes to bottom layer
-               q(2:nx-1,1,i)      = q(2:nx-1,1,i)       - f5(:,1) / (dz(2:nx-1,1,i)*jaco(2:nx-1,1,i))
+               q(2:nx-1,1,i)      = q(2:nx-1,1,i)       - f5(:,1) / (dz(2:nx-1,1,i)*jaco(2:nx-1,1,i) * rho(2:nx-1,1,i) )
                ! add fluxes to top layer
-               q(2:nx-1,nz,i)     = q(2:nx-1,nz,i)      - (qin(2:nx-1,nz,i) * w(2:nx-1,nz,i) - f5(:,nz-1)) / (dz(2:nx-1,nz,i)*jaco(2:nx-1,nz,i))
+               q(2:nx-1,nz,i)     = q(2:nx-1,nz,i)      - (qin(2:nx-1,nz,i) * w(2:nx-1,nz,i) - f5(:,nz-1)) / (dz(2:nx-1,nz,i)*jaco(2:nx-1,nz,i)*rho(2:nx-1,nz,i))
            ! endif
         enddo
         !$omp end do

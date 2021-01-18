@@ -22,8 +22,19 @@ module options_types
         integer::convection
         integer::windtype
     end type physics_type
-
-
+    
+    
+    ! ------------------------------------------------
+    ! store wind solver and parameterization options
+    ! ------------------------------------------------
+    type wind_type
+        integer :: solver
+        logical :: terr_diff
+        logical :: Sx
+        real    :: Sx_dmax
+        integer :: roughness
+    end type wind_type
+    
     ! ------------------------------------------------
     ! store Microphysics sensitivity options
     ! ------------------------------------------------

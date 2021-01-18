@@ -374,6 +374,7 @@ OBJS=	$(BUILD)driver.o            \
 		$(BUILD)output_h.o			\
 		$(BUILD)output_obj.o		\
 		$(BUILD)wind.o				\
+		$(BUILD)wind_surf.o		\
 		$(BUILD)linear_winds.o		\
 		$(BUILD)fftshift.o			\
 		$(BUILD)fftw.o				\
@@ -880,7 +881,7 @@ $(BUILD)domain_h.o: $(OBJECTS)domain_h.f90 $(BUILD)options_h.o $(BUILD)exchangea
 $(BUILD)domain_obj.o: $(OBJECTS)domain_obj.f90 $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)grid_h.o 	\
 					$(BUILD)string.o $(BUILD)assertions.o $(BUILD)geo_reader.o 							\
 					$(BUILD)atm_utilities.o $(BUILD)io_routines.o $(BUILD)co_utilities.o 				\
-					$(BUILD)array_utilities.o $(BUILD)vinterp.o
+					$(BUILD)array_utilities.o $(BUILD)vinterp.o $(BUILD)wind_surf.o
 
 ###################################################################
 #	Core initial and boundary condition and time steping
@@ -1031,7 +1032,9 @@ $(BUILD)adv_mpdata.o:$(PHYS)adv_mpdata.f90 $(PHYS)adv_mpdata_FCT_core.f90 $(BUIL
 #	Wind related code
 ###################################################################
 $(BUILD)wind.o:$(PHYS)wind.f90 $(BUILD)data_structures.o $(BUILD)exchangeable_h.o \
-				$(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)linear_winds.o
+				$(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)linear_winds.o $(BUILD)wind_surf.o
+
+$(BUILD)wind_surf.o:$(PHYS)wind_surf.f90 $(BUILD)data_structures.o $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)io_routines.o
 
 #########################
 # $(BUILD)winds_blocking.o $(BUILD)linear_winds.o
