@@ -75,6 +75,7 @@ contains
         allocate(divergence(ims:ime,kms:kme,jms:jme))
 
         call calc_divergence(divergence,u,v,w,jaco_u,jaco_v,jaco_w,dz,dx,jaco,rho,smooth_height,options,horz_only=.True.)
+        divergence = divergence * vert_div_weight
 
         ! If this becomes a bottle neck in the code it could be parallelized over y
         ! loop over domain levels
@@ -389,7 +390,7 @@ contains
 
         !First call bal_uvw to generate an initial-guess for vertical winds
         call balance_uvw(domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w,domain%advection_dz,&
-          domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options,vert_weight=0.10000000)
+          domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options,vert_weight=1.00000000)
   
         allocate(div(ims:ime,kms:kme,jms:jme))
         allocate(ADJ_coef(ims:ime,kms:kme,jms:jme))
