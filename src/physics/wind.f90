@@ -204,11 +204,11 @@ contains
                                    (w_met(ims:ime,k,jms:jme)-w_met(ims:ime,k-1,jms:jme))/(dz(ims:ime,k,jms:jme))
                 endif
             enddo
-            if (options%parameters%advect_density) then
-                div = div/(jaco*rho)
-            else
-                div = div/jaco
-            end if
+            !if (options%parameters%advect_density) then
+            !    div = div/(jaco*rho)
+            !else
+            !    div = div/jaco
+            !end if
         endif
 
     end subroutine calc_divergence
@@ -358,6 +358,7 @@ contains
         
         ! interal parameters
         real, allocatable, dimension(:,:,:) :: div, ADJ,ADJ_coef, U_cor, V_cor, current_u, current_v, current_w
+        real, allocatable, dimension(:,:)   :: wind_layer
         real    :: corr_factor
         integer :: it, k, j, i, ims, ime, jms, jme, kms, kme, wind_k
         logical :: update
@@ -397,33 +398,36 @@ contains
         allocate(ADJ(ims:ime,kms:kme,jms:jme))
         allocate(U_cor(ims:ime,kms:kme,jms:jme))
         allocate(V_cor(ims:ime,kms:kme,jms:jme))
-
+        allocate(wind_layer(ims:ime,jms:jme))
         ! Calculate and apply correction to w-winds
-        wind_k = kme
-        do k = kms,kme
+        wind_k = kme-1
+        do k = kms,kme-1
             if (sum(domain%advection_dz(ims,1:k,jms)) > domain%smooth_height) then
                 wind_k = k
                 exit
             endif
         enddo
-        
+
+        !Store wind-layer to be subtracted, since we will be modifying vertical winds     
+        wind_layer = domain%w%data_3d(:,wind_k,:)
+
         !Compute relative correction factors for U and V based on input speeds
         U_cor = ABS(domain%u%data_3d(ims:ime,:,jms:jme))/ &
                 (ABS(domain%u%data_3d(ims:ime,:,jms:jme))+ABS(domain%v%data_3d(ims:ime,:,jms:jme)))
                 
         do k = kms,kme
-            corr_factor = ((sum(domain%advection_dz(ims,1:k,jms)))/domain%smooth_height)
-            !corr_factor = (k*1.0)/wind_k
+            !corr_factor = ((sum(domain%advection_dz(ims,1:k,jms)))/domain%smooth_height)
+            corr_factor = (k*1.0)/wind_k
             corr_factor = min(corr_factor,1.0)
             do i = ims,ime
                 do j = jms,jme
-                    domain%w%data_3d(i,k,j) = domain%w%data_3d(i,k,j) - corr_factor * (domain%w%data_3d(i,wind_k,j))
+                    domain%w%data_3d(i,k,j) = domain%w%data_3d(i,k,j) - corr_factor * wind_layer(i,j)
                     
                     !if ( (domain%u%data_3d(i,k,j)+domain%v%data_3d(i,k,j)) == 0) U_cor(i,k,j) = 0.5
                 enddo
             enddo
             ! Compute this now, since it wont change in the loop
-            ADJ_coef(:,k,:) = -2/domain%dx 
+            ADJ_coef(:,k,:) = -(2*domain%jacobian(:,k,:))/domain%dx 
         enddo
         
         !V_cor = 1 - U_cor 
