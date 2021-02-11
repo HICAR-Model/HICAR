@@ -368,13 +368,13 @@ contains
                         !Consider exposure, only for first 10-levels
                         ! If Sx is negative, compute exposure correction
                         if (Sx_U(i,1,j) < 0) then
-                            Sx_U_corr = (Sx_U(i,1,j)/30) * ((11-k)/10.0) !Exposure used to be /30
+                            Sx_U_corr = (Sx_U(i,1,j)/45) * ((11-k)/10.0) !Exposure used to be /30
                             !w(i,k,j) = 5 * ((11-k)/10.0)
                         end if
                         
                         ! If Sx is negative, compute exposure correction
                         if (Sx_V(i,1,j) < 0) then
-                            Sx_V_corr = (Sx_V(i,1,j)/30) * ((11-k)/10.0) !Exposure used to be /30
+                            Sx_V_corr = (Sx_V(i,1,j)/45) * ((11-k)/10.0) !Exposure used to be /30
                             !w(i,k,j) = 5 * ((11-k)/10.0)
                         end if
                     else 

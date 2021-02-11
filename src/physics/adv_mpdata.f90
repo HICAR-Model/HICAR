@@ -326,13 +326,13 @@ contains
                 call upwind_advection(q, u, v, w, q2, dx,dz,nx,nz,ny,jaco)
             else
                 call mpdata_fluxes(q2, u, v, w, u2,v2,w2, nx,nz,ny)
-                if (this_image()==100) write(*,*) maxval(u2)
-                if ( (sum(abs(u2))+sum(abs(v2))+sum(abs(w2)) < 0.01)) write(*,*) "no ADV corr--1"
+                !if (this_image()==100) write(*,*) maxval(u2)
+                !if ( (sum(abs(u2))+sum(abs(v2))+sum(abs(w2)) < 0.01)) write(*,*) "no ADV corr--1"
 
                 if (options%adv_options%flux_corrected_transport) then
                     call flux_limiter(q, q2, u2,v2,w2, nx,nz,ny)
                 endif
-                if ( (sum(abs(u2))+sum(abs(v2))+sum(abs(w2)) < 0.01)) write(*,*) "no ADV corr--2"
+                !if ( (sum(abs(u2))+sum(abs(v2))+sum(abs(w2)) < 0.01)) write(*,*) "no ADV corr--2"
                 call upwind_advection(q2, u2, v2, w2, q, dx,dz,nx,nz,ny,jaco)
             endif
             

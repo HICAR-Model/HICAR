@@ -14,6 +14,7 @@ module wind
     use exchangeable_interface,   only : exchangeable_t
     use domain_interface,  only : domain_t
     use options_interface, only : options_t
+    use grid_interface,    only : grid_t
     use wind_surf, only         : apply_Sx
     use io_routines, only : io_read
 
@@ -36,18 +37,14 @@ contains
         real,           intent(in)    :: jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), dz(:,:,:), jaco(:,:,:), rho(:,:,:)
         real,           intent(in)    :: dx, smooth_height
         type(options_t),intent(in)    :: options
-        real, optional, intent(in)    :: vert_weight
+        real, optional, intent(in)    :: vert_weight(:,:,:)
 
         real, allocatable, dimension(:,:) :: rhou, rhov, rhow
         real, allocatable, dimension(:,:,:) :: divergence
-        real :: vert_div_weight
+        real, allocatable, dimension(:,:,:) :: vert_div_weight
         integer :: ims, ime, jms, jme, kms, kme, k
 
-
-        vert_div_weight = 1.000000000
-        if (present(vert_weight)) vert_div_weight=vert_weight
-
-        if (this_image()==1) write(*,*) "vert_div_weight: ",vert_div_weight
+        !if (this_image()==1) write(*,*) "vert_div_weight: ",vert_div_weight
 
         ! associate(u => domain%u%data_3d,  &
         !           v => domain%v%data_3d,  &
@@ -61,6 +58,10 @@ contains
         jme = ubound(w,3)
 
         w = 0
+        
+        allocate(vert_div_weight(ims:ime,kms:kme,jms:jme))
+        vert_div_weight = 1.000000000
+        if (present(vert_weight)) vert_div_weight=vert_weight
 
         !------------------------------------------------------------
         ! These could be module level to prevent lots of allocation/deallocation/reallocations
@@ -214,19 +215,21 @@ contains
     end subroutine calc_divergence
     
 
+
     !>------------------------------------------------------------
     !! Correct for a grid that is locally rotated with respect to EW,NS
     !!
     !! Assumes forcing winds are EW, NS relative, not grid relative.
     !!
     !!------------------------------------------------------------
-    subroutine make_winds_grid_relative(u, v, w, sintheta, costheta)
+    subroutine make_winds_grid_relative(u, v, w, grid, sintheta, costheta)
         real, intent(inout) :: u(:,:,:), v(:,:,:), w(:,:,:)
+        type(grid_t),   intent(in)    :: grid
         double precision, intent(in)    :: sintheta(:,:), costheta(:,:)
 
+        real, dimension(:,:), allocatable :: cos_shifted_u,sin_shifted_u,cos_shifted_v,sin_shifted_v,u_shifted_v,v_shifted_u
         real, dimension(:), allocatable :: u_local,v_local
-
-        integer :: k, j, ims, ime, jms, jme, kms, kme
+        integer :: k, j, ims, ime, jms, jme, kms, kme, ids, ide, jds, jde
 
         ims = lbound(w,1)
         ime = ubound(w,1)
@@ -235,8 +238,53 @@ contains
         jms = lbound(w,3)
         jme = ubound(w,3)
 
+        ids = lbound(costheta,1)
+        ide = ubound(costheta,1)
+        jds = lbound(costheta,2)
+        jde = ubound(costheta,2)
+
+        !allocate(cos_shifted_u(ids:ide+1,jds:jde))
+        !allocate(sin_shifted_u(ids:ide+1,jds:jde))
+        !allocate(cos_shifted_v(ids:ide,jds:jde+1))
+        !allocate(sin_shifted_v(ids:ide,jds:jde+1))
+        !allocate(u_shifted_v(ims:ime,jms:jme+1))
+        !allocate(v_shifted_u(ims:ime+1,jms:jme))
+        
+        !cos_shifted_u(ids+1:ide,:) = (costheta(ids:ide-1,:) + costheta(ids+1:ide,:))/2
+        !cos_shifted_u(ids,:) = costheta(ids,:)
+        !cos_shifted_u(ide+1,:) = costheta(ide,:)
+        
+        !sin_shifted_u(ids+1:ide,:) = (sintheta(ids:ide-1,:) + sintheta(ids+1:ide,:))/2
+        !sin_shifted_u(ids,:) = sintheta(ids,:)
+        !sin_shifted_u(ide+1,:) = sintheta(ide,:)
+        
+        !cos_shifted_v(:,jds+1:jde) = (costheta(:,jds:jde-1) + costheta(:,jds+1:jde))/2
+        !cos_shifted_v(:,jds) = costheta(:,jds)
+        !cos_shifted_v(:,jde+1) = costheta(:,jde)
+        
+        !sin_shifted_v(:,jds+1:jde) = (sintheta(:,jds:jde-1) + sintheta(:,jds+1:jde))/2
+        !sin_shifted_v(:,jds) = sintheta(:,jds)
+        !sin_shifted_v(:,jde+1) = sintheta(:,jde)
+        
+        
+        !do k = kms, kme
+        !    u_shifted_v(:,jms+1:jme+1) = (u(ims:ime,k,:) + u(ims+1:ime+1,k,:))/2
+        !    u_shifted_v(:,jms) = u_shifted_v(:,jms+1)
+            
+        !    v_shifted_u(ims+1:ime+1,:) = (v(:,k,jms:jme) + v(:,k,jms+1:jme+1))/2
+        !    v_shifted_u(ims,:) = v_shifted_u(ims+1,:)
+            
+        !    u(ims+2:ime,k,jms+1:jme-1) = u(ims+2:ime,k,jms+1:jme-1)*cos_shifted_u(ims+2:ime,jms+1:jme-1) + &
+        !                                v_shifted_u(ims+2:ime,jms+1:jme-1)*sin_shifted_u(ims+2:ime,jms+1:jme-1)
+        !    v(ims+1:ime-1,k,jms+2:jme) = v(ims+1:ime-1,k,jms+2:jme)*cos_shifted_v(ims+1:ime-1,jms+2:jme) + &
+        !                                u_shifted_v(ims+1:ime-1,jms+2:jme)*sin_shifted_v(ims+1:ime-1,jms+2:jme)
+        !enddo
+        
+        !deallocate(cos_shifted_u, sin_shifted_u, cos_shifted_v, sin_shifted_v,u_shifted_v,v_shifted_u)
+        
         allocate(u_local(ims:ime))
         allocate(v_local(ims:ime))
+
         !assumes u and v come in on a staggered Arakawa C-grid with one additional grid point in x/y for u/v respectively
         ! destagger to a centered grid (the mass grid)
         u(:ime,:,:) = (u(:ime,:,:) + u(ims+1:,:,:))/2
@@ -245,13 +293,15 @@ contains
         do j = jms, jme
             do k = kms, kme
                 ! rotate wind field to the real grid
-                u_local = u(ims:ime,k,j) * costheta(:,j) + v(ims:ime,k,j) * sintheta(ims:ime,j)
-                v_local = v(ims:ime,k,j) * costheta(:,j) + u(ims:ime,k,j) * sintheta(ims:ime,j)
+                u_local = u(ims:ime,k,j) * costheta(grid%its-1:grid%ite+1,j+grid%jts-2) &
+                        + v(ims:ime,k,j) * sintheta(grid%its-1:grid%ite+1,j+grid%jts-2)
+                v_local = v(ims:ime,k,j) * costheta(grid%its-1:grid%ite+1,j+grid%jts-2) &
+                        + u(ims:ime,k,j) * sintheta(grid%its-1:grid%ite+1,j+grid%jts-2)
                 u(:ime,k,j) = u_local
                 v(:ime,k,j) = v_local
-            enddo
+           enddo
         enddo
-        deallocate(u_local, v_local)
+        deallocate(u_local,v_local)
 
         ! put the fields back onto a staggered grid, having effectively lost two grid cells in the staggered directions
         ! estimate the "lost" grid cells by extrapolating beyond the remaining
@@ -281,16 +331,19 @@ contains
         real, allocatable, dimension(:,:,:) :: temparray
         integer :: nx, ny, nz, i, j
 
-        if (.not.allocated(domain%sintheta)) then
+        if (.not.allocated(domain%advection_dz)) then
+
             call init_winds(domain, options)
 
             ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
-            call make_winds_grid_relative(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%sintheta, domain%costheta)
+            call make_winds_grid_relative(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%grid, domain%sintheta, domain%costheta)
 
             ! flow blocking parameterization
             ! if (options%block_options%block_flow) then
             !     call add_blocked_flow(domain, options)
             ! endif
+
+            if (options%wind%Sx) call apply_Sx(domain%Sx,domain%TPI,domain%u%data_3d, domain%v%data_3d, domain%w%data_3d)
 
             ! linear winds
             if (options%physics%windtype==kWIND_LINEAR) then
@@ -309,7 +362,7 @@ contains
             endif
             ! else assumes even flow over the mountains
 
-            if (options%wind%Sx) call apply_Sx(domain%Sx,domain%TPI,domain%u%data_3d, domain%v%data_3d, domain%w%data_3d)
+            !if (options%wind%Sx) call apply_Sx(domain%Sx,domain%TPI,domain%u%data_3d, domain%v%data_3d, domain%w%data_3d)
 
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
             call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
@@ -317,8 +370,10 @@ contains
         else
 
             ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
-            call make_winds_grid_relative(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d, domain%sintheta, domain%costheta)
+            !call make_winds_grid_relative(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d, domain%grid, domain%sintheta, domain%costheta)
             
+            if (options%wind%Sx) call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d)
+
             ! linear winds
             if (options%physics%windtype==kWIND_LINEAR) then
                 call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.True.)
@@ -336,7 +391,7 @@ contains
             endif
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
 
-            if (options%wind%Sx) call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d)
+            !if (options%wind%Sx) call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d)
 
             call balance_uvw(domain% u %meta_data%dqdt_3d,      &
                              domain% v %meta_data%dqdt_3d,      &
@@ -357,7 +412,7 @@ contains
         logical, optional, intent(in) :: update_in
         
         ! interal parameters
-        real, allocatable, dimension(:,:,:) :: div, ADJ,ADJ_coef, U_cor, V_cor, current_u, current_v, current_w
+        real, allocatable, dimension(:,:,:) :: div, dial_weights, ADJ,ADJ_coef, U_cor, V_cor, current_u, current_v, current_w
         real, allocatable, dimension(:,:)   :: wind_layer
         real    :: corr_factor
         integer :: it, k, j, i, ims, ime, jms, jme, kms, kme, wind_k
@@ -389,10 +444,27 @@ contains
         call domain%u%exchange_u()
         call domain%v%exchange_v()
 
-        !First call bal_uvw to generate an initial-guess for vertical winds
-        call balance_uvw(domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w,domain%advection_dz,&
-          domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options,vert_weight=1.00000000)
-  
+        if (options%wind%Dial) then
+            allocate(dial_weights(ims:ime,kms:kme,jms:jme))
+            do k = kms,kme
+                if (k <= 10) then
+                    dial_weights(:,k,:) = 1.0
+                else if (k < kme-10) then
+                    dial_weights(:,k,:) = (1 + (10/(kme-10)) - k/(kme-10))
+                else 
+                    dial_weights(:,k,:) = (10/(kme-10))
+                endif
+            enddo
+            
+            !First call bal_uvw to generate an initial-guess for vertical winds
+            call balance_uvw(domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, & 
+                             domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options,vert_weight=dial_weights)
+        else
+            !First call bal_uvw to generate an initial-guess for vertical winds
+            call balance_uvw(domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, & 
+                        domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options)
+        endif
+
         allocate(div(ims:ime,kms:kme,jms:jme))
         allocate(ADJ_coef(ims:ime,kms:kme,jms:jme))
         allocate(ADJ(ims:ime,kms:kme,jms:jme))
@@ -400,8 +472,8 @@ contains
         allocate(V_cor(ims:ime,kms:kme,jms:jme))
         allocate(wind_layer(ims:ime,jms:jme))
         ! Calculate and apply correction to w-winds
-        wind_k = kme-1
-        do k = kms,kme-1
+        wind_k = kme-2
+        do k = kms,kme-2
             if (sum(domain%advection_dz(ims,1:k,jms)) > domain%smooth_height) then
                 wind_k = k
                 exit
@@ -512,64 +584,6 @@ contains
         endif
 
 
-
-        if (options%parameters%sinalpha_var /= "") then
-            ims = lbound(domain%latitude%data_2d, 1)
-            ime = ubound(domain%latitude%data_2d, 1)
-            jms = lbound(domain%latitude%data_2d, 2)
-            jme = ubound(domain%latitude%data_2d, 2)
-
-            if (this_image()==1) print*, "Reading Sinalph/cosalpha"
-
-            call io_read(options%parameters%init_conditions_file, options%parameters%sinalpha_var, temporary_2d)
-            domain%sintheta = temporary_2d(ims:ime, jms:jme)
-
-            call io_read(options%parameters%init_conditions_file, options%parameters%cosalpha_var, temporary_2d)
-            domain%costheta = temporary_2d(ims:ime, jms:jme)
-
-            deallocate(temporary_2d)
-        else
-
-            associate(lat => domain%latitude%data_2d,  &
-                      lon => domain%longitude%data_2d  )
-
-            ims = lbound(lat,1)
-            ime = ubound(lat,1)
-            jms = lbound(lat,2)
-            jme = ubound(lat,2)
-            do j = jms, jme
-                do i = ims, ime
-                    ! in case we are in the first or last grid, reset boundaries
-                    starti = max(ims, i-2)
-                    endi   = min(ime, i+2)
-
-                    ! change in latitude
-                    dlat = DBLE(lat(endi,j)) - lat(starti,j)
-                    ! change in longitude
-                    dlon = DBLE(lon(endi,j) - lon(starti,j)) * cos(deg2rad*DBLE(lat(i,j)))
-                    ! distance between two points
-                    dist = sqrt(DBLE(dlat)**2 + DBLE(dlon)**2)
-
-                    ! sin/cos of angles for use in rotating fields later
-                    domain%costheta(i, j) = abs(dlon / dist)
-                    domain%sintheta(i, j) = (-1) * dlat / dist
-
-                enddo
-            enddo
-
-            end associate
-        endif
-        if (options%parameters%debug .and.(this_image()==1)) then
-            print*, ""
-            print*, "Domain Geometry"
-            print*, "MAX / MIN SIN(theta) (ideally 0)"
-            print*, "   ", maxval(domain%sintheta), minval(domain%sintheta)
-            print*, "MAX / MIN COS(theta) (ideally 1)"
-            print*, "   ", maxval(domain%costheta), minval(domain%costheta)
-            print*, ""
-        endif
-
-
     end subroutine init_winds
 
     !>------------------------------------------------------------
@@ -586,15 +600,6 @@ contains
         jme = ubound(domain%latitude%data_2d, 2)
         kms = lbound(domain%w%data_3d, 2)
         kme = ubound(domain%w%data_3d, 2)
-
-        if (.not.allocated(domain%sintheta)) then
-            allocate(domain%sintheta(ims:ime, jms:jme))
-            domain%sintheta = 0
-        endif
-        if (.not.allocated(domain%costheta)) then
-            allocate(domain%costheta(ims:ime, jms:jme))
-            domain%costheta = 0
-        endif
 
         if (.not.allocated(domain%advection_dz)) then
             allocate(domain%advection_dz(ims:ime,kms:kme,jms:jme))

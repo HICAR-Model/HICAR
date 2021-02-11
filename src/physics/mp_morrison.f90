@@ -89,15 +89,15 @@ MODULE MODULE_MP_MORR_TWO_MOMENT
    ! USE module_mp_radar
 
 ! USE WRF PHYSICS CONSTANTS taken from ICAR data_structures module
-  use data_structures, ONLY: CP, G=>gravity, R => Rd, RV => Rw, EP_2=>EP2
+  use mod_wrf_constants, ONLY: CP=>wrf_cp, G=>wrf_gravity, R => r_d, RV => r_v, EP_2
 !  USE module_state_description
 
    IMPLICIT NONE
+   PUBLIC  ::  MP_MORR_TWO_MOMENT, MORR_TWO_MOMENT_INIT
 
    REAL, PARAMETER :: PI = 3.1415926535897932384626434
    REAL, PARAMETER :: SQRTPI = 0.9189385332046727417803297
 
-   PUBLIC  ::  MP_MORR_TWO_MOMENT
    PUBLIC  ::  POLYSVP
 
    PRIVATE :: GAMMA, DERF1
@@ -554,7 +554,7 @@ SUBROUTINE MP_MORR_TWO_MOMENT(ITIMESTEP,                       &
                 TH, QV, QC, QR, QI, QS, QG, NI, NS, NR, NG, &
                 RHO, PII, P, DT_IN, DZ, W,          &
                 RAINNC, RAINNCV, SR,                    &
-		SNOWNC,SNOWNCV,GRAUPELNC,GRAUPELNCV,    & ! hm added 7/13/13
+                SNOWNC,SNOWNCV,GRAUPELNC,GRAUPELNCV,    & ! hm added 7/13/13
                 refl_10cm, diagflag, do_radar_ref,      & ! GT added for reflectivity calcs
                 qrcuten, qscuten, qicuten & ! mu           & ! hm added
 !               ,F_QNDROP, qndrop                        & ! hm added, wrf-chem 
