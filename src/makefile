@@ -87,7 +87,7 @@ ifeq ($(PE_ENV),CRAY)
 endif
 
 ifndef FFTW
-	FFTW=${HOME}/usr/local
+	FFTW=/usr/local
 endif
 FFTW_PATH = ${FFTW}
 LIBFFT = -L${FFTW_PATH}/lib -lm -lfftw3
