@@ -1872,11 +1872,11 @@ contains
         integer :: name_unit                            ! logical unit number for namelist
         !Define parameters
         integer :: solver, roughness
-        logical :: terr_diff, Sx
+        logical :: terr_diff, Sx, Dial
         real    :: Sx_dmax
         
         !Make name-list
-        namelist /wind/ solver, terr_diff, Sx, Sx_dmax, roughness
+        namelist /wind/ solver, terr_diff, Sx, Sx_dmax, Dial, roughness
         
         !Set defaults
         solver = 0 ! 0 = Simple kinematic method (balance uvw),
@@ -1885,6 +1885,7 @@ contains
         Sx = .False.
         roughness = 0 ! No roughness correction, the only one implemented so far
         Sx_dmax = 300.0
+        Dial = .False.
         
         !Read namelist file
         open(io_newunit(name_unit), file=filename)
@@ -1899,6 +1900,7 @@ contains
         options%wind%terr_diff = terr_diff
         options%wind%Sx = Sx
         options%wind%Sx_dmax = Sx_dmax
+        options%wind%Dial = Dial
         options%wind%roughness = roughness
 
     
