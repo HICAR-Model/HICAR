@@ -32,6 +32,7 @@ module options_types
         logical :: terr_diff
         logical :: Sx
         real    :: Sx_dmax
+        logical :: Dial
         integer :: roughness
     end type wind_type
     

@@ -24,7 +24,8 @@ submodule(domain_interface) domain_implementation
     interface setup
         module procedure setup_var, setup_exch
     end interface
-
+    
+    real, parameter::deg2rad=0.017453293 !2*pi/360
     ! primary public routines : init, get_initial_conditions, halo_send, halo_retrieve, or halo_exchange
 contains
 
@@ -755,6 +756,12 @@ contains
         allocate(this%terrain_v( this%v_grid2d_ext% ims : this%v_grid2d_ext% ime,   &
                                  this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
 
+        allocate(this%sintheta( this% ids : this% ide, &
+                                this% jds : this% jde) )
+
+        allocate(this%costheta( this% ids : this% ide, &
+                                this% jds : this% jde) )
+
 
     end subroutine allocate_z_arrays
 
@@ -1109,13 +1116,108 @@ contains
 
         call setup_geo(this%geo,   this%latitude%data_2d,   this%longitude%data_2d,   this%z%data_3d, options%parameters%longitude_system)
         
+        call setup_grid_rotations(this, options)
+        
         ! Setup variables applicable to near-surface wind modifications
         if (options%wind%Sx) then
             call setup_Sx(this, options)
         endif
 
-
     end subroutine initialize_core_variables
+    
+    
+    subroutine setup_grid_rotations(this,options)
+        type(domain_t),  intent(inout) :: this
+        type(options_t), intent(in)    :: options
+
+        integer :: i, j, ims, ime, jms, jme, smooth_loops
+        integer :: starti, endi
+        double precision :: dist, dlat, dlon
+
+        real, allocatable :: lat(:,:), lon(:,:), costheta(:,:), sintheta(:,:)
+
+        if (options%parameters%sinalpha_var /= "") then
+            ims = lbound(this%latitude%data_2d, 1)
+            ime = ubound(this%latitude%data_2d, 1)
+            jms = lbound(this%latitude%data_2d, 2)
+            jme = ubound(this%latitude%data_2d, 2)
+
+            if (this_image()==1) print*, "Reading Sinalpha/cosalpha"
+
+            call io_read(options%parameters%init_conditions_file, options%parameters%sinalpha_var, lon)
+            this%sintheta = lon(ims:ime, jms:jme)
+
+            call io_read(options%parameters%init_conditions_file, options%parameters%cosalpha_var, lon)
+            this%costheta = lon(ims:ime, jms:jme)
+
+            deallocate(lon)
+        else
+
+            call load_data(options%parameters%init_conditions_file,   &
+                           options%parameters%lat_hi,                 &
+                           lat, this%grid)
+            call load_data(options%parameters%init_conditions_file,   &
+                           options%parameters%lon_hi,                 &
+                           lon, this%grid)
+
+            ims = lbound(lat,1)
+            ime = ubound(lat,1)
+            jms = lbound(lat,2)
+            jme = ubound(lat,2)
+
+            allocate(sintheta(ims:ime,jms:jme))
+            allocate(costheta(ims:ime,jms:jme))
+
+            do j = jms, jme
+                do i = ims, ime
+                    ! in case we are in the first or last grid, reset boundaries
+                    starti = max(ims, i-2)
+                    endi   = min(ime, i+2)
+
+                    ! change in latitude
+                    dlat = DBLE(lat(endi,j) - lat(starti,j))
+                    ! change in longitude
+                    dlon = DBLE(lon(endi,j) - lon(starti,j)) * cos(deg2rad*DBLE(lat(i,j)))
+                    !if (abs(dlat) > 1) write(*,*) 'dlat:  ', dlat, '  ', ims, '  ', ime, '  ', jms, '  ', jme
+                    !if (abs(dlon) > 1) write(*,*) 'dlon:  ', dlon, '  ', ims, '  ', ime, '  ', jms, '  ', jme
+                    
+                    ! distance between two points
+                    dist = sqrt(DBLE(dlat)**2 + DBLE(dlon)**2) 
+
+                    ! sin/cos of angles for use in rotating fields later
+                    costheta(i, j) = abs(dlon / dist)
+                    sintheta(i, j) =  (-1) * dlat / dist
+
+                enddo
+            enddo
+            
+            !Smooth cos/sin in case there are jumps from the lat/lon grids (more likely at low resolutions)
+            smooth_loops = int(1000/this%dx)
+            
+            do i=1,smooth_loops
+             call smooth_array_2d( costheta , windowsize  =  20)
+             call smooth_array_2d( sintheta , windowsize  =  20)
+            enddo
+            this%costheta = costheta
+            this%sintheta = sintheta
+            
+            deallocate(costheta)
+            deallocate(sintheta)
+ 
+        endif
+        if (options%parameters%debug .and.(this_image()==1)) then
+            print*, ""
+            print*, "Domain Geometry"
+            print*, "MAX / MIN SIN(theta) (ideally 0)"
+            print*, "   ", maxval(this%sintheta), minval(this%sintheta)
+            print*, "MAX / MIN COS(theta) (ideally 1)"
+            print*, "   ", maxval(this%costheta), minval(this%costheta)
+            print*, ""
+        endif
+
+
+    end subroutine setup_grid_rotations
+    
     
     subroutine setup_dzdxy(this,options)
         implicit none
@@ -2032,6 +2134,7 @@ contains
     
     end subroutine
 
+
     !> -------------------------------
     !! Loop through all variables for which forcing data have been supplied and interpolate the forcing data to the domain
     !!
@@ -2041,7 +2144,7 @@ contains
         class(domain_t),  intent(inout) :: this
         type(boundary_t), intent(in)    :: forcing
         logical,          intent(in),   optional :: update
-
+        
         ! internal field always present for value of optional "update"
         logical :: update_only
         logical :: var_is_not_pressure
@@ -2117,7 +2220,7 @@ contains
     subroutine interpolate_variable(var_data, input_data, forcing, dom, vert_interp, var_is_u, var_is_v, nsmooth)
         implicit none
         real,               intent(inout) :: var_data(:,:,:)
-        type(variable_t),   intent(in)    :: input_data
+        type(variable_t),   intent(in) :: input_data
         type(boundary_t),   intent(in)    :: forcing
         type(domain_t),     intent(in)    :: dom
         logical,            intent(in),   optional :: vert_interp
@@ -2187,9 +2290,9 @@ contains
             ! temp_3d = pre_smooth(:,:nz,:) ! no vertical interpolation option
 
             call smooth_array(temp_3d, windowsize=windowsize, ydim=3)
-
+                        
             var_data = temp_3d(dom%u_grid%ims-dom%u_grid2d_ext%ims+1 : dom%u_grid%ime-dom%u_grid2d_ext%ims+1,    &
-                                :,   &
+                               :,   &
                                dom%u_grid%jms-dom%u_grid2d_ext%jms+1 : dom%u_grid%jme-dom%u_grid2d_ext%jms+1)
         ! Interpolate to the v staggered grid
         else if (vvar) then
@@ -2215,8 +2318,6 @@ contains
         endif
 
     end subroutine
-
-
 
 
     !> -------------------------------

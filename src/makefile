@@ -388,6 +388,7 @@ OBJS=	$(BUILD)driver.o            \
 		$(BUILD)mp_thompson.o		\
 		$(BUILD)mp_thompson_aer.o	\
 		$(BUILD)mp_wsm6.o		\
+		$(BUILD)mp_morrison.o           \
 		$(BUILD)cu_driver.o			\
 		$(BUILD)cu_tiedtke.o		\
 		$(BUILD)advection_driver.o	\
@@ -503,7 +504,7 @@ caf_options_test: $(BUILD)test_caf_options.o				  	\
 				$(BUILD)co_utilities.o   $(BUILD)default_output_metadata.o \
 				$(BUILD)ra_driver.o      $(BUILD)ra_simple.o	\
 				$(BUILD)pbl_driver.o     $(BUILD)pbl_simple.o	\
-				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o	\
+				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o	$(BUILD)mp_morrison.o\
 				$(BUILD)mp_thompson.o	 $(BUILD)mp_thompson_aer.o   $(BUILD)mp_wsm6.o\
 				$(BUILD)cu_driver.o		 $(BUILD)cu_tiedtke.o	\
 				$(BUILD)advection_driver.o						\
@@ -542,7 +543,7 @@ caf_write_domain_test: $(BUILD)test_caf_write_domain.o					\
 					$(BUILD)co_utilities.o   $(BUILD)default_output_metadata.o\
 					$(BUILD)ra_driver.o      $(BUILD)ra_simple.o		\
 					$(BUILD)pbl_driver.o     $(BUILD)pbl_simple.o		\
-					$(BUILD)mp_driver.o      $(BUILD)mp_simple.o		\
+					$(BUILD)mp_driver.o      $(BUILD)mp_simple.o	$(BUILD)mp_morrison.o\
 					$(BUILD)mp_thompson.o	 $(BUILD)mp_thompson_aer.o   $(BUILD)mp_wsm6.o\
 					$(BUILD)cu_driver.o		 $(BUILD)cu_tiedtke.o		\
 					$(BUILD)advection_driver.o							\
@@ -572,7 +573,7 @@ caf_no_forcing_test: $(BUILD)test_caf_no_forcing.o							\
 					$(BUILD)co_utilities.o   $(BUILD)default_output_metadata.o \
 					$(BUILD)ra_driver.o      $(BUILD)ra_simple.o		\
 					$(BUILD)pbl_driver.o     $(BUILD)pbl_simple.o		\
-					$(BUILD)mp_driver.o      $(BUILD)mp_simple.o		\
+					$(BUILD)mp_driver.o      $(BUILD)mp_simple.o $(BUILD)mp_morrison.o		\
 					$(BUILD)mp_thompson.o	 $(BUILD)mp_thompson_aer.o   $(BUILD)mp_wsm6.o\
 					$(BUILD)cu_driver.o		 $(BUILD)cu_tiedtke.o		\
 					$(BUILD)advection_driver.o $(BUILD)geo_reader.o		\
@@ -601,7 +602,7 @@ caf_domain_init_test: $(BUILD)test_caf_domain_init.o                \
 				$(BUILD)co_utilities.o   $(BUILD)default_output_metadata.o \
 				$(BUILD)ra_driver.o      $(BUILD)ra_simple.o		\
 				$(BUILD)pbl_driver.o     $(BUILD)pbl_simple.o		\
-				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o		\
+				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o	$(BUILD)mp_morrison.o\
 				$(BUILD)mp_thompson.o	 $(BUILD)mp_thompson_aer.o   $(BUILD)mp_wsm6.o\
 				$(BUILD)cu_driver.o		 $(BUILD)cu_tiedtke.o		\
 				$(BUILD)advection_driver.o							\
@@ -631,7 +632,7 @@ caf_init_test: $(BUILD)test_caf_init.o                              \
 				$(BUILD)co_utilities.o   $(BUILD)default_output_metadata.o \
 				$(BUILD)ra_driver.o      $(BUILD)ra_simple.o		\
 				$(BUILD)pbl_driver.o     $(BUILD)pbl_simple.o		\
-				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o		\
+				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o	$(BUILD)mp_morrison.o\
 				$(BUILD)mp_thompson.o	 $(BUILD)mp_thompson_aer.o   $(BUILD)mp_wsm6.o\
 				$(BUILD)cu_driver.o		 $(BUILD)cu_tiedtke.o		\
 				$(BUILD)advection_driver.o							\
@@ -662,7 +663,7 @@ caf_init-write_test: $(BUILD)test_caf_init-write.o                  \
 				$(BUILD)output_h.o		 $(BUILD)output_obj.o		\
 				$(BUILD)ra_driver.o      $(BUILD)ra_simple.o		\
 				$(BUILD)pbl_driver.o     $(BUILD)pbl_simple.o		\
-				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o		\
+				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o	$(BUILD)mp_morrison.o\
 				$(BUILD)mp_thompson.o	 $(BUILD)mp_thompson_aer.o   $(BUILD)mp_wsm6.o\
 				$(BUILD)cu_driver.o		 $(BUILD)cu_tiedtke.o		\
 				$(BUILD)advection_driver.o							\
@@ -695,7 +696,7 @@ caf_boundary_test: $(BUILD)test_caf_boundary.o						\
 				$(BUILD)co_utilities.o   $(BUILD)default_output_metadata.o \
 				$(BUILD)ra_driver.o      $(BUILD)ra_simple.o		\
 				$(BUILD)pbl_driver.o     $(BUILD)pbl_simple.o		\
-				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o		\
+				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o	$(BUILD)mp_morrison.o\
 				$(BUILD)mp_thompson.o	 $(BUILD)mp_thompson_aer.o   $(BUILD)mp_wsm6.o\
 				$(BUILD)cu_driver.o		 $(BUILD)cu_tiedtke.o		\
 				$(BUILD)advection_driver.o							\
@@ -724,7 +725,7 @@ caf_boundary_init_test: $(BUILD)test_caf_boundary_init.o				    \
 				$(BUILD)co_utilities.o   $(BUILD)default_output_metadata.o \
 				$(BUILD)ra_driver.o      $(BUILD)ra_simple.o		\
 				$(BUILD)pbl_driver.o     $(BUILD)pbl_simple.o		\
-				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o		\
+				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o	$(BUILD)mp_morrison.o\
 				$(BUILD)mp_thompson.o	 $(BUILD)mp_thompson_aer.o   $(BUILD)mp_wsm6.o\
 				$(BUILD)cu_driver.o		 $(BUILD)cu_tiedtke.o		\
 				$(BUILD)advection_driver.o							\
@@ -755,7 +756,7 @@ caf_linear_winds_setup_test: $(BUILD)test_caf_linear_winds_setup.o	\
 				$(BUILD)ra_driver.o      $(BUILD)ra_simple.o		\
 				$(BUILD)pbl_driver.o     $(BUILD)pbl_simple.o		\
 				$(BUILD)cu_driver.o		 $(BUILD)cu_tiedtke.o		\
-				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o		\
+				$(BUILD)mp_driver.o      $(BUILD)mp_simple.o	$(BUILD)mp_morrison.o\
 				$(BUILD)mp_thompson.o	 $(BUILD)mp_thompson_aer.o   $(BUILD)mp_wsm6.o\
 				$(BUILD)advection_driver.o $(BUILD)advect.o			\
 				$(BUILD)data_structures.o							\
@@ -950,14 +951,14 @@ $(BUILD)vinterp.o: $(UTIL)vinterp.f90 $(BUILD)data_structures.o
 #	Microphysics code
 ###################################################################
 $(BUILD)mp_driver.o:$(PHYS)mp_driver.f90 $(BUILD)mp_simple.o $(BUILD)mp_thompson_aer.o $(BUILD)mp_thompson.o $(BUILD)mp_wsm6.o\
-					$(BUILD)data_structures.o $(BUILD)time.o $(BUILD)domain_h.o  $(BUILD)icar_constants.o\
-					$(BUILD)wrf_constants.o
+					$(BUILD)mp_morrison.o $(BUILD)data_structures.o $(BUILD)time.o $(BUILD)domain_h.o  \
+					$(BUILD)icar_constants.o $(BUILD)wrf_constants.o
 
 # $(BUILD)mp_driver.o:$(PHYS)mp_driver.f90 $(BUILD)mp_thompson.o $(BUILD)mp_simple.o \
 # 					$(BUILD)mp_morrison.o $(BUILD)data_structures.o $(BUILD)mp_wsm6.o $(BUILD)time.o
 # 	${F90} ${FFLAGS} $(PHYS)mp_driver.f90 -o $(BUILD)mp_driver.o
 
-$(BUILD)mp_morrison.o:$(PHYS)mp_morrison.f90 $(BUILD)data_structures.o
+$(BUILD)mp_morrison.o:$(PHYS)mp_morrison.f90 $(BUILD)wrf_constants.o
 
 $(BUILD)mp_wsm6.o:$(PHYS)mp_wsm6.f90 $(BUILD)wrf_constants.o
 
