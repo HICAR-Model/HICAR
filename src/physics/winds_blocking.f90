@@ -1,6 +1,8 @@
 module mod_blocking
 
     use data_structures
+    use domain_interface,  only : domain_t
+    use options_interface, only : options_t
     use linear_theory_winds, only : linear_perturbation_at_height, initialize_linear_theory_data, linear_perturbation, add_buffer_topo
     use io_routines,         only : io_write, io_read, file_exists
     use mod_atm_utilities,   only : calc_u, calc_v, calc_direction, calc_speed, &
@@ -51,8 +53,8 @@ contains
 
     subroutine add_blocked_flow(domain, options)
         implicit none
-        type(domain_type),  intent(inout) :: domain
-        type(options_type), intent(in)    :: options
+        type(domain_t),  intent(inout) :: domain
+        type(options_t), intent(in)    :: options
 
         if (.not.initialized) then
             call initialize_blocking(domain, options)
@@ -66,33 +68,36 @@ contains
 
     subroutine update_froude_number(domain)
         implicit none
-        type(domain_type), intent(inout) :: domain
+        type(domain_t), intent(inout) :: domain
 
         integer :: i, j, k, nx, ny, nz
         real :: wind_speed, u, v, stability
         real :: z_top, z_bot, th_top, th_bot
         integer :: ymin, ymax, xmin, xmax
-        real, allocatable :: temp_froude(:,:)
+        real, allocatable :: temp_froude(:,:,:)
 
 
         nx = size(domain%terrain_blocking,1)
         ny = size(domain%terrain_blocking,2)
         nz = size(domain%z_layers)
 
-        allocate(temp_froude(nx,ny))
 
+        allocate(temp_froude(nx,nz,ny))
+        !Since we will loop up to nz-1, we set all Fr to 100, which will leave the upper layer as very stable
+        temp_froude = 100
+        
         if (.not.domain%blocking_initialized) then
             call compute_terrain_blocking_heights(domain%terrain_blocking, domain%terrain)
             domain%blocking_initialized = .True.
         endif
 
         ! use a homogenous background temperature gradient and wind field from the boundaryies
-        th_bot = (sum(domain%th(:, 1,1)) / nx + sum(domain%th(:, 1,ny)) / nx)  / 2
-        th_top = (sum(domain%th(:,nz,1)) / nx + sum(domain%th(:,nz,ny)) / nx)  / 2
+        th_bot = (sum(domain%potential_temperature(:, 1,1)) / nx + sum(domain%potential_temperature(:, 1,ny)) / nx)  / 2
+        th_top = (sum(domain%potential_temperature(:,nz,1)) / nx + sum(domain%potential_temperature(:,nz,ny)) / nx)  / 2
 
-        u = (sum(domain%u(:,:,1)) / (nx*nz) + sum(domain%u(:,:,ny)) / (nx*nz)) / 2
-        v = (sum(domain%v(:,:,1)) / (nx*nz) + sum(domain%v(:,:,ny)) / (nx*nz)) / 2
-        wind_speed = sqrt(u**2 + v**2)
+        !u = (sum(domain%u(:,:,1)) / (nx*nz) + sum(domain%u(:,:,ny)) / (nx*nz)) / 2
+        !v = (sum(domain%v(:,:,1)) / (nx*nz) + sum(domain%v(:,:,ny)) / (nx*nz)) / 2
+        wind_speed = sqrt(domain%u**2 + domain%v**2)
 
         z_bot  = domain%z(1, 1,1)
         z_top  = domain%z(1,nz,1)
@@ -102,14 +107,16 @@ contains
                 ! v = sum(domain%v(i,    :,j:j+1)) / (nz*2)
                 ! wind_speed = sqrt(u**2 + v**2)
 
-                ! th_bot = domain%th(i,1,j)
-                ! th_top = domain%th(i,nz,j)
-                ! z_bot  = domain%z(i,1,j)
-                ! z_top  = domain%z(i,nz,j)
-                stability = calc_dry_stability(th_top, th_bot, z_top, z_bot) !sum(domain%nsquared(i,:,j)) / nz
-                stability = sqrt(max(stability, 0.))
+                do k=1,(nz-1)
+                    th_bot = domain%th(i,k,j)
+                    th_top = domain%th(i,k+1,j)
+                    z_bot  = domain%z(i,k,j)
+                    z_top  = domain%z(i,k+1,j)
+                    stability = calc_dry_stability(th_top, th_bot, z_top, z_bot) !sum(domain%nsquared(i,:,j)) / nz
+                    stability = sqrt(max(stability, 0.))
 
-                temp_froude(i,j) = calc_froude(stability, domain%terrain_blocking(i,j), wind_speed)
+                    temp_froude(i,k,j) = calc_froude(stability, domain%terrain_blocking(i,j), wind_speed(i,k,j))
+                enddos
             enddo
         enddo
 
@@ -120,8 +127,9 @@ contains
                 do i=1,nx
                     xmin = max(i-nsmooth_gridcells, 1)
                     xmax = min(i+nsmooth_gridcells, nx)
-
-                    domain%froude(i,j) = sum(temp_froude(xmin:xmax,ymin:ymax)) / ((xmax-xmin+1) * (ymax-ymin+1))
+                    do k=1,nz
+                        domain%froude(i,k,j) = sum(temp_froude(xmin:xmax,k,ymin:ymax)) / ((xmax-xmin+1) * (ymax-ymin+1))
+                    enddo
                 enddo
             enddo
 
@@ -141,7 +149,7 @@ contains
     !!----------------------------------------------------------
     subroutine spatial_blocking(domain, winsz)
         implicit none
-        type(domain_type),intent(inout)::domain
+        type(domain_t),intent(inout)::domain
         integer, intent(in) :: winsz
 
         integer :: nx,nxu, ny,nyv, nz, i,j,k, smoothz
@@ -259,8 +267,8 @@ contains
     !----------------------------------------------
     subroutine initialize_blocking(domain, options)
         implicit none
-        type(domain_type),  intent(inout) :: domain
-        type(options_type), intent(in)    :: options
+        type(domain_t),  intent(inout) :: domain
+        type(options_t), intent(in)    :: options
 
         integer :: nx, ny, nz, err
         real :: dx

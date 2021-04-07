@@ -136,6 +136,7 @@ module domain_interface
     real,                       allocatable :: delta_dzdy(:,:,:) ! change in height difference (between hi and lo-res data) with change in x/y position (used to calculate w_real vertical motions)
     real,                       allocatable :: zfr_u(:,:,:)     ! ratio between z levels (on grid)
     real,                       allocatable :: zfr_v(:,:,:)
+    real,                       allocatable :: froude_terrain(:,:) ! Terrain length-scale to use at each point for Froude Number calculation
     real,                       allocatable :: terrain_u(:,:)
     real,                       allocatable :: terrain_v(:,:)
     real,                       allocatable :: forcing_terrain_u(:,:)
@@ -154,6 +155,7 @@ module domain_interface
     real,                       allocatable :: ustar(:,:)
     real,                       allocatable :: znu(:)
     real,                       allocatable :: znw(:)
+    real,                       allocatable :: froude(:,:,:)
 
     ! these data are stored on the domain wide grid even if this process is only looking at a subgrid
     ! these variables are necessary with linear winds, especially with spatially variable dz, to compute the LUT
