@@ -9,15 +9,16 @@
 !!------------------------------------------------------------
 module wind
     use linear_theory_winds, only : linear_perturb
-    ! use mod_blocking,        only : add_blocked_flow
+    !use mod_blocking,        only : update_froude_number, initialize_blocking
     use data_structures
     use exchangeable_interface,   only : exchangeable_t
     use domain_interface,  only : domain_t
     use options_interface, only : options_t
     use grid_interface,    only : grid_t
     use wind_surf, only         : apply_Sx
-    use io_routines, only : io_read
-
+    use io_routines, only : io_read, io_write
+    use mod_atm_utilities,   only : calc_froude, calc_dry_stability
+    
     implicit none
     private
     public::update_winds, init_winds
@@ -243,45 +244,6 @@ contains
         jds = lbound(costheta,2)
         jde = ubound(costheta,2)
 
-        !allocate(cos_shifted_u(ids:ide+1,jds:jde))
-        !allocate(sin_shifted_u(ids:ide+1,jds:jde))
-        !allocate(cos_shifted_v(ids:ide,jds:jde+1))
-        !allocate(sin_shifted_v(ids:ide,jds:jde+1))
-        !allocate(u_shifted_v(ims:ime,jms:jme+1))
-        !allocate(v_shifted_u(ims:ime+1,jms:jme))
-        
-        !cos_shifted_u(ids+1:ide,:) = (costheta(ids:ide-1,:) + costheta(ids+1:ide,:))/2
-        !cos_shifted_u(ids,:) = costheta(ids,:)
-        !cos_shifted_u(ide+1,:) = costheta(ide,:)
-        
-        !sin_shifted_u(ids+1:ide,:) = (sintheta(ids:ide-1,:) + sintheta(ids+1:ide,:))/2
-        !sin_shifted_u(ids,:) = sintheta(ids,:)
-        !sin_shifted_u(ide+1,:) = sintheta(ide,:)
-        
-        !cos_shifted_v(:,jds+1:jde) = (costheta(:,jds:jde-1) + costheta(:,jds+1:jde))/2
-        !cos_shifted_v(:,jds) = costheta(:,jds)
-        !cos_shifted_v(:,jde+1) = costheta(:,jde)
-        
-        !sin_shifted_v(:,jds+1:jde) = (sintheta(:,jds:jde-1) + sintheta(:,jds+1:jde))/2
-        !sin_shifted_v(:,jds) = sintheta(:,jds)
-        !sin_shifted_v(:,jde+1) = sintheta(:,jde)
-        
-        
-        !do k = kms, kme
-        !    u_shifted_v(:,jms+1:jme+1) = (u(ims:ime,k,:) + u(ims+1:ime+1,k,:))/2
-        !    u_shifted_v(:,jms) = u_shifted_v(:,jms+1)
-            
-        !    v_shifted_u(ims+1:ime+1,:) = (v(:,k,jms:jme) + v(:,k,jms+1:jme+1))/2
-        !    v_shifted_u(ims,:) = v_shifted_u(ims+1,:)
-            
-        !    u(ims+2:ime,k,jms+1:jme-1) = u(ims+2:ime,k,jms+1:jme-1)*cos_shifted_u(ims+2:ime,jms+1:jme-1) + &
-        !                                v_shifted_u(ims+2:ime,jms+1:jme-1)*sin_shifted_u(ims+2:ime,jms+1:jme-1)
-        !    v(ims+1:ime-1,k,jms+2:jme) = v(ims+1:ime-1,k,jms+2:jme)*cos_shifted_v(ims+1:ime-1,jms+2:jme) + &
-        !                                u_shifted_v(ims+1:ime-1,jms+2:jme)*sin_shifted_v(ims+1:ime-1,jms+2:jme)
-        !enddo
-        
-        !deallocate(cos_shifted_u, sin_shifted_u, cos_shifted_v, sin_shifted_v,u_shifted_v,v_shifted_u)
-        
         allocate(u_local(ims:ime))
         allocate(v_local(ims:ime))
 
@@ -330,10 +292,13 @@ contains
 
         real, allocatable, dimension(:,:,:) :: temparray
         integer :: nx, ny, nz, i, j
+        
 
         if (.not.allocated(domain%advection_dz)) then
 
             call init_winds(domain, options)
+            !call initialize_blocking(domain, options)
+            call update_froude_number(domain)
 
             ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
             call make_winds_grid_relative(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%grid, domain%sintheta, domain%costheta)
@@ -368,6 +333,8 @@ contains
             call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
 
         else
+
+            call update_froude_number(domain)
 
             ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
             !call make_winds_grid_relative(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d, domain%grid, domain%sintheta, domain%costheta)
@@ -446,15 +413,24 @@ contains
 
         if (options%wind%Dial) then
             allocate(dial_weights(ims:ime,kms:kme,jms:jme))
-            do k = kms,kme
-                if (k <= 10) then
-                    dial_weights(:,k,:) = 1.0
-                else if (k < kme-10) then
-                    dial_weights(:,k,:) = (1 + (10/(kme-10)) - k/(kme-10))
-                else 
-                    dial_weights(:,k,:) = (10/(kme-10))
-                endif
-            enddo
+            !do k = kms,kme
+            !    if (k <= 10) then
+            !        dial_weights(:,k,:) = 1.0
+            !    else if (k < kme-10) then
+            !        dial_weights(:,k,:) = (1 + (10/(kme-10)) - k/(kme-10))
+            !    else 
+            !        dial_weights(:,k,:) = (10/(kme-10))
+            !    endif
+            !enddo
+            
+            !Dial of 100% (all vertical) at Fr 0.75, 0% (all horizontal) at Fr >= 4.25
+            dial_weights = 1 - max((domain%froude-0.75),0.0)/4.25
+            
+            !Sanity-bounding to min of 0, max of 1
+            dial_weights = max(min(dial_weights,1.0),0.0)
+            
+            call io_write("dial_weights.nc","data",dial_weights)
+            call io_write("dial_weights.nc","froude",domain%froude)
             
             !First call bal_uvw to generate an initial-guess for vertical winds
             call balance_uvw(domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, & 
@@ -619,6 +595,149 @@ contains
         ! endif
 
     end subroutine allocate_winds
+    
+    subroutine update_froude_number(domain)
+        implicit none
+        type(domain_t), intent(inout) :: domain
+
+        real, allocatable, dimension(:,:,:) :: wind_speed, temp_froude
+        
+        integer :: k, j, i, n, ims, ime, jms, jme, kms, kme
+        real :: z_top, z_bot, th_top, th_bot, stability
+        integer :: ymin, ymax, xmin, xmax, n_smoothing_passes, nsmooth_gridcells
+        
+        n_smoothing_passes = 4
+        nsmooth_gridcells = int(1000 / domain%dx)
+        
+        ims = lbound(domain%w%data_3d,1)
+        ime = ubound(domain%w%data_3d,1)
+        kms = lbound(domain%w%data_3d,2)
+        kme = ubound(domain%w%data_3d,2)
+        jms = lbound(domain%w%data_3d,3)
+        jme = ubound(domain%w%data_3d,3)
+
+        !If it is our first time calculating Fr, allocate and populate froude_terrain array
+        if (.not.allocated(domain%froude)) then
+            allocate(domain%froude(ims:ime,kms:kme,jms:jme))
+            allocate(domain%froude_terrain(ims:ime,jms:jme))
+
+            call compute_terrain_blocking_heights(domain)
+        endif
+       
+        allocate(wind_speed(ims:ime,kms:kme,jms:jme))
+        
+        allocate(temp_froude(ims:ime,kms:kme,jms:jme))       
+        
+        wind_speed = sqrt( (domain%u%data_3d(ims+1:ime+1,:,:) + domain%u%data_3d(ims:ime,:,:))**2 + &
+                           (domain%v%data_3d(:,:,jms+1:jme+1) + domain%v%data_3d(:,:,jms:jme))**2 )
+        
+        !Since we will loop up to nz-1, we set all Fr to 100, which will leave the upper layer as very stable
+        temp_froude = 100
+        
+        do i = ims,ime
+            do j = jms,jme
+                do k = kms,kme-1
+                    th_bot = domain%potential_temperature%data_3d(i,k,j)
+                    th_top = domain%potential_temperature%data_3d(i,k+1,j)
+                    z_bot  = domain%z%data_3d(i,k,j)
+                    z_top  = domain%z%data_3d(i,k+1,j)
+                    stability = calc_dry_stability(th_top, th_bot, z_top, z_bot) 
+                    stability = sqrt(max(stability, 0.))
+
+                    temp_froude(i,k,j) = calc_froude(stability, domain%froude_terrain(i,j), wind_speed(i,k,j))
+                enddo
+            enddo
+        enddo
+
+        do n = 1,n_smoothing_passes
+            do j=jms,jme
+                ymin = max(j-nsmooth_gridcells, jms)
+                ymax = min(j+nsmooth_gridcells, jme)
+                do i=ims,ime
+                    xmin = max(i-nsmooth_gridcells, ims)
+                    xmax = min(i+nsmooth_gridcells, ime)
+                    do k=kms,kme
+                        !write(*,*) "temp_f:  ", sum(temp_froude(xmin:xmax,k,ymin:ymax))
+                        !write(*,*) "num_sum:  ", ((xmax-xmin+1) * (ymax-ymin+1))
+                        domain%froude(i,k,j) = sum(temp_froude(xmin:xmax,k,ymin:ymax)) / ((xmax-xmin+1) * (ymax-ymin+1))
+                    enddo
+                enddo
+            enddo
+
+            if (n/=n_smoothing_passes) then
+                temp_froude = domain%froude
+            endif
+        enddo
+
+    end subroutine update_froude_number
+
+    !>-----------------------------------------
+    !> Compute a smoothed terrain varience field for use in Froude number calculation
+    !>
+    !------------------------------------------
+    subroutine compute_terrain_blocking_heights(domain) !froude_terrain, terrain)
+        implicit none
+        type(domain_t), intent(inout) :: domain
+
+        integer :: nx, ny, x, y
+        integer :: xs,xe, ys,ye, n, np
+        integer :: window_size, smooth_window, n_smoothing_passes
+        real, allocatable :: temp_terrain(:,:)
+
+        n_smoothing_passes = 4
+        window_size   = 5
+        smooth_window = 2
+
+        nx = size(domain%global_terrain,1)
+        ny = size(domain%global_terrain,2)
+        
+        allocate(temp_terrain(nx,ny))
+
+        ! first compute lightly smoothed terrain
+        do y=1,ny
+            ys = max( y - smooth_window, 1)
+            ye = min( y + smooth_window, ny)
+            do x=1,nx
+                xs = max( x - smooth_window, 1)
+                xe = min( x + smooth_window, nx)
+                n = (xe-xs+1) * (ye-ys+1)
+                temp_terrain(x,y) = sum(domain%global_terrain(xs:xe,ys:ye)) / n
+            enddo
+        enddo
+
+        ! then compute the range of terrain (max-min) in a given window
+        do y=domain%jts,domain%jte
+            ys = max( y - window_size, 1)
+            ye = min( y + window_size, ny)
+            do x=domain%its,domain%ite
+                xs = max( x - window_size, 1)
+                xe = min( x + window_size, nx)
+                domain%froude_terrain(x,y) = maxval(temp_terrain(xs:xe,ys:ye)) - minval(temp_terrain(xs:xe,ys:ye))
+            enddo
+        enddo
+        ! call io_write("initial_terrain_delta.nc","data",temp_terrain)
+
+        ! finally smooth that terrain delta field a few times as well
+
+        !do np=1,n_smoothing_passes
+        !    do y=1,ny
+        !        ys = max( y - smooth_window, 1)
+        !        ye = min( y + smooth_window, ny)
+        !        do x=1,nx
+        !            xs = max( x - smooth_window, 1)
+        !            xe = min( x + smooth_window, nx)
+        !            n = (xe-xs+1) * (ye-ys+1)
+        !            froude_terrain(x,y) = sum(temp_terrain(xs:xe,ys:ye)) / n
+        !        enddo
+        !    enddo
+        !    if (np /= n_smoothing_passes) then
+        !        temp_terrain = froude_terrain
+        !    endif
+        !enddo
+        call io_write("terrain_blocking.nc","data",domain%froude_terrain)
+
+    end subroutine compute_terrain_blocking_heights
+
 
     !>------------------------------------------------------------
     !! Provides a routine to deallocate memory allocated in allocate_winds
