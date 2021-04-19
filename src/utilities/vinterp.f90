@@ -124,9 +124,16 @@ contains
                         curweights=weights(hi%z(i,k,j),lo%z(i,curpos(1),j),lo%z(i,curpos(2),j))
                     elseif (curpos(1)==-1) then
                         ! matched below the grid
+                        !curpos(1)=1
+                        !curpos(2)=1
+                        !curweights=0.5
+                        
                         curpos(1)=1
-                        curpos(2)=1
-                        curweights=0.5
+                        curpos(2)=2
+                        ! note that this will be > 1
+                        curweights(1) = (lo%z(i,curpos(2),j)-hi%z(i,k,j)) / (lo%z(i,curpos(2),j)-lo%z(i,curpos(1),j))
+                        ! note that this will be < 0 providing a bilinear extrapolation
+                        curweights(2) = 1-curweights(1)
                     elseif (curpos(1)==-2) then
                         ! matched above the grid
                         curpos(1)=lo_nz
