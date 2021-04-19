@@ -13,6 +13,7 @@ module wind_surf
     use domain_interface,  only : domain_t
     use options_interface, only : options_t
     use io_routines,       only : io_write
+    use mod_atm_utilities,     only : calc_thresh_ang
 
     implicit none
     private
@@ -39,6 +40,7 @@ contains
         d_max = 1000
         search_max = floor(d_max/domain%dx)
         
+        allocate(domain%global_TPI(domain%ids : domain%ide, domain%jds : domain%jde))
         allocate(domain%TPI(domain%grid2d% ims : domain%grid2d% ime, domain%grid2d% jms : domain%grid2d% jme))
         allocate(dist( 2*search_max+1, 2*search_max+1 ))
         
@@ -52,8 +54,8 @@ contains
         dist = dist*domain%dx
         
         !Now calc TPI
-        do i=domain%grid2d%ims, domain%grid2d%ime
-            do j=domain%grid2d%jms, domain%grid2d%jme
+        do i=domain%ids, domain%ide
+            do j=domain%jds, domain%jde
                 TPI_num = 0
                 TPI_sum = 0
                     
@@ -75,17 +77,18 @@ contains
                         end if                               
                     end do
                 end do
-                domain%TPI(i,j) = domain%global_terrain(i,j) - TPI_sum/TPI_num
+                domain%global_TPI(i,j) = domain%global_terrain(i,j) - TPI_sum/TPI_num
             end do
         end do
         
+        domain%TPI = domain%global_TPI(domain%grid2d%ims:domain%grid2d%ime,domain%grid2d%jms:domain%grid2d%jme)
         
-        !if ( this_image() == 1 ) then
-        !    write (*,*) "Saving *_Sx.nc"
-        !    !Save file
-        !    call io_write(filename, "Sx", Sx(:,:,:,:) ) 
-        !    call io_write("TPI_out.nc", "TPI", domain%TPI(:,:) ) 
-        !endif
+        
+        if ( this_image() == 1 ) then
+            write (*,*) "Saving *_TPI.nc"
+            !Save file
+            call io_write("global_TPI_out.nc", "TPI", domain%global_TPI(:,:) ) 
+        endif
              
     end subroutine calc_TPI
     
@@ -95,21 +98,30 @@ contains
         type(options_t),intent(in)    :: options
         character(len=*),   intent(in) :: filename
         
-        real, allocatable    :: dist(:,:), azm(:,:), Sx_array_temp(:,:,:,:)
+        real, allocatable    :: dist(:,:), azm(:,:), Sx_array_temp(:,:,:,:), sheltering_TPI(:,:,:,:), temp_sheltering_TPI(:,:,:,:)
         integer, allocatable :: azm_indices(:,:), valid_ks(:)
         integer           :: d_max, search_max, i, j, k, ang, i_s, j_s, i_start_buffer, i_end_buffer, j_start_buffer, j_end_buffer
-        integer           :: rear_ang, fore_ang, test_ang, rear_ang_diff, fore_ang_diff, ang_diff, k_max, window_rear, window_fore
-        real              :: search_height, pt_height, h_diff, Sx_temp
-        
+        integer           :: rear_ang, fore_ang, test_ang, rear_ang_diff, fore_ang_diff, ang_diff, k_max, window_rear, window_fore, maxSxLoc
+        real              :: search_height, pt_height, h_diff, Sx_temp, maxSxVal, TPI_Shelter_temp, exposed_TPI
 
         d_max = options%wind%Sx_dmax
         k_max = 30 !Max number of layers to compute Sx for
         search_max = floor(d_max/domain%dx)
         
-        ! Initialize Sx and set to lowest possible (yet, un-physical) value of -90
+        exposed_TPI = -1000.0
+        
+        ! Initialize Sx and set to value of -90 (absolute minimum possible) for search algorithm
         allocate(domain%Sx( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:k_max, domain%grid2d%jms:domain%grid2d%jme ))
         allocate(Sx_array_temp( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:k_max, domain%grid2d%jms:domain%grid2d%jme ))
+        
         Sx_array_temp = -90.0
+        domain%Sx = -90.0
+        
+        allocate(temp_sheltering_TPI( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:k_max, domain%grid2d%jms:domain%grid2d%jme ))
+        allocate(sheltering_TPI( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:k_max, domain%grid2d%jms:domain%grid2d%jme ))
+
+        temp_sheltering_TPI = 0.0
+        sheltering_TPI = 0.0
         
         !Pre-compute distances, using search_max to build grid
         allocate(dist( 2*search_max+1, 2*search_max+1 ))
@@ -157,16 +169,26 @@ contains
                         do j_s = 1+j_start_buffer, (search_max*2+1)+j_end_buffer
                             !Since dist is for a grid, and we want a search RADIUS, check that we are within d_max
                             if (dist(i_s,j_s) <= d_max .and. .not.(dist(i_s,j_s) == 0) ) then
+                            
                                 !Calculate height difference
                                 search_height = domain%global_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1)))
                                 h_diff = search_height - pt_height
 
                                 !Calculate Sx slope to search-cell
                                 Sx_temp = atan(h_diff/dist(i_s,j_s))*rad2deg
+                                TPI_Shelter_temp = domain%global_TPI(i+(i_s-(search_max+1)),j+(j_s-(search_max+1)))
                             
                                 ! If new Sx is greater than existing Sx for a given search angle, replace
-                                if (Sx_temp > Sx_array_temp(azm_indices(i_s,j_s),i,k,j)) then
-                                    Sx_array_temp(azm_indices(i_s,j_s),i,k,j) = Sx_temp
+                                if (Sx_temp > Sx_array_temp(azm_indices(i_s,j_s),i,k,j) ) then
+                                    !If we have found a sheltering Sx, and it is "exposed" (TPI >= 100.0), use this Sx
+                                    !If we have found a sheltering Sx, but it is not "exposed", then this cell gets neither sheltering nor exposure (Sx = 0)
+                                    !Sx_array_temp(azm_isndices(i_s,j_s),i,k,j) = Sx_temp
+                                    if ((Sx_temp > 0.0) .and. (TPI_Shelter_temp >= exposed_TPI) ) then ! .and. ( TPI_Shelter_temp >= temp_sheltering_TPI(azm_indices(i_s,j_s),i,k,j)) ) then
+                                        Sx_array_temp(azm_indices(i_s,j_s),i,k,j) = Sx_temp
+                                        temp_sheltering_TPI(azm_indices(i_s,j_s),i,k,j) = TPI_Shelter_temp
+                                    else if ( (Sx_temp <= 0.0) ) then !  .and. (domain%global_TPI(i,j) >= exposed_TPI) ) then
+                                        Sx_array_temp(azm_indices(i_s,j_s),i,k,j) = Sx_temp
+                                    end if
                                 end if
                             end if
                         end do
@@ -177,71 +199,121 @@ contains
                     
                     rear_ang = 1 
                     fore_ang = 1
-
-                    do ang = 1, 72
-                                    
-                        !Determine indices for interpolation
-                        if (ang==fore_ang) then
-                            !Update indices for interpolated Sx's
-                            rear_ang = ang
-                            test_ang = ang+1
-                            do while (Sx_array_temp(test_ang,i,k,j) <= -90.0)
-                                test_ang = test_ang+1
-                                if (test_ang > 72) exit 
-                            end do
-                            fore_ang = test_ang
-                         
-                            !Handle wrap-around case
-                            if (fore_ang > 72) fore_ang = 1
-
-                        end if
-                        
-                        !Perform 30º window max search
-                        window_rear = ang-6
-                        window_fore = ang+6
-                        
-                        if (ang <= 6) then
-                            window_rear = 72-(6-ang)
-                            domain%Sx(ang,i,k,j) = max(maxval(Sx_array_temp(window_rear:72,i,k,j)), &
-                                                       maxval(Sx_array_temp(1:window_fore,i,k,j)))
-                        else if (ang >= 67) then
-                            window_fore = 6-(72-ang)
-                            domain%Sx(ang,i,k,j) = max(maxval(Sx_array_temp(window_rear:72,i,k,j)), &
-                                                       maxval(Sx_array_temp(1:window_fore,i,k,j)))
-                        else
-                            domain%Sx(ang,i,k,j) = maxval(Sx_array_temp(window_rear:window_fore,i,k,j))
-                        end if
                     
-                        !If we did not calculate Sx for a given direction
-                        if (domain%Sx(ang,i,k,j) == -90.0) then
-                            !Weight the two surrounding Sx values based on our angular-distance to them
-                            rear_ang_diff = ang-rear_ang
-                            fore_ang_diff = fore_ang-ang
-                            ang_diff = fore_ang-rear_ang
+                    if (.not.( all((Sx_array_temp(:,i,k,j) <= -90.0)) )) then
+                    
+                        !Perform 30º window max search
+                        do ang = 1, 72
+                            window_rear = ang-3
+                            window_fore = ang+3
                         
-                            !Handle wrap-around case
-                            if (ang > fore_ang) then
-                                fore_ang_diff = fore_ang+(72-ang)
-                                ang_diff = fore_ang+(72-rear_ang)
+                            if (ang <= 3) then
+                                window_rear = 72-(3-ang)
+                                
+                                maxSxVal = maxval(Sx_array_temp(window_rear:72,i,k,j))
+                                maxSxLoc = maxloc(Sx_array_temp(window_rear:72,i,k,j),dim=1)
+                                maxSxLoc = maxSxLoc + (window_rear - 1)
+                                
+                                !if (maxSxVal == -90.0) write(*,*) ang, i, k, j
+                                
+                                if (maxval(Sx_array_temp(1:window_fore,i,k,j)) > maxSxVal) then
+                                    maxSxVal = maxval(Sx_array_temp(1:window_fore,i,k,j))
+                                    maxSxLoc = maxloc(Sx_array_temp(1:window_fore,i,k,j),dim=1)
+                                end if
+                            else if (ang >= 70) then
+                                window_fore = 3-(72-ang)
+                                
+                                maxSxVal = maxval(Sx_array_temp(window_rear:72,i,k,j))
+                                maxSxLoc = maxloc(Sx_array_temp(window_rear:72,i,k,j),dim=1)
+                                maxSxLoc = maxSxLoc + (window_rear - 1)
+                                
+                                if (maxval(Sx_array_temp(1:window_fore,i,k,j)) > maxSxVal) then
+                                    maxSxVal = maxval(Sx_array_temp(1:window_fore,i,k,j))
+                                    maxSxLoc = maxloc(Sx_array_temp(1:window_fore,i,k,j),dim=1)
+                                end if
+                            else
+                                maxSxVal = maxval(Sx_array_temp(window_rear:window_fore,i,k,j))
+                                maxSxLoc = maxloc(Sx_array_temp(window_rear:window_fore,i,k,j),dim=1)
+                                maxSxLoc = maxSxLoc + (window_rear - 1)
                             end if
+                            domain%Sx(ang,i,k,j) = maxSxVal
+                            sheltering_TPI(ang,i,k,j) = temp_sheltering_TPI(maxSxLoc,i,k,j)
+                        end do                    
+                    
+                        do ang = 1, 72
+                            !Determine indices for interpolation
+                            if ( (ang==fore_ang) ) then
+                                !Update indices for interpolated Sx's
+                                rear_ang = ang
+                            
+                                fore_ang = ang+1
+                                if (fore_ang > 72) fore_ang = 1
+                                
+                                do while (domain%Sx(fore_ang,i,k,j) <= -90.0)
+                                    fore_ang = fore_ang+1
+                                    if (fore_ang > 72) fore_ang = 1
+                                end do
+                            
+                            end if
+                            
+                            if (ang==1) then
+                                rear_ang = 72
+                                do while(domain%Sx(rear_ang,i,k,j) <= -90)
+                                    rear_ang = rear_ang-1
+                                end do
+                            end if
+                    
+                            !If we did not calculate Sx for a given direction
+                            if (domain%Sx(ang,i,k,j) == -90.0) then
+                                !Weight the two surrounding Sx values based on our angular-distance to them
+                                rear_ang_diff = ang-rear_ang
+                                fore_ang_diff = fore_ang-ang
+                                ang_diff = fore_ang-rear_ang
                         
-                            !Interpolation, linearly-weighted by angular-distance from values
-                            domain%Sx(ang,i,k,j) = (Sx_array_temp(rear_ang,i,k,j)*fore_ang_diff + &
-                                                    Sx_array_temp(fore_ang,i,k,j)*rear_ang_diff)/ang_diff
+                                !Handle wrap-around case
+                                if (ang > fore_ang) then
+                                    fore_ang_diff = fore_ang+(72-ang)
+                                    ang_diff = fore_ang+(72-rear_ang)
+                                end if
+                        
+                                !Interpolation, linearly-weighted by angular-distance from values
+                                domain%Sx(ang,i,k,j) = (domain%Sx(rear_ang,i,k,j)*fore_ang_diff + &
+                                                    domain%Sx(fore_ang,i,k,j)*rear_ang_diff)/ang_diff
 
-                        end if
+                                !if (domain%Sx(ang,i,k,j) > 0) sheltering_TPI(ang,i,k,j) = (sheltering_TPI(rear_ang,i,k,j)*fore_ang_diff + &
+                                !                    sheltering_TPI(fore_ang,i,k,j)*rear_ang_diff)/ang_diff
+
+                            end if
+                        end do
+
+                    else
+                        !IF we only have -90 for all entries, set to 0
+                        domain%Sx(:,i,k,j) = 0.0
+                    end if
+                end do
+            end do
+        end do
+                
+        !Finally, mask out positive (sheltered) Sx where the sheltering element is not "prominent"        
+        !       , mask out negative (exposed) Sx shere the element is not "porminent"
+        do i=domain%grid2d%ims, domain%grid2d%ime
+            do j=domain%grid2d%jms, domain%grid2d%jme
+                do k = 1, k_max
+                    do ang = 1, 72
+                        if( (domain%Sx(ang,i,k,j) < 0.0) .and. (domain%global_TPI(i,j) <= exposed_TPI) ) domain%Sx(ang,i,k,j) = 0.0
+                        if( (domain%Sx(ang,i,k,j) > 0.0) .and. (sheltering_TPI(ang,i,k,j) <= exposed_TPI) ) domain%Sx(ang,i,k,j) = 0.0
                     end do
                 end do
             end do
         end do
         
-    
-        !if ( this_image() == 1 ) then
-        !    write (*,*) "Saving *_Sx.nc"
-        !    !Save file
-        !    call io_write(filename, "Sx", domain%Sx(:,:,:,:) ) 
-        !    call io_write("TPI_out.nc", "TPI", domain%TPI(:,:) ) 
-        !endif
+        if ( this_image() == 1 ) then
+            write (*,*) "Saving *_Sx.nc"
+            !Save file
+            call io_write(filename, "Sx", domain%Sx(:,:,:,:) ) 
+            call io_write("TPI_out.nc", "TPI", domain%global_TPI(:,:) ) 
+            call io_write("sheltering_TPI.nc", "Sx_shelter", sheltering_TPI(:,:,:,:) ) 
+        endif
         
         deallocate(dist)
         deallocate(Sx_array_temp)
@@ -284,26 +356,35 @@ contains
     
     
     
-    subroutine apply_Sx(Sx, TPI, u, v, w)
+    subroutine apply_Sx(domain) !Sx, TPI, u, v, w)
         implicit none
-        real, intent(in)                       :: Sx(:,:,:,:), TPI(:,:)
-        real, intent(inout),  dimension(:,:,:) :: u, v, w
+        class(domain_t), intent(inout) :: domain
+        !real, intent(in)                       :: Sx(:,:,:,:), TPI(:,:)
+        !real, intent(inout),  dimension(:,:,:) :: u, v, w
         
         real, allocatable, dimension(:,:)   :: winddir, Sx_curr
         real, allocatable, dimension(:,:,:)   :: Sx_U, Sx_V
 
         integer ::  i, j, k, ims, ime, jms, jme, CV_u, CV_v
-        real    :: TPI_corr, Sx_U_corr, Sx_V_corr
+        real    :: TPI_corr, Sx_U_corr, Sx_V_corr, thresh_ang, Ri, WS
+                
+        associate(u       => domain%u%data_3d,                         &
+                  v       => domain%v%data_3d,                         &
+                  w       => domain%w%data_3d,                         &
+                  Sx      => domain%Sx,                         &
+                  TPI     => domain%TPI)
                 
         ims = lbound(w,1)
         ime = ubound(w,1)
         jms = lbound(w,3)
         jme = ubound(w,3)
-                
+        
         allocate(Sx_curr(ims:ime,jms:jme))
         
         allocate(Sx_U(ims:ime+1,1:30,jms:jme))
         allocate(Sx_V(ims:ime,1:30,jms:jme+1))
+        
+        thresh_ang = 0
 
         !Initialize staggered-Sx. This will keep the border values from being updated
         Sx_U = 0
@@ -311,6 +392,8 @@ contains
         
         CV_u = 0
         CV_v = 0
+        
+        !Compute threshold separation angle from atmospheric conditions
 
         !Pick appropriate Sx for wind direction and interpolate Sx to staggered grids
         do k = 1, 30
@@ -323,37 +406,32 @@ contains
         do i = ims+1, ime
             do j = jms+1, jme
             
+                !if ( .not.(Sx_U(i,1,j) == 0) .and. .not.(Sx_V(i,1,j) == 0) ) then
+                !    !parent_i = domain%
+                !    !parent_j
+                !
+                !    Ri = domain%Ri(i,1,j)
+                !    WS = sqrt( u(i,1,j)**2 + v(i,1,j)**2 )
+                !    thresh_ang = calc_thresh_ang(Ri,WS)
+                !end if
+            
                 !Loop through vertical column
                 do k = 1, 30
-                
-                
-                    !if ( (k == 1) .and. (TPI(i,j) > 100.0)) then !ridges
-                        !u(i,k,j) = u(i,k,j) - u(i,k,j)*beta(1,1) + Sx_U(i,1,j)*beta(1,3) !+ CV_u*beta(1,2) 
-                        !v(i,k,j) = v(i,k,j) - v(i,k,j)*beta(1,1) + Sx_V(i,1,j)*beta(1,3) !+ CV_v*beta(1,2) 
-                    !else if (TPI(i,j) <= -100.0) then !valleys
-                        !u(i,k,j) = u(i,k,j) - u(i,k,j)*beta(3,1) + Sx_U(i,1,j)*beta(3,3) !+ CV_u*beta(3,2) 
-                        !v(i,k,j) = v(i,k,j) - v(i,k,j)*beta(3,1) + Sx_V(i,1,j)*beta(3,3) !+ CV_v*beta(3,2) 
-                    !else !upper slopes
-                        !u(i,k,j) = u(i,k,j) - u(i,k,j)*beta(2,1) + Sx_U(i,1,j)*beta(2,3) !+ CV_u*beta(2,2) 
-                        !v(i,k,j) = v(i,k,j) - v(i,k,j)*beta(2,1) + Sx_V(i,1,j)*beta(2,3) !+ CV_v*beta(2,2) 
-                    !end if
-                
+
                     !Consider sheltering corrections
                     !If surface was sheltered and we are still sheltered: U-grid
-                    if ((Sx_U(i,1,j) > 0) .and. (Sx_U(i,k,j) > 0)) then
+                    if ((Sx_U(i,1,j) > thresh_ang) .and. (Sx_U(i,k,j) > thresh_ang)) then
                         !Sheltered correction
                         Sx_U_corr = Sx_U(i,k,j) / (Sx_U(i,k,j)+5)
-                        !w(i,k,j) = -5
                     else 
                         Sx_U_corr = 0
                     end if
                     
                     !If surface was sheltered and we are still sheltered: V-grid
-                    if ((Sx_V(i,1,j) > 0) .and. (Sx_V(i,k,j) > 0)) then
+                    if ((Sx_V(i,1,j) > thresh_ang) .and. (Sx_V(i,k,j) > thresh_ang)) then
                         !Sheltered correction
                         Sx_V_corr = Sx_V(i,k,j) / (Sx_V(i,k,j)+5)
-                        !w(i,k,j) = -5
-                    else 
+                    else
                         Sx_V_corr = 0
                     end if
 
@@ -369,13 +447,11 @@ contains
                         ! If Sx is negative, compute exposure correction
                         if (Sx_U(i,1,j) < 0) then
                             Sx_U_corr = (Sx_U(i,1,j)/45) * ((11-k)/10.0) !Exposure used to be /30
-                            !w(i,k,j) = 5 * ((11-k)/10.0)
                         end if
                         
                         ! If Sx is negative, compute exposure correction
                         if (Sx_V(i,1,j) < 0) then
                             Sx_V_corr = (Sx_V(i,1,j)/45) * ((11-k)/10.0) !Exposure used to be /30
-                            !w(i,k,j) = 5 * ((11-k)/10.0)
                         end if
                     else 
                         TPI_corr = 0
@@ -385,6 +461,8 @@ contains
                     !If we have no correction to apply, we are done with this cell
                     if ( Sx_U_corr == 0 .and. Sx_V_corr == 0 .and. TPI_corr == 0 ) exit
                     
+                    TPI_corr = 0
+                    
                     !Finally, apply TPI and Sx corrections
                     u(i,k,j) = u(i,k,j) * (1 + TPI_corr - Sx_U_corr)
                     v(i,k,j) = v(i,k,j) * (1 + TPI_corr - Sx_V_corr)
@@ -392,11 +470,7 @@ contains
             end do
         end do
         
-        
-        
-        
-        
-        
+        end associate
 
         
         !Make mass-centered u/v at ground-level (domain%u_m/v_m are not initialized on spin-up)

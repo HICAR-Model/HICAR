@@ -361,7 +361,8 @@ contains
         real, intent(in) :: th_top, th_bot, z_top, z_bot
         real :: BV_freq
 
-        BV_freq = gravity * (log(th_top)-log(th_bot)) / (z_top - z_bot)
+        !BV_freq = gravity * (log(th_top)-log(th_bot)) / (z_top - z_bot)
+        BV_freq = gravity * (th_top - th_bot) / ((z_top - z_bot) * (th_top+th_bot)/2)
     end function calc_dry_stability
 
     !>----------------------------------------------------------
@@ -412,6 +413,25 @@ contains
         endif
 
     end function calc_froude
+    
+    
+    pure function calc_Ri(brunt_vaisalla_frequency, wind_speed, dz) result(Ri)
+        implicit none
+        real, intent(in) :: brunt_vaisalla_frequency    ! [ 1 / s ]
+        real, intent(in) :: wind_speed                  ! [ m / s ]
+        real, intent(in) :: dz                          ! [ m / s ]
+        real :: Ri                                  ! []
+        real :: denom
+
+        denom = (wind_speed/dz)**2
+
+        if (denom==0) then
+            Ri = 10 ! anything over ~5 is effectively infinite anyway
+        else
+            Ri = brunt_vaisalla_frequency / denom
+        endif
+
+    end function calc_Ri
 
     !>----------------------------------------------------------
     !! Compute the fraction of blocking winds to apply
@@ -426,7 +446,22 @@ contains
         fraction = min(max( fraction, 0.), 1.)
 
     end function blocking_fraction
+    
+    
+    pure function calc_thresh_ang(Ri,WS) result(theta)
+        implicit none
+        real, intent(in) :: Ri
+        real, intent(in) :: WS
+        real :: theta
+        
+        !When we have very unstable conditions (Ri < 0), theta = 10, very stable conditions (Ri > 1), never separation
+        !WS modulates this, reducing the separation angle by 2 degrees for each m/s over 2 m/s
+        theta = 10 + 80*min(max(Ri,0.0),1.0) - 2*min((WS-2.0),0.0)
+        
+        !Only allow separation for a max angle of 10º
+        theta = max(theta,10.0)
 
+    end function calc_thresh_ang
 
     !>----------------------------------------------------------
     !!  Calculate the saturated mixing ratio for a given temperature and pressure

@@ -13,7 +13,7 @@ submodule(domain_interface) domain_implementation
     use icar_constants,       only : kVARS, kLC_LAND
     use string,               only : str
     use co_util,              only : broadcast
-    use io_routines,          only : io_read, io_write
+    use io_routines,          only : io_write
     use geo,                  only : geo_lut, geo_interp, geo_interp2d, standardize_coordinates
     use array_utilities,      only : array_offset_x, array_offset_y, smooth_array, smooth_array_2d, array_offset_x_2d, array_offset_y_2d
     use vertical_interpolation,only : vinterp, vLUT
@@ -1452,8 +1452,8 @@ contains
         !If we don't have an Sx file saved, build one
         !if (.not.(fexist)) then
         if (this_image()==1) write(*,*) "    Calculating Sx and TPI for wind modification"
-        call calc_Sx(this, options, filename)
         call calc_TPI(this)
+        call calc_Sx(this, options, filename)
         !endif
     
         !Load Sx from file into domain_array
@@ -1955,9 +1955,9 @@ contains
                 ! Step in reverse so that the bottom level is preserved until it is no longer needed
                 do i=AGL_nz,1,-1
                     ! Multiply subtraction of base-topography by a factor that scales from 1 at surface to 0 at AGL_cap height
-                    this%geo_u%z(:,i,:) = this%geo_u%z(:,i,:)-(this%geo_u%z(:,1,:)*((AGL_nz-i)/AGL_nz))
-                    this%geo_v%z(:,i,:) = this%geo_v%z(:,i,:)-(this%geo_v%z(:,1,:)*((AGL_nz-i)/AGL_nz))
-                    forcing%z(:,i,:) = forcing%z(:,i,:)-(forcing%original_geo%z(:,1,:)*((AGL_nz-i)/AGL_nz))    
+                    this%geo_u%z(:,i,:) = this%geo_u%z(:,i,:)-(this%geo_u%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))
+                    this%geo_v%z(:,i,:) = this%geo_v%z(:,i,:)-(this%geo_v%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))
+                    forcing%z(:,i,:) = forcing%z(:,i,:)-(forcing%original_geo%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))   
                 enddo
 
             endif
@@ -1969,6 +1969,8 @@ contains
             call geo_interp(forcing%geo_u%z, forcing%z, forc_u_from_mass%geolut)
             call vLUT(this%geo_u, forcing%geo_u)
 
+            call io_write("eo_u_vLUT.nc","data",forcing%geo_u%vert_lut%w)
+            
             nx = size(this%geo_v%z, 1)
             ny = size(this%geo_v%z, 3)
             allocate(forcing%geo_v%z(nx,nz,ny))
@@ -1979,7 +1981,7 @@ contains
         
                 !! Add back terrain-subtracted portions to forcing%z
                 do i=AGL_nz,1,-1
-                    forcing%z(:,i,:) = forcing%z(:,i,:)+(forcing%original_geo%z(:,1,:)*((AGL_nz-i)/AGL_nz))
+                    forcing%z(:,i,:) = forcing%z(:,i,:)+(forcing%original_geo%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))
                 enddo
             endif
             
@@ -1988,6 +1990,7 @@ contains
             allocate(forcing%geo%z(nx, nz, ny))
             call geo_interp(forcing%geo%z, forcing%z, forcing%geo%geolut)
             call vLUT(this%geo,   forcing%geo)
+            call io_write("eo_vLUT.nc","data",forcing%geo%vert_lut%w)
 
         end if
 
