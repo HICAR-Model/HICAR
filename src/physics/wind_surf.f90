@@ -101,14 +101,14 @@ contains
         real, allocatable    :: dist(:,:), azm(:,:), Sx_array_temp(:,:,:,:), sheltering_TPI(:,:,:,:), temp_sheltering_TPI(:,:,:,:)
         integer, allocatable :: azm_indices(:,:), valid_ks(:)
         integer           :: d_max, search_max, i, j, k, ang, i_s, j_s, i_start_buffer, i_end_buffer, j_start_buffer, j_end_buffer
-        integer           :: rear_ang, fore_ang, test_ang, rear_ang_diff, fore_ang_diff, ang_diff, k_max, window_rear, window_fore, maxSxLoc
+        integer           :: rear_ang, fore_ang, test_ang, rear_ang_diff, fore_ang_diff, ang_diff, k_max, window_rear, window_fore, maxSxLoc, window_width
         real              :: search_height, pt_height, h_diff, Sx_temp, maxSxVal, TPI_Shelter_temp, exposed_TPI
 
         d_max = options%wind%Sx_dmax
         k_max = 30 !Max number of layers to compute Sx for
         search_max = floor(d_max/domain%dx)
         
-        exposed_TPI = -1000.0
+        exposed_TPI = 10.0
         
         ! Initialize Sx and set to value of -90 (absolute minimum possible) for search algorithm
         allocate(domain%Sx( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:k_max, domain%grid2d%jms:domain%grid2d%jme ))
@@ -183,7 +183,7 @@ contains
                                     !If we have found a sheltering Sx, and it is "exposed" (TPI >= 100.0), use this Sx
                                     !If we have found a sheltering Sx, but it is not "exposed", then this cell gets neither sheltering nor exposure (Sx = 0)
                                     !Sx_array_temp(azm_isndices(i_s,j_s),i,k,j) = Sx_temp
-                                    if ((Sx_temp > 0.0) .and. (TPI_Shelter_temp >= exposed_TPI) ) then ! .and. ( TPI_Shelter_temp >= temp_sheltering_TPI(azm_indices(i_s,j_s),i,k,j)) ) then
+                                    if ( (Sx_temp > 0.0) .and. (TPI_Shelter_temp >= exposed_TPI) ) then ! .and. ( TPI_Shelter_temp >= temp_sheltering_TPI(azm_indices(i_s,j_s),i,k,j)) ) then
                                         Sx_array_temp(azm_indices(i_s,j_s),i,k,j) = Sx_temp
                                         temp_sheltering_TPI(azm_indices(i_s,j_s),i,k,j) = TPI_Shelter_temp
                                     else if ( (Sx_temp <= 0.0) ) then !  .and. (domain%global_TPI(i,j) >= exposed_TPI) ) then
@@ -202,13 +202,14 @@ contains
                     
                     if (.not.( all((Sx_array_temp(:,i,k,j) <= -90.0)) )) then
                     
-                        !Perform 30º window max search
+                        !Perform 40º window max search
+                        window_width = 1
                         do ang = 1, 72
-                            window_rear = ang-3
-                            window_fore = ang+3
+                            window_rear = ang-window_width
+                            window_fore = ang+window_width
                         
-                            if (ang <= 3) then
-                                window_rear = 72-(3-ang)
+                            if (ang <= window_width) then
+                                window_rear = 72-(window_width-ang)
                                 
                                 maxSxVal = maxval(Sx_array_temp(window_rear:72,i,k,j))
                                 maxSxLoc = maxloc(Sx_array_temp(window_rear:72,i,k,j),dim=1)
@@ -220,8 +221,8 @@ contains
                                     maxSxVal = maxval(Sx_array_temp(1:window_fore,i,k,j))
                                     maxSxLoc = maxloc(Sx_array_temp(1:window_fore,i,k,j),dim=1)
                                 end if
-                            else if (ang >= 70) then
-                                window_fore = 3-(72-ang)
+                            else if ( ang >= (72-(window_width-1)) ) then
+                                window_fore = window_width-(72-ang)
                                 
                                 maxSxVal = maxval(Sx_array_temp(window_rear:72,i,k,j))
                                 maxSxLoc = maxloc(Sx_array_temp(window_rear:72,i,k,j),dim=1)
@@ -356,23 +357,16 @@ contains
     
     
     
-    subroutine apply_Sx(domain) !Sx, TPI, u, v, w)
+    subroutine apply_Sx(Sx, TPI, u, v, w, Ri)
         implicit none
-        class(domain_t), intent(inout) :: domain
-        !real, intent(in)                       :: Sx(:,:,:,:), TPI(:,:)
-        !real, intent(inout),  dimension(:,:,:) :: u, v, w
+        real, intent(in)                       :: Sx(:,:,:,:), TPI(:,:), Ri(:,:,:)
+        real, intent(inout),  dimension(:,:,:) :: u, v, w
         
         real, allocatable, dimension(:,:)   :: winddir, Sx_curr
         real, allocatable, dimension(:,:,:)   :: Sx_U, Sx_V
 
         integer ::  i, j, k, ims, ime, jms, jme, CV_u, CV_v
-        real    :: TPI_corr, Sx_U_corr, Sx_V_corr, thresh_ang, Ri, WS
-                
-        associate(u       => domain%u%data_3d,                         &
-                  v       => domain%v%data_3d,                         &
-                  w       => domain%w%data_3d,                         &
-                  Sx      => domain%Sx,                         &
-                  TPI     => domain%TPI)
+        real    :: TPI_corr, Sx_U_corr, Sx_V_corr, thresh_ang, Ri_num, WS        
                 
         ims = lbound(w,1)
         ime = ubound(w,1)
@@ -384,7 +378,6 @@ contains
         allocate(Sx_U(ims:ime+1,1:30,jms:jme))
         allocate(Sx_V(ims:ime,1:30,jms:jme+1))
         
-        thresh_ang = 0
 
         !Initialize staggered-Sx. This will keep the border values from being updated
         Sx_U = 0
@@ -393,7 +386,7 @@ contains
         CV_u = 0
         CV_v = 0
         
-        !Compute threshold separation angle from atmospheric conditions
+        thresh_ang = 0
 
         !Pick appropriate Sx for wind direction and interpolate Sx to staggered grids
         do k = 1, 30
@@ -401,19 +394,25 @@ contains
             Sx_U(ims+1:ime,k,:) = (Sx_curr(ims:ime-1,:) + Sx_curr(ims+1:ime,:))/2
             Sx_V(:,k,jms+1:jme) = (Sx_curr(:,jms:jme-1) + Sx_curr(:,jms+1:jme))/2
         end do
+        
+        if (this_image()==1) then
+            call io_write("Sx_U.nc", "Sx_U", Sx_U(:,:,:) ) 
+            call io_write("Sx_V.nc", "Sx_V", Sx_V(:,:,:) ) 
+        end if
 
         !Loop through i,j
         do i = ims+1, ime
             do j = jms+1, jme
             
-                !if ( .not.(Sx_U(i,1,j) == 0) .and. .not.(Sx_V(i,1,j) == 0) ) then
-                !    !parent_i = domain%
-                !    !parent_j
-                !
-                !    Ri = domain%Ri(i,1,j)
-                !    WS = sqrt( u(i,1,j)**2 + v(i,1,j)**2 )
-                !    thresh_ang = calc_thresh_ang(Ri,WS)
-                !end if
+                !Compute threshold separation angle from atmospheric conditions
+                if ( .not.(Sx_U(i,1,j) == 0) .and. .not.(Sx_V(i,1,j) == 0) ) then
+                    !parent_i = domain%
+                    !parent_j
+                
+                    Ri_num = Ri(i,1,j)
+                    WS = sqrt( u(i,1,j)**2 + v(i,1,j)**2 )
+                    thresh_ang = calc_thresh_ang(Ri_num,WS)
+                end if
             
                 !Loop through vertical column
                 do k = 1, 30
@@ -422,7 +421,7 @@ contains
                     !If surface was sheltered and we are still sheltered: U-grid
                     if ((Sx_U(i,1,j) > thresh_ang) .and. (Sx_U(i,k,j) > thresh_ang)) then
                         !Sheltered correction
-                        Sx_U_corr = Sx_U(i,k,j) / (Sx_U(i,k,j)+5)
+                        Sx_U_corr = (Sx_U(i,k,j)-thresh_ang)/10.0 !Sx_U(i,k,j) / (Sx_U(i,k,j)+5)
                     else 
                         Sx_U_corr = 0
                     end if
@@ -430,7 +429,7 @@ contains
                     !If surface was sheltered and we are still sheltered: V-grid
                     if ((Sx_V(i,1,j) > thresh_ang) .and. (Sx_V(i,k,j) > thresh_ang)) then
                         !Sheltered correction
-                        Sx_V_corr = Sx_V(i,k,j) / (Sx_V(i,k,j)+5)
+                        Sx_V_corr = (Sx_V(i,k,j)-thresh_ang)/10.0 !Sx_V(i,k,j) / (Sx_V(i,k,j)+5)
                     else
                         Sx_V_corr = 0
                     end if
@@ -446,12 +445,12 @@ contains
                         !Consider exposure, only for first 10-levels
                         ! If Sx is negative, compute exposure correction
                         if (Sx_U(i,1,j) < 0) then
-                            Sx_U_corr = (Sx_U(i,1,j)/45) * ((11-k)/10.0) !Exposure used to be /30
+                            Sx_U_corr = -((11-k)/10.0) * 0.7 !(Sx_U(i,1,j)/45) * ((11-k)/10.0) 
                         end if
                         
                         ! If Sx is negative, compute exposure correction
                         if (Sx_V(i,1,j) < 0) then
-                            Sx_V_corr = (Sx_V(i,1,j)/45) * ((11-k)/10.0) !Exposure used to be /30
+                            Sx_V_corr = -((11-k)/10.0) * 0.7 !(Sx_V(i,1,j)/45) * ((11-k)/10.0)
                         end if
                     else 
                         TPI_corr = 0
@@ -463,6 +462,10 @@ contains
                     
                     TPI_corr = 0
                     
+                    !Dummy bounding of Sx corrections
+                    Sx_U_corr = min(max(Sx_U_corr,-1.0),2.0)
+                    Sx_V_corr = min(max(Sx_V_corr,-1.0),2.0)
+                    
                     !Finally, apply TPI and Sx corrections
                     u(i,k,j) = u(i,k,j) * (1 + TPI_corr - Sx_U_corr)
                     v(i,k,j) = v(i,k,j) * (1 + TPI_corr - Sx_V_corr)
@@ -470,8 +473,6 @@ contains
             end do
         end do
         
-        end associate
-
         
         !Make mass-centered u/v at ground-level (domain%u_m/v_m are not initialized on spin-up)
         !do k = 1,ubound(Sx,3)

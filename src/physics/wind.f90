@@ -18,6 +18,7 @@ module wind
     use wind_surf, only         : apply_Sx
     use io_routines, only : io_read, io_write
     use mod_atm_utilities,   only : calc_froude, calc_Ri, calc_dry_stability
+    use timer_interface,    only : timer_t
     
     implicit none
     private
@@ -79,7 +80,7 @@ contains
         allocate(divergence(ims:ime,kms:kme,jms:jme))
 
         call calc_divergence(divergence,u,v,w,jaco_u,jaco_v,jaco_w,dz,dx,jaco,rho,smooth_height,options,horz_only=.True.)
-        divergence = divergence * vert_div_weight
+        !divergence = divergence * vert_div_weight
 
         ! If this becomes a bottle neck in the code it could be parallelized over y
         ! loop over domain levels
@@ -114,13 +115,12 @@ contains
                     endif
                 else
                     if (k==kms) then
-                        w(:,k,:) = 0 - divergence(:,k,:) * dz(:,k,:) / (jaco_w(:,k,:) )
+                        w(:,k,:) = vert_div_weight(:,k,:) * (0 - divergence(:,k,:) * dz(:,k,:)) / (jaco_w(:,k,:) )
                     else 
-                        w(:,k,:) = (w(:,k-1,:) * jaco_w(:,k-1,:) - divergence(:,k,:) * dz(:,k,:))/ (jaco_w(:,k,:) )
+                        w(:,k,:) = vert_div_weight(:,k,:) * ((w(:,k-1,:) * jaco_w(:,k-1,:) - divergence(:,k,:) * dz(:,k,:)))/ (jaco_w(:,k,:) )
                     end if
                     !u(:,k,:) = (u(:,k,:) * jaco_u(:,k,:) - divergence(:,k,:) * 0.25 * dx) / jaco_u(:,k,:)
                     !v(:,k,:) = (v(:,k,:) * jaco_v(:,k,:) - divergence(:,k,:) * 0.25 * dx) / jaco_v(:,k,:)
-
 
                 
                 end if
@@ -296,10 +296,11 @@ contains
         type(domain_t), intent(inout) :: domain
         type(options_t),intent(in)    :: options
 
+        type(timer_t)   :: wind_timer
         real, allocatable, dimension(:,:,:) :: temparray
         integer :: nx, ny, nz, i, j
         
-
+        call wind_timer%start()
         if (.not.allocated(domain%advection_dz)) then
 
             call init_winds(domain, options)
@@ -314,7 +315,7 @@ contains
             !     call add_blocked_flow(domain, options)
             ! endif
 
-            if (options%wind%Sx) call apply_Sx(domain)!%Sx,domain%TPI,domain%u%data_3d, domain%v%data_3d, domain%w%data_3d)
+            if (options%wind%Sx) call apply_Sx(domain%Sx,domain%TPI,domain%u%data_3d, domain%v%data_3d, domain%w%data_3d,domain%Ri)
 
             ! linear winds
             if (options%physics%windtype==kWIND_LINEAR) then
@@ -335,7 +336,13 @@ contains
 
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
             call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
-            write(*,*) "Just in initilaization of winds"
+            
+            call calc_w_real(domain% u %data_3d,      &
+                             domain% v %data_3d,      &
+                             domain% w %data_3d,      &
+                             domain% w_real %data_3d,      &
+                             domain%dzdx, domain%dzdy,    &
+                             domain%jacobian)
         else
 
             call update_stability(domain)
@@ -343,7 +350,7 @@ contains
             ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
             !call make_winds_grid_relative(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d, domain%grid, domain%sintheta, domain%costheta)
             
-            if (options%wind%Sx) call apply_Sx(domain)!%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d)
+            if (options%wind%Sx) call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d,domain%Ri)
 
             ! linear winds
             if (options%physics%windtype==kWIND_LINEAR) then
@@ -368,12 +375,79 @@ contains
                              domain%jacobian_u, domain%jacobian_v, domain%jacobian_w,         &
                              domain%advection_dz, domain%dx,    &
                              domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
-            write(*,*) "Just in Updaate of winds"
+                             
+            call calc_w_real(domain% u %meta_data%dqdt_3d,      &
+                             domain% v %meta_data%dqdt_3d,      &
+                             domain% w %meta_data%dqdt_3d,      &
+                             domain% w_real %data_3d,      &
+                             domain%dzdx, domain%dzdy,    &
+                             domain%jacobian)
 
         endif
-
+        
+        call wind_timer%stop()
+        if (this_image()==1) write(*,*) "wind_loop  : ", trim(wind_timer%as_string())
 
     end subroutine update_winds
+    
+    subroutine calc_w_real(u,v,w_grid,w_real,dzdx,dzdy,jacobian)
+        implicit none
+        real, intent(in), dimension(:,:,:) :: u,v,w_grid,dzdx,dzdy,jacobian
+        real, intent(inout)                :: w_real(:,:,:)
+        
+        real, allocatable :: lastw(:,:)
+        real, allocatable :: currw(:,:)
+        real, allocatable :: uw(:,:)
+        real, allocatable :: vw(:,:)
+        integer :: z, ims, ime, jms, jme, kms, kme
+        
+        ims = lbound(w_grid,1)
+        ime = ubound(w_grid,1)
+        kms = lbound(w_grid,2)
+        kme = ubound(w_grid,2)
+        jms = lbound(w_grid,3)
+        jme = ubound(w_grid,3)
+        
+        if (.not.allocated(lastw)) then
+            allocate( lastw( ims+1:ime-1, jms+1:jme-1))
+            allocate( currw( ims+1:ime-1, jms+1:jme-1))
+            allocate(    uw( ims+1:ime,   jms+1:jme-1))
+            allocate(    vw( ims+1:ime-1, jms+1:jme  ))
+        endif
+        
+        !calculate the real vertical motions (including U*dzdx + V*dzdy)
+        lastw = 0
+        do z = kms, kme
+            
+            ! ! if(options%parameters%use_terrain_difference) then
+            !                 ! compute the U * dz/dx component of vertical motion
+            !     uw    = u(ims+1:ime,   z, jms+1:jme-1) * domain%delta_dzdx(:,z,jms+1:jme-1)
+            !     ! compute the V * dz/dy component of vertical motion
+            !     vw    = v(ims+1:ime-1, z, jms+1:jme  ) * domain%delta_dzdy(ims+1:ime-1,z,:)
+            ! else    
+                ! compute the U * dz/dx component of vertical motion
+                uw    = u(ims+1:ime,   z, jms+1:jme-1) * dzdx(ims+1:ime,z,jms+1:jme-1)
+                ! compute the V * dz/dy component of vertical motion
+                vw    = v(ims+1:ime-1, z, jms+1:jme  ) * dzdy(ims+1:ime-1,z,jms+1:jme)
+            ! endif    
+            ! ! convert the W grid relative motion to m/s
+            ! currw = w(ims+1:ime-1, z, jms+1:jme-1) * dz_interface(ims+1:ime-1, z, jms+1:jme-1) / domain%dx
+
+            ! the W grid relative motion
+            currw = w_grid(ims+1:ime-1, z, jms+1:jme-1)
+
+            ! if (options%physics%convection>0) then
+            !     currw = currw + domain%w_cu(2:nx-1,z,2:ny-1) * domain%dz_inter(2:nx-1,z,2:ny-1) / domain%dx
+            ! endif
+
+            ! compute the real vertical velocity of air by combining the different components onto the mass grid
+            ! includes vertical interpolation between w_z-1/2 and w_z+1/2
+            w_real(ims+1:ime-1, z, jms+1:jme-1) = (uw(ims+1:ime-1,:) + uw(ims+2:ime,:))*0.5 &
+                                                 +(vw(:,jms+1:jme-1) + vw(:,jms+2:jme))*0.5 &
+                                                 +jacobian(ims+1:ime-1,z,jms+1:jme-1)*(lastw + currw) * 0.5
+            lastw = currw ! could avoid this memcopy cost using pointers or a single manual loop unroll
+        end do
+    end subroutine calc_w_real
     
     subroutine iterative_winds(domain, options, update_in)
         implicit none
@@ -382,7 +456,8 @@ contains
         logical, optional, intent(in) :: update_in
         
         ! interal parameters
-        real, allocatable, dimension(:,:,:) :: div, dial_weights, ADJ,ADJ_coef, U_cor, V_cor, current_u, current_v, current_w
+        real, allocatable, dimension(:,:,:) :: div, dial_weights, ADJ,ADJ_coef, U_D_cor, V_D_cor, current_u, current_v, current_w
+        real, allocatable, dimension(:,:,:) :: y_p, x_p, T_W_cor,U_W_cor,V_W_cor, u_m, v_m, dzdx_m, dzdy_m
         real, allocatable, dimension(:,:)   :: wind_layer
         real    :: corr_factor
         integer :: it, k, j, i, ims, ime, jms, jme, kms, kme, wind_k
@@ -426,8 +501,8 @@ contains
             !    endif
             !enddo
             
-            !Dial of 100% (all vertical) at Fr 1.25, 0% (all horizontal) at Fr <= 0.75
-            dial_weights = max((domain%froude-0.75),0.0)/1.25
+            !Dial of 100% (all vertical) at Fr 0.75, 0% (all horizontal) at Fr <= 0.25
+            dial_weights = 0.5 !max((domain%froude-0.25),0.0)/0.25
             
             !Sanity-bounding to min of 0, max of 1
             dial_weights = max(min(dial_weights,1.0),0.0)
@@ -444,12 +519,23 @@ contains
             call balance_uvw(domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, & 
                         domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options)
         endif
-
+        
         allocate(div(ims:ime,kms:kme,jms:jme))
+        !allocate(destructive_vert(ims:ime,kms:kme,jms:jme))
         allocate(ADJ_coef(ims:ime,kms:kme,jms:jme))
         allocate(ADJ(ims:ime,kms:kme,jms:jme))
-        allocate(U_cor(ims:ime,kms:kme,jms:jme))
-        allocate(V_cor(ims:ime,kms:kme,jms:jme))
+        allocate(U_D_cor(ims:ime,kms:kme,jms:jme))
+        allocate(V_D_cor(ims:ime,kms:kme,jms:jme))
+        allocate(U_W_cor(ims:ime,kms:kme,jms:jme))
+        allocate(V_W_cor(ims:ime,kms:kme,jms:jme))
+        allocate(T_W_cor(ims:ime,kms:kme,jms:jme))
+        allocate(dzdx_m(ims:ime,kms:kme,jms:jme))
+        allocate(dzdy_m(ims:ime,kms:kme,jms:jme))
+        allocate(u_m(ims:ime,kms:kme,jms:jme))
+        allocate(v_m(ims:ime,kms:kme,jms:jme))
+        allocate(y_p(ims:ime,kms:kme,jms:jme))
+        allocate(x_p(ims:ime,kms:kme,jms:jme))
+
         allocate(wind_layer(ims:ime,jms:jme))
         ! Calculate and apply correction to w-winds
         wind_k = kme-2
@@ -464,9 +550,7 @@ contains
         wind_layer = domain%w%data_3d(:,wind_k,:)
 
         !Compute relative correction factors for U and V based on input speeds
-        U_cor = ABS(domain%u%data_3d(ims:ime,:,jms:jme))/ &
-                (ABS(domain%u%data_3d(ims:ime,:,jms:jme))+ABS(domain%v%data_3d(ims:ime,:,jms:jme)))
-                
+      
         do k = kms,kme
             !corr_factor = ((sum(domain%advection_dz(ims,1:k,jms)))/domain%smooth_height)
             corr_factor = (k*1.0)/wind_k
@@ -483,72 +567,130 @@ contains
         enddo
         
 
-        !domain%w%data_3d(:,kms,:) = 0
-        if (this_image()==4) call io_write("ideal_w_grid_before.nc","w_grid",domain%w%data_3d)
-        !do k = kms,kme
-        !    if (kms==1) then
-        !        domain%w%data_3d(:,k,:) = domain%w%data_3d(:,k,:) !( -2*(U_cor(:,k,:) + V_cor(:,k,:))/domain%jacobian(:,k,:) ) - 0
-        !    else
-        !        domain%w%data_3d(:,k,:) = ( -2*(U_cor(:,k,:) + V_cor(:,k,:))/domain%jacobian(:,k,:) ) - domain%w%data_3d(:,k-1,:)
-        !    endif
-        !enddo
+        if (this_image()==1) call io_write("ideal_w_grid_before.nc","w_grid",domain%w%data_3d)
+   
+        !domain%w%data_3d = (U_cor + V_cor)/domain%jacobian
         
-        U_cor    = (domain%u%data_3d(ims+1:ime+1, :, :) * domain%dzdx(ims+1:ime+1,:,jms:jme) + &
-                    domain%u%data_3d(ims:ime, :, :) * domain%dzdx(ims:ime,:,jms:jme))/2
-                ! compute the V * dz/dy component of vertical motion
-        V_cor    = (domain%v%data_3d(:, :, jms+1:jme+1) * domain%dzdy(ims:ime,:,jms+1:jme+1) + &
-                    domain%v%data_3d(:, :, jms:jme) * domain%dzdy(ims:ime,:,jms:jme))/2
+        !destructive_vert(:,kme,:) = 0
+        !destructive_vert(:,kms:kme-1,:) = -( ((U_cor(:,kms:kme-1,:)+U_cor(:,kms+1:kme,:))/2) + &
+        !                                     ((V_cor(:,kms:kme-1,:)+V_cor(:,kms+1:kme,:))/2) ) /domain%jacobian(:,kms:kme-1,:)
         
-        !domain%w%data_3d = -( U_cor + V_cor)/domain%jacobian
+        domain%w%data_3d = 0 !domain%w%data_3d * (1.0-dial_weights) + destructive_vert * dial_weights
+        !do k = kms,10
+        !    domain%w%data_3d(:,k,:) = domain%w%data_3d(:,k,:) * (k/10.0)
+        !end do
         
-        if (this_image()==2) call io_write("ideal_w_grid_after.nc","w_grid",domain%w%data_3d)
+        if (this_image()==1) call io_write("ideal_w_grid_after.nc","w_grid",domain%w%data_3d)
         
-        !U_cor = ABS(sin(domain%dzdx(ims:ime,kms:kme,jms:jme))) / &
-        !        ( ABS(sin(domain%dzdx(ims:ime,kms:kme,jms:jme))) + ABS(sin(domain%dzdy(ims:ime,kms:kme,jms:jme))) )
+        !U_cor = 0.5 !max(U_cor,0.1)
+        !V_cor = 1 - U_cor 
         
-        !V_cor = ABS(domain%dzdx)!0.5
-        U_cor = 0.5 !+ ( ABS(sin(domain%dzdx(ims:ime,kms:kme,jms:jme))) - ABS(sin(domain%dzdy(ims:ime,kms:kme,jms:jme))) )/2
-        V_cor = 1 - U_cor 
+        !if (this_image()==1) call io_write("U_cor.nc","U_cor",U_cor)
+        !if (this_image()==1) call io_write("V_cor.nc","V_cor",V_cor)
         
-        if (this_image()==2) call io_write("U_cor.nc","U_cor",U_cor)
-        if (this_image()==2) call io_write("V_cor.nc","V_cor",V_cor)
         
+        !Do some setup for solver
+        dzdx_m = ( domain%dzdx(ims+1:ime+1,:,jms:jme) + domain%dzdx(ims:ime,:,jms:jme) )/2
+        dzdy_m = ( domain%dzdy(ims:ime,:,jms+1:jme+1) + domain%dzdy(ims:ime,:,jms:jme) )/2
+        
+        where(abs(dzdx_m) < 0.0001) dzdx_m = 0.0
+        where(abs(dzdy_m) < 0.0001) dzdy_m = 0.0
+        y_p = -1.0
+        x_p = -1.0
+        where( (dzdx_m == 0.0) .and. (dzdy_m == 0.0) ) y_p = 0.5
+        where( (dzdx_m == 0.0) .and. (dzdy_m == 0.0) ) x_p = 0.5
+        where(y_p < 0.0) y_p = ((dzdy_m)/( abs(dzdx_m) + abs(dzdy_m) ))
+        where(x_p < 0.0) x_p = ((dzdx_m)/( abs(dzdx_m) + abs(dzdy_m) ))
+                    
+        if (this_image()==1) call io_write("dzdx_m.nc","dzdx_m",dzdx_m)
+        if (this_image()==1) call io_write("dzdy_m.nc","dzdy_m",dzdy_m)
+
         ! Now, fixing w-winds, iterate over U/V to reduce divergence with new w-winds
-        do it = 0,options%parameters%wind_iterations
+        !This look will drive W-to 0 if you let it
         
-            !U_cor    = (domain%u%data_3d(ims+1:ime+1, :, :) * domain%dzdx(ims+1:ime+1,:,jms:jme) + &
-            !        domain%u%data_3d(ims:ime, :, :) * domain%dzdx(ims:ime,:,jms:jme))/2
-                ! compute the V * dz/dy component of vertical motion
-            !V_cor    = (domain%v%data_3d(:, :, jms+1:jme+1) * domain%dzdy(ims:ime,:,jms+1:jme+1) + &
-            !        domain%v%data_3d(:, :, jms:jme) * domain%dzdy(ims:ime,:,jms:jme))/2
+        do it = 1,40
+
+            !dial_weights = 0.8
+
+            u_m = ( domain%u%data_3d(ims+1:ime+1,:,jms:jme) + domain%u%data_3d(ims:ime,:,jms:jme) )/2
+            v_m = ( domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) )/2
+                 
+            T_W_cor = -(domain%jacobian*domain%w%data_3d + dzdx_m*u_m + dzdy_m*v_m) / (2)
+            U_W_cor = T_W_cor * x_p
+            V_W_cor = T_W_cor * y_p
+            
+            domain%u%data_3d(ims+1:ime+1,:,:) = domain%u%data_3d(ims+1:ime+1,:,:) + U_W_cor
+                                                        
+            domain%u%data_3d(ims:ime,:,:) = domain%u%data_3d(ims:ime,:,:) + U_W_cor
+                                                        
+            domain%v%data_3d(:,:,jms+1:jme+1) = domain%v%data_3d(:,:,jms+1:jme+1) + V_W_cor
+                                                        
+            domain%v%data_3d(:,:,jms:jme) = domain%v%data_3d(:,:,jms:jme) + V_W_cor
+                                                        
+            if ( (this_image()==1) .and. (it==1) ) call io_write("U_stab_cor.nc","U",domain%u%data_3d)
+            if ( (this_image()==1) .and. (it==1) ) call io_write("V_stab_cor.nc","V",domain%v%data_3d)
+            
+        enddo
         
-            !domain%w%data_3d = -( U_cor + V_cor)/domain%jacobian
-        
-        
-            !Compute divergence in new wind field
+        !This loop adjusts U/V to match w_grid so that there is 0 divergence. Currently, this sorta screws up the result from the above loop. 
+        do it = 1,options%parameters%wind_iterations
+            
+            u_m = ( domain%u%data_3d(ims+1:ime+1,:,jms:jme) + domain%u%data_3d(ims:ime,:,jms:jme) )/2
+            v_m = ( domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) )/2
+                 
             call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, &
             domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options)
+            
+            y_p = 0.5!abs(v_m)/( abs(u_m) + abs(v_m) )
+            x_p = 0.5!abs(u_m)/( abs(u_m) + abs(v_m) )
+                                
+            U_D_cor = (x_p)*2*div/ADJ_coef
+            V_D_cor = (y_p)*2*div/ADJ_coef
 
-            !Compute adjustment based on divergence
-            ADJ = div/ADJ_coef
+            if ( (this_image()==1) .and. (it==1) ) call io_write("U_W_cor.nc","U_W_cor",U_W_cor)
+            if ( (this_image()==1) .and. (it==1) ) call io_write("V_W_cor.nc","V_W_cor",V_W_cor)
+            if ( (this_image()==1) .and. (it==1) ) call io_write("T_W_cor.nc","T_W_cor",T_W_cor)
+            if ( (this_image()==1) .and. (it==1) ) call io_write("y_p.nc","y_p",y_p)
+            if ( (this_image()==1) .and. (it==1) ) call io_write("x_p.nc","x_p",x_p)
+            if ( (this_image()==1) .and. (it==1) ) call io_write("sum_p.nc","sum_p",((x_p)+(y_p)))
+
+
+            write(*,*) 'divs: ',maxval((div))
+
+            write(*,*) 'verts: ',maxval((domain%jacobian*domain%w%data_3d + dzdx_m*u_m + dzdy_m*v_m))
+
+                        
+            !Distribute divergence among the U and V fields       
             
-            !Distribute divergence among the U and V fields                                                                    
-            domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) = domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) + &
-                                                        (ADJ(ims+1:ime-1,:,jms+1:jme-1) * U_cor(ims+2:ime,:,jms+1:jme-1))
+            !The OG bit
+            !domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) = domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) + &
+            !                                            (ADJ(ims+1:ime-1,:,jms+1:jme-1) * U_cor(ims+2:ime,:,jms+1:jme-1))
                                                         
-            domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) = domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) - &
-                                                        (ADJ(ims+2:ime,:,jms+1:jme-1) * U_cor(ims+2:ime,:,jms+1:jme-1))
+            !domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) = domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) - &
+            !                                            (ADJ(ims+2:ime,:,jms+1:jme-1) * U_cor(ims+2:ime,:,jms+1:jme-1))
                                                         
-            domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) = domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) + &
-                                                        (ADJ(ims+1:ime-1,:,jms+1:jme-1) * V_cor(ims+1:ime-1,:,jms+2:jme))
+            !domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) = domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) + &
+            !                                            (ADJ(ims+1:ime-1,:,jms+1:jme-1) * V_cor(ims+1:ime-1,:,jms+2:jme))
                                                         
-            domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) = domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) - &
-                                                        (ADJ(ims+1:ime-1,:,jms+2:jme) * V_cor(ims+1:ime-1,:,jms+2:jme))
+            !domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) = domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) - &
+            !                                            (ADJ(ims+1:ime-1,:,jms+2:jme) * V_cor(ims+1:ime-1,:,jms+2:jme))
             
-            !U_cor = ABS(domain%u%data_3d(ims:ime,:,jms:jme))/ &
-            !    (ABS(domain%u%data_3d(ims:ime,:,jms:jme))+ABS(domain%v%data_3d(ims:ime,:,jms:jme)))
-            !U_cor = min(max(U_cor,0.0),1.0)
-            !V_cor = 1.0 - U_cor 
+            domain%u%data_3d(ims+1:ime+1,:,:) = domain%u%data_3d(ims+1:ime+1,:,:) + U_D_cor !+ U_W_cor
+                                                        
+            domain%u%data_3d(ims:ime,:,:) = domain%u%data_3d(ims:ime,:,:) - U_D_cor !+ U_W_cor
+                                                        
+            domain%v%data_3d(:,:,jms+1:jme+1) = domain%v%data_3d(:,:,jms+1:jme+1) + V_D_cor !+ V_W_cor
+                                                        
+            domain%v%data_3d(:,:,jms:jme) = domain%v%data_3d(:,:,jms:jme) - V_D_cor !+ V_W_cor
+                                                        
+            !Idea -- to have a full add and subtract step for all cells, so use an edge-case for edge cells
+            !domain%u%data_3d(ims+1:ime+1,:,:) = domain%u%data_3d(ims+1:ime+1,:,:) + (ADJ * 0.5)
+                                                        
+            !domain%u%data_3d(ims:ime,:,:) = domain%u%data_3d(ims:ime,:,:) - (ADJ * 0.5)
+                                                        
+            !domain%v%data_3d(:,:,jms+1:jme+1) = domain%v%data_3d(:,:,jms+1:jme+1) + (ADJ * 0.5)
+                                                        
+            !domain%v%data_3d(:,:,jms:jme) = domain%v%data_3d(:,:,jms:jme) - (ADJ * 0.5)
         
             call domain%u%exchange_u()
             call domain%v%exchange_v()
