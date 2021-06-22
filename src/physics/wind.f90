@@ -456,12 +456,12 @@ contains
         logical, optional, intent(in) :: update_in
         
         ! interal parameters
-        real, allocatable, dimension(:,:,:) :: div, dial_weights, ADJ,ADJ_coef, U_D_cor, V_D_cor, current_u, current_v, current_w, destructive_vert
-        real, allocatable, dimension(:,:,:) :: y_p, x_p, T_W_cor,U_W_cor,V_W_cor, u_m, v_m, dzdx_m, dzdy_m, N, theta, phi, beta
-        real, allocatable, dimension(:,:)   :: wind_layer
+        real, allocatable, dimension(:,:,:) :: div, dial_weights, temp_dw, ADJ,ADJ_coef, U_D_cor, V_D_cor, current_u, current_v, current_w, destructive_vert
+        real, allocatable, dimension(:,:,:) :: T_W_cor, u_m, v_m, dzdx_m, dzdy_m
         real    :: corr_factor
-        integer :: it, k, j, i, ims, ime, jms, jme, kms, kme, wind_k
+        integer :: it, k, j, i, ims, ime, jms, jme, kms, kme, wind_k, n, xmin, xmax, ymin, ymax, nsmooth_gridcells, n_smoothing_passes
         logical :: update
+        character(len=3) :: img
         
         update=.False.
         if (present(update_in)) update=update_in
@@ -472,6 +472,10 @@ contains
         kme = ubound(domain%w%data_3d,2)
         jms = lbound(domain%w%data_3d,3)
         jme = ubound(domain%w%data_3d,3)
+        
+        n_smoothing_passes = 5
+        nsmooth_gridcells = 10 !int(500 / domain%dx)
+        
 
         !If we are doing an update, we need to swap meta data into data_3d fields so it can be exchanged while balancing
         !First, we save a copy of the current data_3d so that we can substitute it back in later
@@ -491,20 +495,12 @@ contains
         allocate(ADJ(ims:ime,kms:kme,jms:jme))
         allocate(U_D_cor(ims:ime,kms:kme,jms:jme))
         allocate(V_D_cor(ims:ime,kms:kme,jms:jme))
-        allocate(U_W_cor(ims:ime,kms:kme,jms:jme))
-        allocate(V_W_cor(ims:ime,kms:kme,jms:jme))
         allocate(T_W_cor(ims:ime,kms:kme,jms:jme))
         allocate(dzdx_m(ims:ime,kms:kme,jms:jme))
         allocate(dzdy_m(ims:ime,kms:kme,jms:jme))
         allocate(u_m(ims:ime,kms:kme,jms:jme))
         allocate(v_m(ims:ime,kms:kme,jms:jme))
-        allocate(y_p(ims:ime,kms:kme,jms:jme))
-        allocate(x_p(ims:ime,kms:kme,jms:jme))
-
-        allocate(N(ims:ime,kms:kme,jms:jme))
-        allocate(theta(ims:ime,kms:kme,jms:jme))
-        allocate(phi(ims:ime,kms:kme,jms:jme))
-        allocate(beta(ims:ime,kms:kme,jms:jme))
+        allocate(temp_dw(ims:ime,kms:kme,jms:jme))
 
         
         !Do an initial exchange to make sure the U and V grids are similar for calculating w
@@ -518,137 +514,77 @@ contains
         
         where(abs(dzdx_m) < 0.0001) dzdx_m = 0.0
         where(abs(dzdy_m) < 0.0001) dzdy_m = 0.0
-        y_p = -1.0
-        x_p = -1.0
-        where( (dzdx_m == 0.0) .and. (dzdy_m == 0.0) ) y_p = 0.5
-        where( (dzdx_m == 0.0) .and. (dzdy_m == 0.0) ) x_p = 0.5
-        where(y_p < 0.0) y_p = ((dzdy_m)/( abs(dzdx_m) + abs(dzdy_m) ))
-        where(x_p < 0.0) x_p = ((dzdx_m)/( abs(dzdx_m) + abs(dzdy_m) ))
-                    
-        
-        do it = 1,1
-
-            !dial_weights = 0.8
-
-            u_m = ( domain%u%data_3d(ims+1:ime+1,:,jms:jme) + domain%u%data_3d(ims:ime,:,jms:jme) )/2
-            v_m = ( domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) )/2
-                 
-            !T_W_cor = -(domain%jacobian*domain%w%data_3d + dzdx_m*u_m + dzdy_m*v_m) / (2)
-            T_W_cor = -(0 + dzdx_m*u_m + dzdy_m*v_m) / (2)
-            U_W_cor = T_W_cor * x_p
-            V_W_cor = T_W_cor * y_p
-
-            !domain%u%data_3d(ims+1:ime+1,:,:) = domain%u%data_3d(ims+1:ime+1,:,:) + U_W_cor
-                                                       
-            !domain%u%data_3d(ims:ime,:,:) = domain%u%data_3d(ims:ime,:,:) + U_W_cor
-                                                        
-            !domain%v%data_3d(:,:,jms+1:jme+1) = domain%v%data_3d(:,:,jms+1:jme+1) + V_W_cor
-                                                        
-            !domain%v%data_3d(:,:,jms:jme) = domain%v%data_3d(:,:,jms:jme) + V_W_cor
-                                                        
-            if ( (this_image()==1) .and. (it==1) ) call io_write("beta.nc","beta",beta)
-            if ( (this_image()==1) .and. (it==1) ) call io_write("U_stab_cor.nc","U",domain%u%data_3d)
-            if ( (this_image()==1) .and. (it==1) ) call io_write("V_stab_cor.nc","V",domain%v%data_3d)
-            write(*,*) 'verts: ',maxval((domain%jacobian*domain%w%data_3d + dzdx_m*u_m + dzdy_m*v_m))
-
-        enddo
 
         if (options%wind%Dial) then
             allocate(dial_weights(ims:ime,kms:kme,jms:jme))
             
             !Dial of 100% (all vertical) at Fr 0.75, 0% (all horizontal) at Fr <= 0.25
-            dial_weights = 0.2 !max((domain%froude-0.25),0.0)/0.25
+            dial_weights = max((domain%froude-0.25),0.0)/0.25 !0.2
             
-            !Sanity-bounding to min of 0, max of 1
-            dial_weights = max(min(dial_weights,1.0),0.0)
-                        
-            if (this_image()==1) call io_write("dial_weights.nc","data",dial_weights)
+            !Sanity-bounding to min of 0.1, max of 0.9
+            dial_weights = 0.1 !max(min(dial_weights,0.9),0.1)
+            
+            dial_weights(int(ime/2):ime,:,:) = 0.9
+            
+            temp_dw = dial_weights
+            
+            do n = 1,n_smoothing_passes
+                do j=jms,jme
+                    ymin = max(j-nsmooth_gridcells, jms)
+                    ymax = min(j+nsmooth_gridcells, jme)
+                    do i=ims,ime
+                        xmin = max(i-nsmooth_gridcells, ims)
+                        xmax = min(i+nsmooth_gridcells, ime)
+                        do k=kms,kme
+                            !write(*,*) "temp_f:  ", sum(temp_froude(xmin:xmax,k,ymin:ymax))
+                           !write(*,*) "num_sum:  ", ((xmax-xmin+1) * (ymax-ymin+1))
+                            dial_weights(i,k,j) = sum(temp_dw(xmin:xmax,k,ymin:ymax)) / ((xmax-xmin+1) * (ymax-ymin+1))
+                        enddo
+                    enddo
+                enddo
+
+                if (n/=n_smoothing_passes) then
+                    temp_dw = dial_weights
+                endif
+            enddo
+            
+            write (img,'(I3.3)') this_image()
+            call io_write("dial_weights"//trim(img)//".nc","data",dial_weights)
             if (this_image()==1) call io_write("froude.nc","froude",domain%froude)
             if (this_image()==1) call io_write("Dick.nc","Ri",domain%Ri)
-            
-            !First call bal_uvw to generate an initial-guess for vertical winds
-            !call balance_uvw(domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, & 
-                             !domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options,vert_weight=dial_weights)
-        else
-            !First call bal_uvw to generate an initial-guess for vertical winds
-            !call balance_uvw(domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, & 
-                        domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options)
         endif
         
         do k = kms,kme
             ADJ_coef(:,k,:) = -(2*domain%jacobian(:,k,:))!/domain%dx 
         enddo
         
-        if (this_image()==1) call io_write("ideal_w_grid_before.nc","w_grid",domain%w%data_3d)
-   
+        call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
+
         !domain%w%data_3d = (U_cor + V_cor)/domain%jacobian
         u_m = ( domain%u%data_3d(ims+1:ime+1,:,jms:jme) + domain%u%data_3d(ims:ime,:,jms:jme) )/2
         v_m = ( domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) )/2
         T_W_cor = -(0 + dzdx_m*u_m + dzdy_m*v_m) / (2)
         
         destructive_vert(:,kms:kme,:) = T_W_cor/domain%jacobian(:,kms:kme,:)
-        domain%w%data_3d = destructive_vert * (1.0-dial_weights) ! +domain%w%data_3d * (1.0-dial_weights)
-
-        !if (this_image()==1) call io_write("U_cor.nc","U_cor",U_cor)
-        !if (this_image()==1) call io_write("V_cor.nc","V_cor",V_cor)
-        
-        
-        if (this_image()==1) call io_write("dzdx_m.nc","dzdx_m",dzdx_m)
-        if (this_image()==1) call io_write("dzdy_m.nc","dzdy_m",dzdy_m)
+        domain%w%data_3d = destructive_vert * (1.0-dial_weights) + domain%w%data_3d * (dial_weights)
 
         do it = 1,options%parameters%wind_iterations
-            
-            u_m = ( domain%u%data_3d(ims+1:ime+1,:,jms:jme) + domain%u%data_3d(ims:ime,:,jms:jme) )/2
-            v_m = ( domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) )/2
-            !T_W_cor = -(0 + dzdx_m*u_m + dzdy_m*v_m) / (2)
-            !destructive_vert(:,kms:kme,:) = T_W_cor/domain%jacobian(:,kms:kme,:)
-            !domain%w%data_3d = destructive_vert * (1.0-dial_weights) ! +domain%w%data_3d * (1.0-dial_weights)
-             
+
             call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, &
             domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options)
-            
-            x_p = 0.5 !abs(v_m)/( abs(u_m) + abs(v_m) )
-            y_p = 0.5 !abs(u_m)/( abs(u_m) + abs(v_m) )
- 
-            N = div/ADJ_coef
+
+            ADJ = div/ADJ_coef
                     
-            U_D_cor = (1-dial_weights)*N*domain%dx*x_p
-            V_D_cor = (1-dial_weights)*N*domain%dx*y_p
-            T_W_cor = dial_weights*N*domain%advection_dz
-
-                    
-            !U_D_cor = (x_p)*2*(1-dial_weights)*div/ADJ_coef
-            !V_D_cor = (y_p)*2*(1-dial_weights)*div/ADJ_coef
-            !T_W_cor = 2*dial_weights*div/ADJ_coef
-
-            if ( (this_image()==1) .and. (it==1) ) call io_write("U_W_cor.nc","U_W_cor",U_W_cor)
-            if ( (this_image()==1) .and. (it==1) ) call io_write("V_W_cor.nc","V_W_cor",V_W_cor)
-            if ( (this_image()==1) .and. (it==1) ) call io_write("T_W_cor.nc","T_W_cor",T_W_cor)
-            if ( (this_image()==1) .and. (it==1) ) call io_write("y_p.nc","y_p",y_p)
-            if ( (this_image()==1) .and. (it==1) ) call io_write("x_p.nc","x_p",x_p)
-            if ( (this_image()==1) .and. (it==1) ) call io_write("sum_p.nc","sum_p",((x_p)+(y_p)))
-
+            U_D_cor = (1-dial_weights)*ADJ*domain%dx*0.5
+            V_D_cor = (1-dial_weights)*ADJ*domain%dx*0.5
+            T_W_cor = dial_weights*ADJ*domain%advection_dz
 
             write(*,*) 'divs: ',maxval((div))
-
             write(*,*) 'verts: ',maxval((domain%jacobian*domain%w%data_3d + dzdx_m*u_m + dzdy_m*v_m))
 
                         
             !Distribute divergence among the U and V fields       
-            
-            !The OG bit
-            !domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) = domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) + &
-            !                                            (ADJ(ims+1:ime-1,:,jms+1:jme-1) * U_cor(ims+2:ime,:,jms+1:jme-1))
-                                                        
-            !domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) = domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) - &
-            !                                            (ADJ(ims+2:ime,:,jms+1:jme-1) * U_cor(ims+2:ime,:,jms+1:jme-1))
-                                                        
-            !domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) = domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) + &
-            !                                            (ADJ(ims+1:ime-1,:,jms+1:jme-1) * V_cor(ims+1:ime-1,:,jms+2:jme))
-                                                        
-            !domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) = domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) - &
-            !                                            (ADJ(ims+1:ime-1,:,jms+2:jme) * V_cor(ims+1:ime-1,:,jms+2:jme))
-            
+
             domain%u%data_3d(ims+1:ime+1,:,:) = domain%u%data_3d(ims+1:ime+1,:,:) + U_D_cor! + U_W_cor
                                                         
             domain%u%data_3d(ims:ime,:,:) = domain%u%data_3d(ims:ime,:,:) - U_D_cor !+ U_W_cor
@@ -660,16 +596,7 @@ contains
             domain%w%data_3d(:,kms:kme,:) = domain%w%data_3d(:,kms:kme,:) + T_W_cor(:,kms:kme,:) !+ V_W_cor
                                                         
             domain%w%data_3d(:,kms:kme-1,:) = domain%w%data_3d(:,kms:kme-1,:) - T_W_cor(:,kms+1:kme,:) !+ V_W_cor
-                       
-            !Idea -- to have a full add and subtract step for all cells, so use an edge-case for edge cells
-            !domain%u%data_3d(ims+1:ime+1,:,:) = domain%u%data_3d(ims+1:ime+1,:,:) + (ADJ * 0.5)
-                                                        
-            !domain%u%data_3d(ims:ime,:,:) = domain%u%data_3d(ims:ime,:,:) - (ADJ * 0.5)
-                                                        
-            !domain%v%data_3d(:,:,jms+1:jme+1) = domain%v%data_3d(:,:,jms+1:jme+1) + (ADJ * 0.5)
-                                                        
-            !domain%v%data_3d(:,:,jms:jme) = domain%v%data_3d(:,:,jms:jme) - (ADJ * 0.5)
-        
+             
             call domain%u%exchange_u()
             call domain%v%exchange_v()
             
@@ -773,8 +700,8 @@ contains
         real :: z_top, z_bot, th_top, th_bot, stability
         integer :: ymin, ymax, xmin, xmax, n_smoothing_passes, nsmooth_gridcells
         
-        n_smoothing_passes = 4
-        nsmooth_gridcells = int(1000 / domain%dx)
+        n_smoothing_passes = 5
+        nsmooth_gridcells = 20 !int(500 / domain%dx)
         
         ims = lbound(domain%w%data_3d,1)
         ime = ubound(domain%w%data_3d,1)
@@ -794,7 +721,7 @@ contains
         if (.not.allocated(domain%Ri)) allocate(domain%Ri(ims:ime,kms:kme,jms:jme))
        
         allocate(wind_speed(ims:ime,kms:kme,jms:jme))
-        !allocate(temp_froude(ims:ime,kms:kme,jms:jme))       
+        allocate(temp_froude(ims:ime,kms:kme,jms:jme))       
         
         wind_speed = sqrt( ((domain%u%data_3d(ims+1:ime+1,:,:) + domain%u%data_3d(ims:ime,:,:))/2)**2 + &
                            ((domain%v%data_3d(:,:,jms+1:jme+1) + domain%v%data_3d(:,:,jms:jme))/2)**2 )
@@ -822,6 +749,8 @@ contains
             enddo
         enddo
 
+        temp_froude = domain%froude
+
         !do n = 1,n_smoothing_passes
         !    do j=jms,jme
         !        ymin = max(j-nsmooth_gridcells, jms)
@@ -831,7 +760,7 @@ contains
         !            xmax = min(i+nsmooth_gridcells, ime)
         !            do k=kms,kme
         !                !write(*,*) "temp_f:  ", sum(temp_froude(xmin:xmax,k,ymin:ymax))
-        !                !write(*,*) "num_sum:  ", ((xmax-xmin+1) * (ymax-ymin+1))
+                        !write(*,*) "num_sum:  ", ((xmax-xmin+1) * (ymax-ymin+1))
         !                domain%froude(i,k,j) = sum(temp_froude(xmin:xmax,k,ymin:ymax)) / ((xmax-xmin+1) * (ymax-ymin+1))
         !            enddo
         !        enddo
@@ -855,17 +784,17 @@ contains
         integer :: nx, ny, x, y
         integer :: xs,xe, ys,ye, n, np
         integer :: window_size, smooth_window, n_smoothing_passes
-        real, allocatable :: temp_terrain(:,:)
+        real, allocatable :: temp_terrain(:,:), f_terrain(:,:)
 
-        n_smoothing_passes = 4
+        n_smoothing_passes = 5
         window_size   = int(max(5000.0/domain%dx,1.0)) !Compute Froude-terrain as the diff in min and max over a 5000m search window
-        smooth_window = 2
+        smooth_window = 5
 
         nx = size(domain%global_terrain,1)
         ny = size(domain%global_terrain,2)
         
         allocate(temp_terrain(nx,ny))
-
+        allocate(f_terrain(nx,ny))
         ! first compute lightly smoothed terrain
         !do y=1,ny
         !    ys = max( y - smooth_window, 1)
@@ -889,25 +818,37 @@ contains
                                              minval(domain%global_terrain(xs:xe,ys:ye))
             enddo
         enddo
+        
+        do y=1,ny
+            ys = max( y - window_size, 1)
+            ye = min( y + window_size, ny)
+            do x=1,nx
+                xs = max( x - window_size, 1)
+                xe = min( x + window_size, nx)
+                f_terrain(x,y) = maxval(domain%global_terrain(xs:xe,ys:ye)) - &
+                                             minval(domain%global_terrain(xs:xe,ys:ye))
+            enddo
+        enddo
         ! call io_write("initial_terrain_delta.nc","data",temp_terrain)
 
         ! finally smooth that terrain delta field a few times as well
 
-        !do np=1,n_smoothing_passes
-        !    do y=1,ny
-        !        ys = max( y - smooth_window, 1)
-        !        ye = min( y + smooth_window, ny)
-        !        do x=1,nx
-        !            xs = max( x - smooth_window, 1)
-        !            xe = min( x + smooth_window, nx)
-        !            n = (xe-xs+1) * (ye-ys+1)
-        !            froude_terrain(x,y) = sum(temp_terrain(xs:xe,ys:ye)) / n
-        !        enddo
-        !    enddo
-        !    if (np /= n_smoothing_passes) then
-        !        temp_terrain = froude_terrain
-        !    endif
-        !enddo
+        do np=1,n_smoothing_passes
+            do y=1,ny
+                ys = max( y - smooth_window, 1)
+                ye = min( y + smooth_window, ny)
+                do x=1,nx
+                    xs = max( x - smooth_window, 1)
+                    xe = min( x + smooth_window, nx)
+                    n = (xe-xs+1) * (ye-ys+1)
+                    temp_terrain(x,y) = sum(f_terrain(xs:xe,ys:ye)) / n
+                enddo
+            enddo
+            if (np /= n_smoothing_passes) then
+                f_terrain = temp_terrain
+            endif
+        enddo
+        domain%froude_terrain = temp_terrain(domain%its-1:domain%ite+1,domain%jts-1:domain%jte+1)
         call io_write("terrain_blocking.nc","data",domain%froude_terrain)
 
     end subroutine compute_terrain_blocking_heights

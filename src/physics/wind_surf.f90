@@ -445,12 +445,12 @@ contains
                         !Consider exposure, only for first 10-levels
                         ! If Sx is negative, compute exposure correction
                         if (Sx_U(i,1,j) < 0) then
-                            Sx_U_corr = -((11-k)/10.0) * 0.7 !(Sx_U(i,1,j)/45) * ((11-k)/10.0) 
+                            Sx_U_corr = -((11-k)/10.0) * 0.0 !(Sx_U(i,1,j)/45) * ((11-k)/10.0) 
                         end if
                         
                         ! If Sx is negative, compute exposure correction
                         if (Sx_V(i,1,j) < 0) then
-                            Sx_V_corr = -((11-k)/10.0) * 0.7 !(Sx_V(i,1,j)/45) * ((11-k)/10.0)
+                            Sx_V_corr = -((11-k)/10.0) * 0.0 !(Sx_V(i,1,j)/45) * ((11-k)/10.0)
                         end if
                     else 
                         TPI_corr = 0
