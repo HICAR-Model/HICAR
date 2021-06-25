@@ -136,7 +136,7 @@ module domain_interface
     real,                       allocatable :: delta_dzdy(:,:,:) ! change in height difference (between hi and lo-res data) with change in x/y position (used to calculate w_real vertical motions)
     real,                       allocatable :: zfr_u(:,:,:)     ! ratio between z levels (on grid)
     real,                       allocatable :: zfr_v(:,:,:)
-    real,                       allocatable :: froude_terrain(:,:) ! Terrain length-scale to use at each point for Froude Number calculation
+    real,                       allocatable :: froude_terrain(:,:,:,:) ! Terrain length-scale to use at each point for Froude Number calculation
     real,                       allocatable :: terrain_u(:,:)
     real,                       allocatable :: terrain_v(:,:)
     real,                       allocatable :: forcing_terrain_u(:,:)
