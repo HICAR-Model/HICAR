@@ -24,6 +24,7 @@ module wind
     private
     public::update_winds, init_winds
     real, parameter::deg2rad=0.017453293 !2*pi/360
+    real, parameter :: rad2deg=57.2957779371
 contains
 
     !>------------------------------------------------------------
@@ -457,7 +458,7 @@ contains
         
         ! interal parameters
         real, allocatable, dimension(:,:,:) :: div, dial_weights, temp_dw, ADJ,ADJ_coef, U_D_cor, V_D_cor, current_u, current_v, current_w, destructive_vert
-        real, allocatable, dimension(:,:,:) :: T_W_cor, u_m, v_m, dzdx_m, dzdy_m
+        real, allocatable, dimension(:,:,:) :: T_W_cor, u_m, v_m, dzdx_m, dzdy_m, x_p, y_p
         real    :: corr_factor
         integer :: it, k, j, i, ims, ime, jms, jme, kms, kme, wind_k, n, xmin, xmax, ymin, ymax, nsmooth_gridcells, n_smoothing_passes
         logical :: update
@@ -473,8 +474,8 @@ contains
         jms = lbound(domain%w%data_3d,3)
         jme = ubound(domain%w%data_3d,3)
         
-        n_smoothing_passes = 5
-        nsmooth_gridcells = 10 !int(500 / domain%dx)
+        n_smoothing_passes = 2
+        nsmooth_gridcells = 5 !int(500 / domain%dx)
         
 
         !If we are doing an update, we need to swap meta data into data_3d fields so it can be exchanged while balancing
@@ -501,7 +502,8 @@ contains
         allocate(u_m(ims:ime,kms:kme,jms:jme))
         allocate(v_m(ims:ime,kms:kme,jms:jme))
         allocate(temp_dw(ims:ime,kms:kme,jms:jme))
-
+        allocate(y_p(ims:ime,kms:kme,jms:jme))
+        allocate(x_p(ims:ime,kms:kme,jms:jme))
         
         !Do an initial exchange to make sure the U and V grids are similar for calculating w
         call domain%u%exchange_u()
@@ -514,18 +516,29 @@ contains
         
         where(abs(dzdx_m) < 0.0001) dzdx_m = 0.0
         where(abs(dzdy_m) < 0.0001) dzdy_m = 0.0
-
+        y_p = -1.0
+        x_p = -1.0
+        where( (dzdx_m == 0.0) .and. (dzdy_m == 0.0) ) y_p = 0.5
+        where( (dzdx_m == 0.0) .and. (dzdy_m == 0.0) ) x_p = 0.5
+        where(y_p < 0.0) y_p = ((dzdy_m)/( abs(dzdx_m) + abs(dzdy_m) ))
+        where(x_p < 0.0) x_p = ((dzdx_m)/( abs(dzdx_m) + abs(dzdy_m) ))
+             
+        
+        call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options,vert_weight=dial_weights)
+        temp_dw = domain%w%data_3d
+        
+        
         if (options%wind%Dial) then
             allocate(dial_weights(ims:ime,kms:kme,jms:jme))
             
             !Dial of 100% (all vertical) at Fr 0.75, 0% (all horizontal) at Fr <= 0.25
-            dial_weights = max((domain%froude-0.25),0.0)/0.25 !0.2
+            dial_weights = max((domain%froude-0.5),0.0) !0.25 !0.2
             
             !Sanity-bounding to min of 0.1, max of 0.9
-            dial_weights = 0.1 !max(min(dial_weights,0.9),0.1)
+            dial_weights = max(min(dial_weights,1.0),0.0)
             
-            dial_weights(int(ime/2):ime,:,:) = 0.9
-            
+            !dial_weights(:,15:kme,:) = 0.1
+                                    
             temp_dw = dial_weights
             
             do n = 1,n_smoothing_passes
@@ -554,30 +567,76 @@ contains
             if (this_image()==1) call io_write("Dick.nc","Ri",domain%Ri)
         endif
         
+        do it = 1,1
+
+            !dial_weights = 0.8
+
+            u_m = ( domain%u%data_3d(ims+1:ime+1,:,jms:jme) + domain%u%data_3d(ims:ime,:,jms:jme) )/2
+            v_m = ( domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) )/2
+                 
+            !T_W_cor = -(domain%jacobian*domain%w%data_3d + dzdx_m*u_m + dzdy_m*v_m) / (2)
+            T_W_cor = -(1-dial_weights)*(0 + dzdx_m*u_m + dzdy_m*v_m) !/ (domain%jacobian(:,kms:kme,:))
+            !T_W_cor(:,30:kme,:) = 0
+            U_D_cor = T_W_cor * x_p
+            V_D_cor = T_W_cor * y_p
+
+            !domain%u%data_3d(ims+1:ime+1,:,:) = domain%u%data_3d(ims+1:ime+1,:,:) + U_D_cor
+                                                       
+            !domain%u%data_3d(ims:ime,:,:) = domain%u%data_3d(ims:ime,:,:) + U_D_cor
+                                                        
+            !domain%v%data_3d(:,:,jms+1:jme+1) = domain%v%data_3d(:,:,jms+1:jme+1) + V_D_cor
+                                                        
+            !domain%v%data_3d(:,:,jms:jme) = domain%v%data_3d(:,:,jms:jme) + V_D_cor
+                                                        
+            !if ( (this_image()==1) .and. (it==1) ) call io_write("U_stab_cor.nc","U",domain%u%data_3d)
+            !if ( (this_image()==1) .and. (it==1) ) call io_write("V_stab_cor.nc","V",domain%v%data_3d)
+            write(*,*) 'verts: ',maxval((domain%jacobian*domain%w%data_3d + dzdx_m*u_m + dzdy_m*v_m))
+
+        enddo
+        
         do k = kms,kme
             ADJ_coef(:,k,:) = -(2*domain%jacobian(:,k,:))!/domain%dx 
         enddo
         
-        call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
-
         !domain%w%data_3d = (U_cor + V_cor)/domain%jacobian
         u_m = ( domain%u%data_3d(ims+1:ime+1,:,jms:jme) + domain%u%data_3d(ims:ime,:,jms:jme) )/2
         v_m = ( domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) )/2
-        T_W_cor = -(0 + dzdx_m*u_m + dzdy_m*v_m) / (2)
+        T_W_cor = -(0 + dzdx_m*u_m + dzdy_m*v_m) !/ (2)
+        
         
         destructive_vert(:,kms:kme,:) = T_W_cor/domain%jacobian(:,kms:kme,:)
-        domain%w%data_3d = destructive_vert * (1.0-dial_weights) + domain%w%data_3d * (dial_weights)
+        domain%w%data_3d = destructive_vert * (1.0-dial_weights) !+ domain%w%data_3d * (dial_weights)
 
+
+        
+        call calc_w_real(domain% u %data_3d,      &
+                             domain% v %data_3d,      &
+                             domain% w %data_3d,      &
+                             domain% w_real %data_3d,      &
+                             domain%dzdx, domain%dzdy,    &
+                             domain%jacobian)
+                             
+        !if (this_image()==1) call io_write("W_stab_cor.nc","W",domain%w%data_3d)
+        !if (this_image()==1) call io_write("W_real_stab_cor.nc","W_real",domain%w_real%data_3d)
+        
         do it = 1,options%parameters%wind_iterations
-
+            
+            u_m = ( domain%u%data_3d(ims+1:ime+1,:,jms:jme) + domain%u%data_3d(ims:ime,:,jms:jme) )/2
+            v_m = ( domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) )/2
+            T_W_cor = -(0 + dzdx_m*u_m + dzdy_m*v_m) / (domain%jacobian(:,kms:kme,:))
+        
+            domain%w%data_3d(:,kms:kme,:) = (T_W_cor) * (1.0-dial_weights) !&
+                                             !+ temp_dw
+            !domain%w%data_3d = destructive_vert * (1.0-dial_weights) !+ domain%w%data_3d * (dial_weights)
+            
             call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, &
             domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options)
 
             ADJ = div/ADJ_coef
                     
-            U_D_cor = (1-dial_weights)*ADJ*domain%dx*0.5
-            V_D_cor = (1-dial_weights)*ADJ*domain%dx*0.5
-            T_W_cor = dial_weights*ADJ*domain%advection_dz
+            U_D_cor = (1-0.0)*ADJ*domain%dx*0.5
+            V_D_cor = (1-0.0)*ADJ*domain%dx*0.5
+            T_W_cor = 0.0*ADJ*domain%advection_dz
 
             write(*,*) 'divs: ',maxval((div))
             write(*,*) 'verts: ',maxval((domain%jacobian*domain%w%data_3d + dzdx_m*u_m + dzdy_m*v_m))
@@ -694,7 +753,8 @@ contains
         implicit none
         type(domain_t), intent(inout) :: domain
 
-        real, allocatable, dimension(:,:,:) :: wind_speed, temp_froude
+        real, allocatable, dimension(:,:,:) :: wind_speed, temp_froude, u_m, v_m, winddir
+        integer,  allocatable, dimension(:,:,:) :: dir_indices
         
         integer :: k, j, i, n, ims, ime, jms, jme, kms, kme
         real :: z_top, z_bot, th_top, th_bot, stability
@@ -713,18 +773,39 @@ contains
         !If it is our first time calculating Fr, allocate and populate froude_terrain array
         if (.not.allocated(domain%froude)) then
             allocate(domain%froude(ims:ime,kms:kme,jms:jme))            
-            allocate(domain%froude_terrain(ims:ime,jms:jme))
+            allocate(domain%froude_terrain(1:72,ims:ime,kms:kme,jms:jme))
 
             call compute_terrain_blocking_heights(domain)
         endif
        
         if (.not.allocated(domain%Ri)) allocate(domain%Ri(ims:ime,kms:kme,jms:jme))
        
+        allocate(u_m(ims:ime,kms:kme,jms:jme))
+        allocate(v_m(ims:ime,kms:kme,jms:jme))
+        allocate(winddir(ims:ime,kms:kme,jms:jme))
+        allocate(dir_indices(ims:ime,kms:kme,jms:jme))
         allocate(wind_speed(ims:ime,kms:kme,jms:jme))
         allocate(temp_froude(ims:ime,kms:kme,jms:jme))       
         
-        wind_speed = sqrt( ((domain%u%data_3d(ims+1:ime+1,:,:) + domain%u%data_3d(ims:ime,:,:))/2)**2 + &
-                           ((domain%v%data_3d(:,:,jms+1:jme+1) + domain%v%data_3d(:,:,jms:jme))/2)**2 )
+        u_m = (domain%u%data_3d(ims:ime,:,:) + domain%u%data_3d(ims+1:ime+1,:,:))/2
+        v_m = (domain%v%data_3d(:,:,jms:jme) + domain%v%data_3d(:,:,jms+1:jme+1))/2
+        
+        !Compute wind direction for each cell on mass grid
+        winddir = atan2(-u_m,-v_m)*rad2deg
+        where(winddir < 0.0) winddir = winddir+360
+        where(winddir == 360.0) winddir = 0.0
+        dir_indices = int(winddir/5)+1
+
+        !Build grid of Sx values based on wind direction at that cell
+        do i = ims, ime
+            do j = jms, jme
+                do k=kms, kme
+                    temp_froude(i,k,j) = 10*domain%froude_terrain(dir_indices(i,k,j),i,k,j)
+                enddo
+            end do
+        end do
+        call io_write("temp_terrain_blocking.nc","data",temp_froude)
+        wind_speed = sqrt( (u_m)**2 + (v_m)**2 )
         
         !Since we will loop up to nz-1, we set all Fr to 0.1, which will leave the upper layer as very stable
         domain%froude = 0.1
@@ -744,7 +825,7 @@ contains
                     domain%Ri(i,k,j) =  calc_Ri(stability, wind_speed(i,k,j), domain%advection_dz(i,k,j) )
 
                     stability = sqrt(max(stability, 0.))
-                    domain%froude(i,k,j) = calc_froude(stability, domain%froude_terrain(i,j), wind_speed(i,k,j))
+                    domain%froude(i,k,j) = calc_froude(stability, temp_froude(i,k,j), wind_speed(i,k,j))
                 enddo
             enddo
         enddo
@@ -780,21 +861,33 @@ contains
     subroutine compute_terrain_blocking_heights(domain) !froude_terrain, terrain)
         implicit none
         type(domain_t), intent(inout) :: domain
-
+        real, allocatable    ::  azm(:,:), temp_ft_array(:,:,:,:)
+        integer, allocatable :: azm_indices(:,:)
+        integer           :: i, j, k, kms, kme, ang, i_s, j_s, i_start_buffer, i_end_buffer, j_start_buffer, j_end_buffer
+        integer           :: rear_ang, fore_ang, test_ang, rear_ang_diff, fore_ang_diff, ang_diff, k_max, window_rear, window_fore, window_width
         integer :: nx, ny, x, y
         integer :: xs,xe, ys,ye, n, np
-        integer :: window_size, smooth_window, n_smoothing_passes
+        integer :: window_size, smooth_window, n_smoothing_passes, search_max
         real, allocatable :: temp_terrain(:,:), f_terrain(:,:)
-
+        real              :: pt_height, temp_ft, maxFTVal
+        
         n_smoothing_passes = 5
         window_size   = int(max(5000.0/domain%dx,1.0)) !Compute Froude-terrain as the diff in min and max over a 5000m search window
         smooth_window = 5
 
+        search_max = floor(2000/domain%dx)
+
         nx = size(domain%global_terrain,1)
         ny = size(domain%global_terrain,2)
+        kms = lbound(domain%w%data_3d,2)
+        kme = ubound(domain%w%data_3d,2)
         
-        allocate(temp_terrain(nx,ny))
+        allocate(temp_ft_array( 1:72, domain%grid2d%ims:domain%grid2d%ime, kms:kme, domain%grid2d%jms:domain%grid2d%jme ))
         allocate(f_terrain(nx,ny))
+        
+        
+        temp_ft_array = -100000.0
+        
         ! first compute lightly smoothed terrain
         !do y=1,ny
         !    ys = max( y - smooth_window, 1)
@@ -806,49 +899,186 @@ contains
         !        temp_terrain(x,y) = sum(domain%global_terrain(xs:xe,ys:ye)) / n
         !    enddo
         !enddo
+        
+        
+        allocate(azm( 2*search_max+1, 2*search_max+1 ))
+        allocate(azm_indices( 2*search_max+1, 2*search_max+1 ))
+        azm = 0
+                
+        !Setup azm so that it is looking along wind direction (i.e. negatives here)
+        do i = 1, 2*search_max+1
+            do j = 1, 2*search_max+1                
+                azm(i,j)  = atan2(-1.0*(i-(search_max+1)),-1.0*(j-(search_max+1)))
+            end do
+        end do
+        
+        !convert azm to deg
+        azm = azm*rad2deg
+        where(azm < 0) azm = 360+azm
+        where(azm >= 360.0) azm=0.0
+        azm_indices = int(azm/5)+1
 
         ! then compute the range of terrain (max-min) in a given window
-        do y=domain%jts-1,domain%jte+1
-            ys = max( y - window_size, 1)
-            ye = min( y + window_size, ny)
-            do x=domain%its-1,domain%ite+1
-                xs = max( x - window_size, 1)
-                xe = min( x + window_size, nx)
-                domain%froude_terrain(x,y) = maxval(domain%global_terrain(xs:xe,ys:ye)) - &
-                                             minval(domain%global_terrain(xs:xe,ys:ye))
+        do i=domain%grid2d%ims, domain%grid2d%ime
+            do j=domain%grid2d%jms, domain%grid2d%jme
+                do k=kms,kme
+                    if (k == 1) then
+                        pt_height = domain%global_terrain(i,j)
+                    else if (k > 1) then
+                        pt_height = pt_height + domain%global_dz_interface(i,k,j)
+                    end if
+                    
+                    
+                    ! Check to use buffers to avoid searching out of grid
+                    i_start_buffer = -min(0,i-(search_max+1))
+                    i_end_buffer = min(0,domain%grid2d%ide-(i+search_max))
+                
+                    j_start_buffer = -min(0,j-(search_max+1))
+                    j_end_buffer = min(0,domain%grid2d%jde-(j+search_max))
+                
+                    do i_s = 1+i_start_buffer, (search_max*2+1)+i_end_buffer
+                        do j_s = 1+j_start_buffer, (search_max*2+1)+j_end_buffer
+                        
+                            temp_ft = domain%global_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1))) - pt_height
+                            
+                            if (temp_ft > temp_ft_array(azm_indices(i_s,j_s),i,k,j)) then
+                            
+                                !Only save scale length if it is greater than the vertical dz -- otherwise copy that over
+                                if (temp_ft > domain%dz_interface%data_3d(i,k,j)) then
+                                    temp_ft_array(azm_indices(i_s,j_s),i,k,j) = temp_ft
+                                else
+                                    temp_ft_array(azm_indices(i_s,j_s),i,k,j) = domain%dz_interface%data_3d(i,k,j)
+                                end if
+                            end if
+                        enddo
+                    enddo
+             
+                                   
+                    !After finding Sx in each absolute direction around grid cell, 
+                    !Pick max for each 30º window and perform interpolation to other directions if necesarry
+                    
+                    rear_ang = 1 
+                    fore_ang = 1
+                    
+                    if (.not.( all((temp_ft_array(:,i,k,j) <= -100000.0)) )) then
+                    
+                        !Perform 20º window max search
+                        window_width = 2
+                        do ang = 1, 72
+                            window_rear = ang-window_width
+                            window_fore = ang+window_width
+                        
+                            if (ang <= window_width) then
+                                window_rear = 72-(window_width-ang)
+                                
+                                maxFTVal = maxval(temp_ft_array(window_rear:72,i,k,j))
+
+                                if (maxval(temp_ft_array(1:window_fore,i,k,j)) > maxFTVal) then
+                                    maxFTVal = maxval(temp_ft_array(1:window_fore,i,k,j))
+                                end if
+                                
+                            else if ( ang >= (72-(window_width-1)) ) then
+                                window_fore = window_width-(72-ang)
+                                
+                                maxFTVal = maxval(temp_ft_array(window_rear:72,i,k,j))
+
+                                if (maxval(temp_ft_array(1:window_fore,i,k,j)) > maxFTVal) then
+                                    maxFTVal = maxval(temp_ft_array(1:window_fore,i,k,j))
+                                end if
+                            else
+                                maxFTVal = maxval(temp_ft_array(window_rear:window_fore,i,k,j))
+                            end if
+                            domain%froude_terrain(ang,i,k,j) = maxFTVal
+                        end do                    
+                    
+                        do ang = 1, 72
+                            !Determine indices for interpolation
+                            if ( (ang==fore_ang) ) then
+                                !Update indices for interpolated Sx's
+                                rear_ang = ang
+                            
+                                fore_ang = ang+1
+                                if (fore_ang > 72) fore_ang = 1
+                                
+                                do while (domain%froude_terrain(fore_ang,i,k,j) <= -100000.0)
+                                    fore_ang = fore_ang+1
+                                    if (fore_ang > 72) fore_ang = 1
+                                end do
+                            
+                            end if
+                            
+                            if (ang==1) then
+                                rear_ang = 72
+                                do while(domain%froude_terrain(rear_ang,i,k,j) <= -100000.0)
+                                    rear_ang = rear_ang-1
+                                end do
+                            end if
+                    
+                            !If we did not calculate Sx for a given direction
+                            if (domain%froude_terrain(ang,i,k,j) == -100000.0) then
+                                !Weight the two surrounding Sx values based on our angular-distance to them
+                                rear_ang_diff = ang-rear_ang
+                                fore_ang_diff = fore_ang-ang
+                                ang_diff = fore_ang-rear_ang
+                        
+                                !Handle wrap-around case
+                                if (ang > fore_ang) then
+                                    fore_ang_diff = fore_ang+(72-ang)
+                                    ang_diff = fore_ang+(72-rear_ang)
+                                end if
+                        
+                                !Interpolation, linearly-weighted by angular-distance from values
+                                domain%froude_terrain(ang,i,k,j) = (domain%froude_terrain(rear_ang,i,k,j)*fore_ang_diff + &
+                                                    domain%froude_terrain(fore_ang,i,k,j)*rear_ang_diff)/ang_diff
+
+                                !if (domain%Sx(ang,i,k,j) > 0) sheltering_TPI(ang,i,k,j) = (sheltering_TPI(rear_ang,i,k,j)*fore_ang_diff + &
+                                !                    sheltering_TPI(fore_ang,i,k,j)*rear_ang_diff)/ang_diff
+
+                            end if
+                        end do
+
+                    else
+                        !IF we only have -100000 for all entries, set to dz
+                        domain%froude_terrain(:,i,k,j) = domain%dz_interface%data_3d(i,k,j)
+                    end if
+                enddo
+
             enddo
         enddo
         
-        do y=1,ny
-            ys = max( y - window_size, 1)
-            ye = min( y + window_size, ny)
-            do x=1,nx
-                xs = max( x - window_size, 1)
-                xe = min( x + window_size, nx)
-                f_terrain(x,y) = maxval(domain%global_terrain(xs:xe,ys:ye)) - &
-                                             minval(domain%global_terrain(xs:xe,ys:ye))
-            enddo
-        enddo
+        !domain%froude_terrain(x,y) = maxval(domain%global_terrain(xs:xe,ys:ye)) - &
+        !                                     minval(domain%global_terrain(xs:xe,ys:ye))        
+        
+        !do y=1,ny
+        !    ys = max( y - window_size, 1)
+        !    ye = min( y + window_size, ny)
+        !    do x=1,nx
+        !        xs = max( x - window_size, 1)
+        !        xe = min( x + window_size, nx)
+        !        domain%froude_terrain(:,x,:,y) = maxval(domain%global_terrain(xs:xe,ys:ye)) - &
+        !                                     minval(domain%global_terrain(xs:xe,ys:ye))
+        !    enddo
+        !enddo
         ! call io_write("initial_terrain_delta.nc","data",temp_terrain)
 
         ! finally smooth that terrain delta field a few times as well
 
-        do np=1,n_smoothing_passes
-            do y=1,ny
-                ys = max( y - smooth_window, 1)
-                ye = min( y + smooth_window, ny)
-                do x=1,nx
-                    xs = max( x - smooth_window, 1)
-                    xe = min( x + smooth_window, nx)
-                    n = (xe-xs+1) * (ye-ys+1)
-                    temp_terrain(x,y) = sum(f_terrain(xs:xe,ys:ye)) / n
-                enddo
-            enddo
-            if (np /= n_smoothing_passes) then
-                f_terrain = temp_terrain
-            endif
-        enddo
-        domain%froude_terrain = temp_terrain(domain%its-1:domain%ite+1,domain%jts-1:domain%jte+1)
+        !do np=1,n_smoothing_passes
+        !    do y=1,ny
+        !        ys = max( y - smooth_window, 1)
+        !        ye = min( y + smooth_window, ny)
+        !        do x=1,nx
+        !            xs = max( x - smooth_window, 1)
+        !            xe = min( x + smooth_window, nx)
+        !            n = (xe-xs+1) * (ye-ys+1)
+        !            temp_terrain(x,y) = sum(f_terrain(xs:xe,ys:ye)) / n
+        !        enddo
+        !    enddo
+        !    if (np /= n_smoothing_passes) then
+        !        f_terrain = temp_terrain
+        !    endif
+        !enddo
+        !domain%froude_terrain = temp_terrain(domain%its-1:domain%ite+1,domain%jts-1:domain%jte+1)
         call io_write("terrain_blocking.nc","data",domain%froude_terrain)
 
     end subroutine compute_terrain_blocking_heights
