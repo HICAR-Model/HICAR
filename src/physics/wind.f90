@@ -195,7 +195,7 @@ contains
         diff_U = u_met(ims+1:ime+1, :, jms:jme) - u_met(ims:ime, :, jms:jme)
         diff_V = v_met(ims:ime, :, jms+1:jme+1) - v_met(ims:ime, :, jms:jme)
 
-        div(ims:ime,kms:kme,jms:jme) = (diff_U+diff_V)/(dx)
+        div(ims:ime,kms:kme,jms:jme) = (diff_U+diff_V) /(dx)
 
         if (.NOT.(horz)) then
             if (options%parameters%advect_density) then
@@ -309,7 +309,7 @@ contains
             call update_stability(domain)
 
             ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
-            call make_winds_grid_relative(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%grid, domain%sintheta, domain%costheta)
+            !call make_winds_grid_relative(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%grid, domain%sintheta, domain%costheta)
 
             ! flow blocking parameterization
             ! if (options%block_options%block_flow) then
@@ -457,9 +457,9 @@ contains
         logical, optional, intent(in) :: update_in
         
         ! interal parameters
-        real, allocatable, dimension(:,:,:) :: div, dial_weights, temp_dw, ADJ,ADJ_coef, U_D_cor, V_D_cor, current_u, current_v, current_w, destructive_vert
-        real, allocatable, dimension(:,:,:) :: T_W_cor, u_m, v_m, dzdx_m, dzdy_m, x_p, y_p
-        real    :: corr_factor
+        real, allocatable, dimension(:,:,:) :: div, dial_weights, temp_dw, ADJ,ADJ_coef, U_D_cor, V_D_cor, current_u, current_v, current_w, W_cor_dif, temp_xp, temp_yp
+        real, allocatable, dimension(:,:,:) :: T_W_cor, u_m, v_m, dzdx_m, dzdy_m, x_p, y_p, SL, SL_term, u_sign, v_sign
+        real    :: corr_factor, old_max
         integer :: it, k, j, i, ims, ime, jms, jme, kms, kme, wind_k, n, xmin, xmax, ymin, ymax, kmin, kmax, nsmooth_gridcells, n_smoothing_passes
         logical :: update
         character(len=4) :: img
@@ -475,7 +475,7 @@ contains
         jme = ubound(domain%w%data_3d,3)
         
         n_smoothing_passes = 2
-        nsmooth_gridcells = 5 !int(500 / domain%dx)
+        nsmooth_gridcells = 2 !int(500 / domain%dx)
         
 
         !If we are doing an update, we need to swap meta data into data_3d fields so it can be exchanged while balancing
@@ -491,7 +491,7 @@ contains
         endif
         
         allocate(div(ims:ime,kms:kme,jms:jme))
-        allocate(destructive_vert(ims:ime,kms:kme,jms:jme))
+        allocate(W_cor_dif(ims:ime,kms:kme,jms:jme))
         allocate(ADJ_coef(ims:ime,kms:kme,jms:jme))
         allocate(ADJ(ims:ime,kms:kme,jms:jme))
         allocate(U_D_cor(ims:ime,kms:kme,jms:jme))
@@ -502,9 +502,15 @@ contains
         allocate(u_m(ims:ime,kms:kme,jms:jme))
         allocate(v_m(ims:ime,kms:kme,jms:jme))
         allocate(temp_dw(ims:ime,kms:kme,jms:jme))
+        allocate(temp_xp(ims:ime,kms:kme,jms:jme))
+        allocate(u_sign(ims:ime+1,kms:kme,jms:jme))
+        allocate(v_sign(ims:ime,kms:kme,jms:jme+1))
+        allocate(temp_yp(ims:ime,kms:kme,jms:jme))
         allocate(y_p(ims:ime,kms:kme,jms:jme))
         allocate(x_p(ims:ime,kms:kme,jms:jme))
-        
+        allocate(SL(ims:ime,kms:kme,jms:jme))
+        allocate(SL_term(ims:ime,kms:kme,jms:jme))
+
         !Do an initial exchange to make sure the U and V grids are similar for calculating w
         call domain%u%exchange_u()
         call domain%v%exchange_v()
@@ -514,16 +520,32 @@ contains
         dzdx_m = ( domain%dzdx(ims+1:ime+1,:,jms:jme) + domain%dzdx(ims:ime,:,jms:jme) )/2
         dzdy_m = ( domain%dzdy(ims:ime,:,jms+1:jme+1) + domain%dzdy(ims:ime,:,jms:jme) )/2
         
-        where(abs(dzdx_m) < 0.0001) dzdx_m = 0.0
-        where(abs(dzdy_m) < 0.0001) dzdy_m = 0.0
+        where(abs(dzdx_m) < 0.00001) dzdx_m = 0.0
+        where(abs(dzdy_m) < 0.00001) dzdy_m = 0.0
         y_p = -1.0
         x_p = -1.0
-        where( (dzdx_m == 0.0) .and. (dzdy_m == 0.0) ) y_p = 0.5
-        where( (dzdx_m == 0.0) .and. (dzdy_m == 0.0) ) x_p = 0.5
-        where(y_p < 0.0) y_p = ((dzdy_m)/( abs(dzdx_m) + abs(dzdy_m) ))
-        where(x_p < 0.0) x_p = ((dzdx_m)/( abs(dzdx_m) + abs(dzdy_m) ))
-
+        where( ((abs(dzdx_m) + abs(dzdy_m)) == 0.0) ) y_p = 0.5
+        where( ((abs(dzdx_m) + abs(dzdy_m)) == 0.0) ) x_p = 0.5
+        where(x_p < 0.0) x_p = (abs(dzdx_m)/( abs(dzdx_m) + abs(dzdy_m) ))
+        where(x_p < 0.0) x_p = 0.5 + 0.5*((dzdx_m)/( abs(dzdx_m) + abs(dzdy_m) ))
         
+        u_m = ( domain%u%data_3d(ims+1:ime+1,:,jms:jme) + domain%u%data_3d(ims:ime,:,jms:jme) )/2
+        v_m = ( domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) )/2
+
+        x_p = 0.5
+        
+        !where( .not.((abs(u_m)+abs(v_m)) == 0) ) x_p = 0.5*x_p + 0.5*abs(u_m)/(abs(u_m)+abs(v_m))
+        
+        !This one gieves most "spreading" of speed up
+        !where( .not.((abs(dzdx_m*u_m)+abs(dzdy_m*v_m)) == 0) ) &
+        !    x_p = 0.5+0.5*(abs(dzdx_m*u_m+dzdy_m*v_m))*abs(dzdx_m*u_m)/( (abs(dzdx_m*u_m)+abs(dzdy_m*v_m))**2 )
+            
+        !This one gives most similar results to if just 0.5 is used 
+        !where( .not.((abs(dzdx_m*u_m)+abs(dzdy_m*v_m)) == 0) ) &
+        !    x_p = 0.5 + 0.5*abs(dzdx_m*u_m)/sqrt(u_m**2 + v_m**2) - 0.5*abs(dzdy_m*v_m)/sqrt(u_m**2 + v_m**2) 
+            
+        !x_p = max(min(0.9,x_p),0.1)
+
         if (options%wind%Dial) then
             allocate(dial_weights(ims:ime,kms:kme,jms:jme))
             
@@ -531,7 +553,7 @@ contains
             dial_weights = max((domain%froude-0.5),0.0) !0.25 !0.2
             
             !Sanity-bounding to min of 0.0, max of 1.0
-            dial_weights = 0.0 !max(min(dial_weights,1.0),0.0)
+            dial_weights = 0.1 !max(min(dial_weights,1.0),0.0)
                                                             
             temp_dw = dial_weights
             
@@ -543,100 +565,112 @@ contains
                         xmin = max(i-nsmooth_gridcells, ims)
                         xmax = min(i+nsmooth_gridcells, ime)
                         do k=kms,kme
+                            !write(*,*) "temp_f:  ", sum(temp_froude(xmin:xmax,k,ymin:ymax))
+                           !write(*,*) "num_sum:  ", ((xmax-xmin+1) * (ymax-ymin+1))
                             dial_weights(i,k,j) = sum(temp_dw(xmin:xmax,k,ymin:ymax)) / ((xmax-xmin+1) * (ymax-ymin+1))
+                            !x_p(i,k,j) = sum(x_p(xmin:xmax,k,ymin:ymax)) / ((xmax-xmin+1) * (ymax-ymin+1))
+                            !y_p(i,k,j) = sum(y_p(xmin:xmax,k,ymin:ymax)) / ((xmax-xmin+1) * (ymax-ymin+1))
                         enddo
                     enddo
                 enddo
 
                 if (n/=n_smoothing_passes) then
                     temp_dw = dial_weights
+                    temp_xp = x_p
+                    temp_yp = y_p
                 endif
             enddo
             
+            y_p = (1.0-x_p)
+
+            !y_p = 0.5
+            !where( .not.(( domain%dzdx(ims+1:ime+1,:,:)-domain%dzdx(ims:ime,:,:) ) == 0.0) ) &
+            !      y_p = 1-( domain%dzdy(:,:,jms+1:jme+1)-domain%dzdy(:,:,jms:jme) )/( domain%dzdx(ims+1:ime+1,:,:)-domain%dzdx(ims:ime,:,:) )
+            !y_p = abs(y_p)     
+            !where(y_p == 0.0) y_p = 0.5
+
+            
+            if ( (this_image()==1)) call io_write("x_p.nc","sum",(x_p))
+            if ( (this_image()==1)) call io_write("y_p.nc","sum",(y_p))
+        
             write (img,'(I3.3)') this_image()
             call io_write("dial_weights"//trim(img)//".nc","data",dial_weights)
             if (this_image()==1) call io_write("froude.nc","froude",domain%froude)
             if (this_image()==1) call io_write("Dick.nc","Ri",domain%Ri)
         endif
+        
+        
+        call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options,vert_weight=dial_weights)
+        temp_dw = domain%w%data_3d
+                
+        do it = 1,1
 
+            u_m = ( domain%u%data_3d(ims+1:ime+1,:,jms:jme) + domain%u%data_3d(ims:ime,:,jms:jme) )/2
+            v_m = ( domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) )/2
+                 
+            !T_W_cor = -(domain%jacobian*domain%w%data_3d + dzdx_m*u_m + dzdy_m*v_m) / (2)
+            T_W_cor = -(1-dial_weights)*(0 + dzdx_m*u_m + dzdy_m*v_m) !/ (domain%jacobian(:,kms:kme,:))
+            !T_W_cor(:,30:kme,:) = 0
+            U_D_cor = T_W_cor * x_p
+            V_D_cor = T_W_cor * y_p
+            
+
+            !domain%u%data_3d(ims+1:ime+1,:,:) = domain%u%data_3d(ims+1:ime+1,:,:) + U_D_cor/2
+                                                       
+            !domain%u%data_3d(ims:ime,:,:) = domain%u%data_3d(ims:ime,:,:) + U_D_cor/2
+                                                        
+            !domain%v%data_3d(:,:,jms+1:jme+1) = domain%v%data_3d(:,:,jms+1:jme+1) + V_D_cor/2
+                                                        
+            !domain%v%data_3d(:,:,jms:jme) = domain%v%data_3d(:,:,jms:jme) + V_D_cor/2
+                                                        
+            if ( (this_image()==1) .and. (it==1) ) call io_write("U_stab_cor.nc","U",domain%u%data_3d)
+            if ( (this_image()==1) .and. (it==1) ) call io_write("V_stab_cor.nc","V",domain%v%data_3d)
+            if ( (this_image()==1) .and. (it==1) ) call io_write("dzdx_m.nc","dzdx",dzdx_m)
+            if ( (this_image()==1) .and. (it==1) ) call io_write("dzdx_diff.nc","dzdx", &
+                                                   ( domain%dzdx(ims+1:ime+1,:,jms:jme) - domain%dzdx(ims:ime,:,jms:jme) ))
+
+            if ( (this_image()==1) .and. (it==1) ) call io_write("dzdy_m.nc","dzdy",dzdy_m)
+            if ( (this_image()==1) .and. (it==1) ) call io_write("xy_p.nc","sum",((x_p)+(y_p)))
+
+            write(*,*) 'verts: ',maxval((domain%jacobian*domain%w%data_3d + dzdx_m*u_m + dzdy_m*v_m))
+
+        enddo
+        
         do k = kms,kme
             !ADJ_coef(:,k,:) = -( (2*dial_weights(:,k,:)/domain%advection_dz(:,k,:)) + &
             !                     (4*domain%jacobian(:,k,:)*(1-dial_weights(:,k,:))/domain%dx) )
-            ADJ_coef(:,k,:) = -(4*domain%jacobian(:,k,:)/domain%dx)
+            ADJ_coef(:,k,:) = (2*domain%jacobian(:,k,:)/domain%dx)
         enddo
         
-        it = 0
-        div = 1
-        do while ((it < options%parameters%wind_iterations) )! (maxval(div) > 0.0001) .and. )
-            it = it +1
-            
-            if (it < 500) then
-
-                u_m = ( domain%dzdx(ims+1:ime+1,:,jms:jme)*domain%u%data_3d(ims+1:ime+1,:,jms:jme) + &
-                        domain%dzdx(ims:ime,:,jms:jme)*domain%u%data_3d(ims:ime,:,jms:jme) ) / 2
-                v_m = ( domain%dzdy(ims:ime,:,jms+1:jme+1)*domain%v%data_3d(ims:ime,:,jms+1:jme+1) + &
-                        domain%dzdy(ims:ime,:,jms:jme)*domain%v%data_3d(ims:ime,:,jms:jme) ) / 2
-                T_W_cor = -2*(u_m + v_m) * (1.0-dial_weights) / (domain%jacobian)
+        u_m = ( domain%u%data_3d(ims+1:ime+1,:,jms:jme) + domain%u%data_3d(ims:ime,:,jms:jme) )/2
+        v_m = ( domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) )/2
+        T_W_cor = -(0 + dzdx_m*u_m + dzdy_m*v_m) !/ (2)
         
-                do k = kms,kme
-                    if (k==kms) then
-                        T_W_cor(:,k,:) = T_W_cor(:,k,:)/2 - 0
-                    else
-                        T_W_cor(:,k,:) = T_W_cor(:,k,:) - T_W_cor(:,k-1,:)
-                    endif
-                end do
-
-                n_smoothing_passes = 15
-                do n = 1,n_smoothing_passes
-                    do i = ims,ime
-                        do j=jms,jme
-                            do k=kms,kme
-                                kmin = max(k-1, kms)
-                                kmax = min(k+1, kme)
-                               if (k==kms) then
-                                   T_W_cor(i,k,j) = (T_W_cor(i,kmax,j)) / (2) !Add one to account for 0 on bottom level
-                               else 
-                                   T_W_cor(i,k,j) = (T_W_cor(i,kmin,j) + T_W_cor(i,kmax,j)) / (2)
-                               endif
-                            enddo
-                        enddo
-                    enddo
-                enddo            
-            
-                domain%w%data_3d = (T_W_cor)
-            end if
-            
-            !write (img,'(I4.4)') it
-            !if (mod(it,1)==0) call io_write("w_grid_goal"//trim(img)//".nc","w_grid",domain%w%data_3d)
-            !if (mod(it,1)==0) call io_write("d_vert"//trim(img)//".nc","d_vert",destructive_vert)
-            
-            call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, &
-            domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options)
-
-            ADJ = div/ADJ_coef
-            
-            U_D_cor = (1-0.0)*ADJ*0.5
-            V_D_cor = (1-0.0)*ADJ*0.5
-
+        !x_p = 0.5
+        !where( .not.((abs(dzdx_m*u_m)+abs(dzdy_m*v_m)) == 0) ) &
+        !    x_p = (abs(dzdx_m*u_m+dzdy_m*v_m)*abs(dzdx_m*u_m) )/( (abs(dzdx_m*u_m)+abs(dzdy_m*v_m))**2 )
+        !x_p = max(min(0.9,x_p),0.1)
+        !y_p = 1.0-x_p
         
-            !Distribute divergence among the U and V fields       
+        W_cor_dif(:,kms:kme,:) = (T_W_cor/domain%jacobian(:,kms:kme,:)) * (1.0-dial_weights)
+        !domain%w%data_3d = W_cor_dif  !+ domain%w%data_3d * (dial_weights)
+        
+        u_m = ( domain%dzdx(ims+1:ime+1,:,jms:jme)*domain%u%data_3d(ims+1:ime+1,:,jms:jme) + &
+                domain%dzdx(ims:ime,:,jms:jme)*domain%u%data_3d(ims:ime,:,jms:jme) ) / 2
+        v_m = ( domain%dzdy(ims:ime,:,jms+1:jme+1)*domain%v%data_3d(ims:ime,:,jms+1:jme+1) + &
+                domain%dzdy(ims:ime,:,jms:jme)*domain%v%data_3d(ims:ime,:,jms:jme) ) / 2
+        !T_W_cor = -2*(u_m + v_m)* (1.0-dial_weights) / (domain%jacobian)
+        
+        do k = kms,kme
+            if (k==kms) then
+                !domain%w%data_3d(:,k,:) = T_W_cor(:,k,:) - 0
+            else
+                !domain%w%data_3d(:,k,:) = T_W_cor(:,k,:) - domain%w%data_3d(:,k-1,:)
+            endif
+        end do
 
-            domain%u%data_3d(ims+1:ime+1,:,:) = domain%u%data_3d(ims+1:ime+1,:,:) + U_D_cor! + U_W_cor
-                                                        
-            domain%u%data_3d(ims:ime,:,:) = domain%u%data_3d(ims:ime,:,:) - U_D_cor !+ U_W_cor
-                                                        
-            domain%v%data_3d(:,:,jms+1:jme+1) = domain%v%data_3d(:,:,jms+1:jme+1) + V_D_cor !+ V_W_cor
-                                                        
-            domain%v%data_3d(:,:,jms:jme) = domain%v%data_3d(:,:,jms:jme) - V_D_cor !+ V_W_cor
-
-            call domain%u%exchange_u()
-            call domain%v%exchange_v()
-            
-        enddo
-        write(*,*) 'divs: ',maxval((div))
-        write(*,*) 'verts: ',maxval((domain%jacobian*domain%w%data_3d + dzdx_m*u_m + dzdy_m*v_m))
-
-                
+        !domain%w%data_3d = 0
+        
         call calc_w_real(domain% u %data_3d,      &
                              domain% v %data_3d,      &
                              domain% w %data_3d,      &
@@ -644,8 +678,101 @@ contains
                              domain%dzdx, domain%dzdy,    &
                              domain%jacobian)
                              
-        if (this_image()==1) call io_write("W_it_final.nc","W",domain%w%data_3d)
-        if (this_image()==1) call io_write("W_real_it_final.nc","W_real",domain%w_real%data_3d)
+        if (this_image()==1) call io_write("W_stab_cor.nc","W",domain%w%data_3d)
+        if (this_image()==1) call io_write("W_real_stab_cor.nc","W_real",domain%w_real%data_3d)
+        
+        
+        it = -1
+
+        do while ((it < options%parameters%wind_iterations) )! (maxval(div) > 0.0001) .and. )
+            it = it +1
+            corr_factor = 0.1
+
+           !call calc_w_real(domain% u %data_3d,      &
+           !                  domain% v %data_3d,      &
+           !                  domain% w %data_3d,      &
+           !                  domain% w_real %data_3d,      &
+           !                  domain%dzdx, domain%dzdy,    &
+           !                  domain%jacobian)
+
+            u_m = ( domain%u%data_3d(ims+1:ime+1,:,jms:jme) + domain%u%data_3d(ims:ime,:,jms:jme) )/2
+            v_m = ( domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) )/2
+                
+            u_m = u_m*dzdx_m
+            v_m = v_m*dzdy_m
+                !u_m(:,kms:kme-1,:) = (u_m(:,kms:kme-1,:) + u_m(:,kms+1:kme,:) )/2
+                !v_m(:,kms:kme-1,:) = (v_m(:,kms:kme-1,:) + v_m(:,kms+1:kme,:) )/2
+                
+                !T_W_cor = -(0 + dzdx_m*u_m + dzdy_m*v_m) * (1.0-dial_weights) / (domain%jacobian)
+
+
+                                
+                !u_m = ( domain%dzdx(ims+1:ime+1,:,jms:jme)*domain%u%data_3d(ims+1:ime+1,:,jms:jme) + &
+                !        domain%dzdx(ims:ime,:,jms:jme)*domain%u%data_3d(ims:ime,:,jms:jme) ) / 2
+                !v_m = ( domain%dzdy(ims:ime,:,jms+1:jme+1)*domain%v%data_3d(ims:ime,:,jms+1:jme+1) + &
+                !        domain%dzdy(ims:ime,:,jms:jme)*domain%v%data_3d(ims:ime,:,jms:jme) ) / 2
+                !u_m(:,kms:kme-1,:) = (u_m(:,kms:kme-1,:) + u_m(:,kms+1:kme,:) )/2
+                !v_m(:,kms:kme-1,:) = (v_m(:,kms:kme-1,:) + v_m(:,kms+1:kme,:) )/2
+
+            write (img,'(I4.4)') it
+            !if ((it < 4000)) call io_write("./../debug_out/w_grid"//trim(img)//".nc","w_grid",domain%w%data_3d)
+            !if ((it < 4000)) call io_write("./../debug_out/v_grid"//trim(img)//".nc","v_grid",domain%v%data_3d)
+            !if ((it < 4000)) call io_write("./../debug_out/u_grid"//trim(img)//".nc","u_grid",domain%u%data_3d)
+            !if ((it < 4000)) call io_write("./../debug_out/w_real"//trim(img)//".nc","w_real",domain%w_real%data_3d)
+
+            call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
+                        
+            call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, &
+            domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options,horz_only=.True.)
+           
+
+            temp_dw(:,kms,:) = 0
+            temp_dw(:,kms+1:kme,:) = domain%w%data_3d(:,kms:kme-1,:)
+            !temp_dw = domain%w%data_3d
+            !temp_dw(:,kme,:) = 0
+
+            do k = kms,kme
+                temp_dw(:,k,:) = ((domain%dx/((domain%advection_dz(:,k,:))*domain%jacobian(:,k,:)))*&
+                                    ((1/(domain%jacobian(:,k,:)))*(u_m(:,k,:)+v_m(:,k,:))+&
+                                    domain%w%data_3d(:,k,:)-dial_weights(:,k,:)*domain%w_real%data_3d(:,k,:)))
+            enddo
+            
+            ADJ = -((domain%dx*div/2)-(temp_dw)*(1-sqrt(dzdx_m**2+dzdy_m**2))*0.5)
+            
+            !This divergence call is purely as a diagnostic check
+            !call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, &
+            domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options)
+            
+            write(*,*) 'divs: ',maxval((div))
+            write(*,*) 'verts: ',maxval(domain%w_real%data_3d)
+            write(*,*) 'u_m+v_m: ',maxval((u_m+v_m))
+            write(*,*) 'w_m: ',maxval((domain%w%data_3d))
+            
+            write(*,*) 'ADJ: ', maxval(abs(ADJ))                     
+
+            
+            V_D_cor = ADJ*x_p * corr_factor
+            U_D_cor = ADJ*y_p * corr_factor
+            
+            !Distribute divergence among the U and V fields       
+            u_sign = domain%u%data_3d
+            domain%u%data_3d(ims+1:ime+1,:,:) = domain%u%data_3d(ims+1:ime+1,:,:) + U_D_cor! + U_W_cor
+                                                        
+            domain%u%data_3d(ims:ime,:,:) = domain%u%data_3d(ims:ime,:,:) - U_D_cor !+ U_W_cor
+            where ( (.not.(domain%u%data_3d==sign(domain%u%data_3d,u_sign))) .and. (.not.(u_sign==0)) ) domain%u%data_3d = 0
+            
+            v_sign = domain%v%data_3d
+            domain%v%data_3d(:,:,jms+1:jme+1) = domain%v%data_3d(:,:,jms+1:jme+1) + V_D_cor !+ V_W_cor
+                                                        
+            domain%v%data_3d(:,:,jms:jme) = domain%v%data_3d(:,:,jms:jme) - V_D_cor !+ V_W_cor
+            where ( (.not.(domain%v%data_3d==sign(domain%v%data_3d,v_sign))) .and. (.not.(v_sign==0))  ) domain%v%data_3d = 0
+            
+            call domain%u%exchange_u()
+            call domain%v%exchange_v()
+            
+        enddo
+        
+
         if (this_image()==1) call io_write("U_it_final.nc","U",domain%u%data_3d)
         if (this_image()==1) call io_write("V_it_final.nc","V",domain%v%data_3d)
         sync all 
