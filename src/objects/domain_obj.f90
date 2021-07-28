@@ -1243,8 +1243,14 @@ contains
         global_dzdx = 0
         global_dzdy = 0
         
-        global_dzdx(this%ids+1:this%ide,:,:) = (global_z(this%ids+1:this%ide,:,:) - global_z(this%ids:this%ide-1,:,:)) / this%dx
-        global_dzdy(:,:,this%jds+1:this%jde) = (global_z(:,:,this%jds+1:this%jde) - global_z(:,:,this%jds:this%jde-1)) / this%dx
+        global_dzdx(this%ids+1:this%ide,:,:) = SIN( ATAN( (global_z(this%ids+1:this%ide,:,:) - &
+                                                           global_z(this%ids:this%ide-1,:,:))/this%dx))
+        global_dzdy(:,:,this%jds+1:this%jde) = SIN( ATAN( (global_z(:,:,this%jds+1:this%jde) - &
+                                                           global_z(:,:,this%jds:this%jde-1))/this%dx))
+        !global_dzdx(this%ids+1:this%ide,:,:) = (global_z(this%ids+1:this%ide,:,:) - &
+        !                                                   global_z(this%ids:this%ide-1,:,:))/this%dx
+        !global_dzdy(:,:,this%jds+1:this%jde) = (global_z(:,:,this%jds+1:this%jde) - &
+        !                                                   global_z(:,:,this%jds:this%jde-1))/this%dx
 
         this%dzdx(:,:,:) = global_dzdx(this%ims:this%ime+1,:,this%jms:this%jme)
         this%dzdy(:,:,:) = global_dzdy(this%ims:this%ime,:,this%jms:this%jme+1)
