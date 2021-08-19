@@ -179,7 +179,7 @@ contains
     if (.not. this%east_boundary)  call this%put_east
     if (.not. this%west_boundary)  call this%put_west
         
-    sync all !images( neighbors )
+    sync images( neighbors ) !all
     
     if (.not. this%north_boundary) call this%retrieve_north_halo
 
@@ -216,7 +216,7 @@ contains
         this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%data_3d(start+halo_size*2:start+halo_size*2,:,:)
     endif  
 
-    sync all !images( neighbors )
+    sync images( neighbors ) !all
     
     if (.not. this%north_boundary) call this%retrieve_north_halo  
     if (.not. this%south_boundary) call this%retrieve_south_halo

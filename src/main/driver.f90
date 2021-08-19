@@ -40,7 +40,7 @@ program icar
     type(boundary_t):: boundary, add_cond
     type(output_t)  :: dataset
     ! type(output_t)  :: surface_dataset
-    type(timer_t)   :: initialization_timer, total_timer, input_timer, output_timer, physics_timer
+    type(timer_t)   :: initialization_timer, total_timer, input_timer, output_timer, physics_timer, wind_timer
     type(Time_type) :: next_output
     type(time_delta_t) :: small_time_delta
 
@@ -125,8 +125,10 @@ program icar
             if (this_image()==1) write(*,*) "Updating Boundary conditions"
             call boundary%update_forcing(options)
             call domain%interpolate_forcing(boundary, update=.True.)
+            call wind_timer%start()
             call update_winds(domain, options)
-
+            call wind_timer%stop()
+            
             ! Make the boundary condition dXdt values into units of [X]/s
             call domain%update_delta_fields(boundary%current_time - domain%model_time)
         endif
@@ -199,6 +201,7 @@ program icar
         write(*,*) "input   : ", trim(input_timer%as_string())
         write(*,*) "output  : ", trim(output_timer%as_string())
         write(*,*) "physics : ", trim(physics_timer%as_string())
+        write(*,*) "winds   : ", trim(wind_timer%as_string())
     endif
 
 contains
