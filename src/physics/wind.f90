@@ -457,8 +457,8 @@ contains
         
         ! interal parameters
         real, allocatable, dimension(:,:,:) :: div, dial_weights, temp_dw, ADJ1, ADJ2U, ADJ2V, U_D_cor, V_D_cor, current_u, current_v, current_w
-        real, allocatable, dimension(:,:,:) :: u_m, v_m, w_m, dzdx_m, dzdy_m, SLOPE, dw_factor, old_dw, dw_tend, temp_w
-        real    :: global_max
+        real, allocatable, dimension(:,:,:) :: u_m, v_m, w_m, dzdx_m, dzdy_m, SLOPE, dw_factor, rot_ang, terr_ang, dw_tend, temp_w
+        real    :: global_max, old_max
         integer :: it, k, j, i, ims, ime, jms, jme, kms, kme, wind_k, n, xmin, xmax, ymin, ymax, kmin, kmax, i_start1, i_end1, j_start1, j_end1, i_start2, i_end2, j_start2, j_end2
         logical :: update
         character(len=4) :: img
@@ -499,7 +499,8 @@ contains
         allocate(temp_dw(ims:ime,kms:kme,jms:jme))
         allocate(temp_w(ims:ime,kms:kme,jms:jme))
         allocate(dw_factor(ims:ime,kms:kme,jms:jme))
-        allocate(old_dw(ims:ime,kms:kme,jms:jme))
+        allocate(rot_ang(ims:ime,kms:kme,jms:jme))
+        allocate(terr_ang(ims:ime,kms:kme,jms:jme))
         allocate(dw_tend(ims:ime,kms:kme,jms:jme))
         allocate(SLOPE(ims:ime,kms:kme,jms:jme))
         it = 0
@@ -509,6 +510,7 @@ contains
         ADJ2V = 0
   
         global_max = 1
+        old_max = 0
         
         i_start1 = ims+2
         i_start2 = ims+2
@@ -527,7 +529,7 @@ contains
             dial_weights = domain%froude/50.0 !max((domain%froude-0.5),0.0) !0.25 !0.2
             
             !Sanity-bounding to min of 0.0, max of 1.0
-            dial_weights = max(min(dial_weights,1.0),0.0)
+            dial_weights = 0!max(min(dial_weights,1.0),0.0)
             
             write (img,'(I3.3)') this_image()
             call io_write("dial_weights"//trim(img)//".nc","data",dial_weights)
@@ -557,32 +559,37 @@ contains
         call domain%u%exchange_u()
         call domain%v%exchange_v()
         
-        
+        if (this_image()==1) call io_write("ySlope.nc","ySlope",SIN(ATAN(domain%dzdy(:,:,jms+1:jme))))
+        if (this_image()==1) call io_write("xSlope.nc","xSlope",SIN(ATAN(domain%dzdx(ims+1:ime,:,:))))  
+            
         !Do some setup for solver
         dzdx_m = ( domain%dzdx(ims+1:ime+1,:,jms:jme) + domain%dzdx(ims:ime,:,jms:jme) )/2
         dzdy_m = ( domain%dzdy(ims:ime,:,jms+1:jme+1) + domain%dzdy(ims:ime,:,jms:jme) )/2
         
-        SLOPE = SIN(ATAN(sqrt(dzdx_m**2 + dzdy_m**2)))
-        
+        terr_ang = -sign(PI/2.0,dzdx_m)
+        where ( .not.(dzdy_m==0) ) terr_ang = -ATAN(dzdx_m/dzdy_m)
+        if (this_image()==1) call io_write("terr_ang.nc","terr_ang",terr_ang)  
+        SLOPE = (ATAN(sqrt(dzdx_m**2 + dzdy_m**2)))/(PI/2.0) !https://desktop.arcgis.com/en/arcmap/10.3/tools/spatial-analyst-toolbox/how-slope-works.htm
+
         !Balance uvw to get initial state of w_grid
-        call balance_uvw(domain%u%data_3d, domain%v%data_3d, temp_w, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
+        call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
 
-        domain%w%data_3d = temp_w*(dial_weights)
-
-        !Compute horizontal divergence of wind field
-        call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, &
-            domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options,horz_only=.False.)
-        
-        ADJ1 = -(div) &
-               /((4*domain%jacobian)/domain%dx)
-                      
-        do while ( (global_max > 0.002) .and. (it < 3000) )
+        dw_factor = 0.01 !*(1-SLOPE)
+   
+        do while ( (it < 3000))! .and. ((abs(global_max-old_max)/global_max) > 0.0001) )
            
             !write (img,'(I4.4)') it
             !if ((it < 4000)) call io_write("./../debug_out/w_grid"//trim(img)//".nc","w_grid",domain%w%data_3d)
             !if ((it < 4000)) call io_write("./../debug_out/v_grid"//trim(img)//".nc","v_grid",domain%v%data_3d)
             !if ((it < 4000)) call io_write("./../debug_out/u_grid"//trim(img)//".nc","u_grid",domain%u%data_3d)
             !if ((it < 4000)) call io_write("./../debug_out/w_real"//trim(img)//".nc","w_real",domain%w_real%data_3d)
+            w_m(:,kms,:) = domain%w%data_3d(:,kms,:)*domain%jacobian_w(:,kms,:)/2
+            w_m(:,kms+1:kme,:) = (domain%w%data_3d(:,kms+1:kme,:)*domain%jacobian_w(:,kms+1:kme,:) + &
+                                  domain%w%data_3d(:,kms:kme-1,:)*domain%jacobian_w(:,kms:kme-1,:))/2
+
+            u_m = (domain%u%data_3d(ims+1:ime+1,:,jms:jme)+domain%u%data_3d(ims:ime,:,jms:jme))/2
+            v_m = (domain%v%data_3d(ims:ime,:,jms+1:jme+1)+domain%v%data_3d(ims:ime,:,jms:jme))/2
+            temp_w = sqrt(u_m**2+v_m**2+w_m**2)
            
             !Compute mass-grid components of w_real
             u_m = ( SIN(ATAN(domain%dzdx(ims+1:ime+1,:,jms:jme)))*domain%u%data_3d(ims+1:ime+1,:,jms:jme) + &
@@ -590,69 +597,95 @@ contains
             v_m = ( SIN(ATAN(domain%dzdy(ims:ime,:,jms+1:jme+1)))*domain%v%data_3d(ims:ime,:,jms+1:jme+1) + &
                     SIN(ATAN(domain%dzdy(ims:ime,:,jms:jme)))*domain%v%data_3d(ims:ime,:,jms:jme) ) / 2
                     
-            w_m(:,kms,:) = domain%w%data_3d(:,kms,:)*domain%jacobian_w(:,kms,:)/2
-            w_m(:,kms+1:kme,:) = (domain%w%data_3d(:,kms+1:kme,:)*domain%jacobian_w(:,kms+1:kme,:) + &
-                                  domain%w%data_3d(:,kms:kme-1,:)*domain%jacobian_w(:,kms:kme-1,:))/2
+            !u_m = ((domain%u%data_3d(ims+1:ime+1,:,jms:jme)+domain%u%data_3d(ims:ime,:,jms:jme))/2) * &
+            !        SIN(ATAN(dzdx_m))
+            !v_m = ((domain%v%data_3d(ims:ime,:,jms+1:jme+1)+domain%v%data_3d(ims:ime,:,jms:jme))/2) * &
+            !        SIN(ATAN(dzdy_m))
             
-            !Compute adjustment for the given loop
-            !temp_w(:,kms,:) = 0
-            !temp_w(:,kms+1:kme,:) = domain%w%data_3d(:,kms:kme-1,:)*domain%jacobian_w(:,kms:kme-1,:)
-            !temp_dw = (u_m+v_m+w_m) - (dial_weights)*(u_m+v_m+temp_w)
-            
-            temp_dw = (u_m+v_m+w_m) - (dial_weights)*(u_m+v_m)
-
-            dw_tend = temp_dw !/domain%advection_dz
 
             call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, &
             domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options,horz_only=.False.)
 
-            ADJ1 = -div*domain%dx/(4*domain%jacobian) + (1-SLOPE)*(dw_tend)/(domain%advection_dz)
-                   
-            dw_tend = (1-SLOPE)*0.01*(1-dial_weights)*(u_m+v_m+w_m)/(domain%advection_dz)            
-            
-            where( .not.( (u_m**2+v_m**2)==0 )) ADJ2U = sign(dw_tend, (domain%u%data_3d(ims:ime,:,:)+domain%u%data_3d(ims+1:ime+1,:,:)) )*abs(u_m)/sqrt(u_m**2+v_m**2)
-            where( .not.( (u_m**2+v_m**2)==0 )) ADJ2V = sign(dw_tend, (domain%v%data_3d(:,:,jms:jme)+domain%v%data_3d(:,:,jms+1:jme+1)) )*abs(v_m)/sqrt(u_m**2+v_m**2)
-            
-            where (abs(ADJ2U) > abs(ADJ2V)) ADJ2V = sign(ADJ2U,u_m*dzdy_m)
-            where (abs(ADJ2V) > abs(ADJ2U)) ADJ2U = sign(ADJ2V,dzdx_m*v_m)
-            
+            temp_dw = (u_m+v_m+w_m)*(1-dial_weights)*domain%jacobian/(domain%advection_dz*4)!*(1+temp_w))
+            div = div*domain%dx/(4*domain%jacobian)
+            ADJ1 = -div + temp_dw
+
+
             if (this_image()==1) write(*,*) "ADJ: ",global_max
             if (this_image()==1) write(*,*) "vert: ",maxval(abs(u_m+v_m+w_m))
-            
-            !if (this_image()==1) write(*,*) "ADJU: ",maxval(ADJ2U)
-            !if (this_image()==1) write(*,*) "ADJV: ",maxval(ADJ2V)
-            
             if (this_image()==1) write(*,*) "div: ",maxval(abs(div))
             
+            !dw_tend = (1-dial_weights)*(u_m+v_m)/domain%jacobian
+            !temp_dw(:,kms,:) = 0
+            !temp_dw(:,kms+1:kme,:) = dial_weights(:,kms:kme-1,:)*domain%w%data_3d(:,kms:kme-1,:) - &
+            !           (1-dial_weights(:,kms:kme-1,:))*(u_m(:,kms:kme-1,:)+v_m(:,kms:kme-1,:))/domain%jacobian(:,kms:kme-1,:)
+            !ADJ1 = -(domain%dx/(4*domain%jacobian))*( div+(dial_weights*domain%w%data_3d-dw_tend-temp_dw)/domain%advection_dz )
+
+            temp_dw = 0!-temp_dw!*0.1 !/((sqrt(u_m**2+v_m**2+w_m**2))+1)
+            !where( .not.((u_m**2+v_m**2+w_m**2)==0) )temp_dw = dw_tend*sqrt(u_m**2+v_m**2)/sqrt(u_m**2+v_m**2+w_m**2) !0.01 !*(1-SLOPE)
+            
+
+            !rot_ang = sign(PI/2.0,v_m) !- sign(PI/2.0,dzdx_m)
+            !where ( .not.(u_m==0)) rot_ang = -ATAN(v_m/u_m) !- ATAN((dzdx_m/dzdy_m) + w_m/(u_m*dzdy_m))
+            !if (this_image()==1) call io_write("terr_corr.nc","terr_corr",ATAN((dzdx_m/dzdy_m) + w_m/(u_m*dzdy_m)))  
+            !rot_ang = (rot_ang + terr_ang)*(SLOPE)*(1-dial_weights)!/2
+            !where(SLOPE==0) rot_ang=0
+            !if (this_image()==1) call io_write("rot_ang.nc","rot_ang",rot_ang)  
+            !ADJ2U = ((COS(rot_ang)-1)*u_m - SIN(rot_ang)*v_m)*0.05/domain%advection_dz
+            !ADJ2V = ((COS(rot_ang)-1)*v_m + SIN(rot_ang)*u_m)*0.05/domain%advection_dz
+            
+            ADJ2U = temp_dw*SIN(ATAN(dzdx_m))!sign((SLOPE),SIN(ATAN(dzdx_m)) )
+            ADJ2V = temp_dw*SIN(ATAN(dzdy_m))!sign((SLOPE),SIN(ATAN(dzdy_m)) )
+            
+            !where (dzdx_m > dzdy_m) ADJ2V = sign(ADJ2U,-ADJ2U*ADJ2V)
+            !where (dzdy_m > dzdx_m) ADJ2U = sign(ADJ2V,-ADJ2U*ADJ2V)
+
+            !where( .not.( (u_m**2+v_m**2)==0 )) ADJ2U = temp_dw*(u_m**2)/(u_m**2+v_m**2)
+            !where( .not.( (u_m**2+v_m**2)==0 )) ADJ2V = temp_dw*(v_m**2)/(u_m**2+v_m**2)
+            
+            !where (abs(ADJ2U) > abs(ADJ2V)) ADJ2V = sign(ADJ2U,u_m)
+            !where (abs(ADJ2V) > abs(ADJ2U)) ADJ2U = sign(ADJ2V,v_m)
+            
+            where (abs(ADJ2V) > abs(ADJ2U)) ADJ2U = sign(ADJ2V,ADJ2U)
+            where (abs(ADJ2U) > abs(ADJ2V)) ADJ2V = sign(ADJ2U,ADJ2V)
+            
+            !domain%u%data_3d(ims+1:ime,:,:) = domain%u%data_3d(ims+1:ime,:,:) - (COS(ATAN(domain%dzdx(ims+1:ime,:,:)))**2*(ADJ2U(ims+1:ime,:,:)+ADJ2U(ims:ime-1,:,:))/2)
+            !domain%v%data_3d(:,:,jms+1:jme) = domain%v%data_3d(:,:,jms+1:jme) + (SIN(ATAN(domain%dzdy(:,:,jms+1:jme)))**2*(ADJ2V(:,:,jms+1:jme)+ADJ2V(:,:,jms:jme-1))/2)
+
+            domain%u%data_3d(ims+1:ime+1,:,:) = domain%u%data_3d(ims+1:ime+1,:,:) + ADJ2U*0.5
+            domain%v%data_3d(:,:,jms+1:jme+1) = domain%v%data_3d(:,:,jms+1:jme+1) + ADJ2V*0.5
+            domain%u%data_3d(ims:ime,:,:) = domain%u%data_3d(ims:ime,:,:) + ADJ2U*0.5
+            domain%v%data_3d(:,:,jms:jme) = domain%v%data_3d(:,:,jms:jme) + ADJ2V*0.5
+                        
             !Apply adjustment
 
             domain%u%data_3d(i_start1:i_end1,:,j_start1-1:j_end1-1) = &
                                                         domain%u%data_3d(i_start1:i_end1,:,j_start1-1:j_end1-1) + &
-                                                        ADJ1(i_start1-1:i_end1-1,:,j_start1-1:j_end1-1) - &
-                                                        ADJ2U(i_start1-1:i_end1-1,:,j_start1-1:j_end1-1)
+                                                        ADJ1(i_start1-1:i_end1-1,:,j_start1-1:j_end1-1) !+ &
+                                                        !ADJ2U(i_start1-1:i_end1-1,:,j_start1-1:j_end1-1)
                                                         
             domain%u%data_3d(i_start2:i_end2,:,j_start1-1:j_end1-1) = &
                                                         domain%u%data_3d(i_start2:i_end2,:,j_start1-1:j_end1-1) - &
-                                                        ADJ1(i_start2:i_end2,:,j_start1-1:j_end1-1) - &
-                                                        ADJ2U(i_start2:i_end2,:,j_start1-1:j_end1-1)
+                                                        ADJ1(i_start2:i_end2,:,j_start1-1:j_end1-1) !+ &
+                                                        !ADJ2U(i_start2:i_end2,:,j_start1-1:j_end1-1)
                                                         
             domain%v%data_3d(i_start1-1:i_end1-1,:,j_start1:j_end1) = &
                                                         domain%v%data_3d(i_start1-1:i_end1-1,:,j_start1:j_end1) + &
-                                                        ADJ1(i_start1-1:i_end1-1,:,j_start1-1:j_end1-1) - &
-                                                        ADJ2V(i_start1-1:i_end1-1,:,j_start1-1:j_end1-1)
+                                                        ADJ1(i_start1-1:i_end1-1,:,j_start1-1:j_end1-1) !+ &
+                                                        !ADJ2V(i_start1-1:i_end1-1,:,j_start1-1:j_end1-1)
                                                         
             domain%v%data_3d(i_start1-1:i_end1-1,:,j_start2:j_end2) = &
                                                         domain%v%data_3d(i_start1-1:i_end1-1,:,j_start2:j_end2) - &
-                                                        ADJ1(i_start1-1:i_end1-1,:,j_start2:j_end2) - &
-                                                        ADJ2V(i_start1-1:i_end1-1,:,j_start2:j_end2)
+                                                        ADJ1(i_start1-1:i_end1-1,:,j_start2:j_end2) !+ &
+                                                        !ADJ2V(i_start1-1:i_end1-1,:,j_start2:j_end2)
                                                         
-            !if (domain%jts==(domain%jds+1)) domain%v%data_3d(ims:ime-1,:,jms) = domain%v%data_3d(ims:ime-1,:,jms+1)
+            if (domain%jts==(domain%jds+1)) domain%v%data_3d(ims:ime-1,:,jms) = domain%v%data_3d(ims:ime-1,:,jms+1)
                         
-            !if (domain%its==(domain%ids+1)) domain%u%data_3d(ims,:,jms+1:jme) = domain%u%data_3d(ims+1,:,jms+1:jme)
+            if (domain%its==(domain%ids+1)) domain%u%data_3d(ims,:,jms+1:jme) = domain%u%data_3d(ims+1,:,jms+1:jme)
 
-            !if (domain%jte==(domain%jde-1)) domain%v%data_3d(ims+1:ime,:,jme+1) = domain%v%data_3d(ims+1:ime,:,jme)
+            if (domain%jte==(domain%jde-1)) domain%v%data_3d(ims+1:ime,:,jme+1) = domain%v%data_3d(ims+1:ime,:,jme)
 
-            !if (domain%ite==(domain%ide-1)) domain%u%data_3d(ime+1,:,jms:jme-1) = domain%u%data_3d(ime,:,jms:jme-1)
+            if (domain%ite==(domain%ide-1)) domain%u%data_3d(ime+1,:,jms:jme-1) = domain%u%data_3d(ime,:,jms:jme-1)
 
             call domain%u%exchange_u()
             call domain%v%exchange_v()
@@ -660,10 +693,14 @@ contains
             !Update w_grid
             call balance_uvw(domain%u%data_3d, domain%v%data_3d, temp_w, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
             
-            domain%w%data_3d = temp_w*0.01 + domain%w%data_3d*0.99
-            !domain%w%data_3d = temp_w*(dial_weights)
+            !domain%w%data_3d = temp_w*0.005 + domain%w%data_3d*0.995
+            !dw_factor = 0.01
+            dw_factor = 0.01*(1+abs(domain%w%data_3d))/(1+abs(ADJ1))
 
+            domain%w%data_3d = domain%w%data_3d + (temp_w-domain%w%data_3d)*(dw_factor)
+            
             !Update loop controls
+            old_max = global_max
             global_max = maxval(abs(ADJ1))
             call CO_MAX(global_max)
             it = it+1
