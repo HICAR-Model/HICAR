@@ -667,10 +667,11 @@ contains
 
             ! reset the counter so we know that *this* is the last time we've run the microphysics
             ! NOTE, ONLY reset this when running the inner subset... ideally probably need a separate counter for the halo and subset
+            !last_model_time = domain%model_time%seconds()
             if (.not.present(halo)) then
                 last_model_time = domain%model_time%seconds()
             endif
-
+            
             ! If we are going to distribute the current precip over a few grid cells, we need to keep track of
             ! the last_precip so we know how much fell
             if ((options%mp_options%local_precip_fraction<1).or.(options%parameters%use_bias_correction)) then

@@ -491,7 +491,7 @@ contains
 
                 call mp(domain, options, real(dt%seconds()), subset=1)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp(domain")
-
+                
                 call domain%halo_retrieve()
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_retrieve")
 
