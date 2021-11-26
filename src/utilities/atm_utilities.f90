@@ -415,15 +415,16 @@ contains
     end function calc_froude
     
     
-    pure function calc_Ri(BV_frequency_sq, wind_speed, dz) result(Ri)
+    pure function calc_Ri(BV_frequency_sq, u_shear, v_shear, dz) result(Ri)
         implicit none
         real, intent(in) :: BV_frequency_sq    ! [ 1 / s ]
-        real, intent(in) :: wind_speed                  ! [ m / s ]
+        real, intent(in) :: u_shear                  ! [ m / s ]
+        real, intent(in) :: v_shear                  ! [ m / s ]
         real, intent(in) :: dz                          ! [ m / s ]
         real :: Ri                                  ! []
         real :: denom
 
-        denom = (wind_speed/dz)**2
+        denom = ( ((u_shear/dz)**2) + ((v_shear/dz)**2) )
 
         if (denom==0) then
             Ri = 10 ! anything over ~5 is effectively infinite anyway
@@ -456,7 +457,7 @@ contains
         
         !When we have very unstable conditions (Ri < 0), theta = 0, very stable conditions (Ri > 1), never separation
         !WS modulates this, reducing the separation angle by 2 degrees for each m/s over 2 m/s
-        theta = 0 + 45*min(max(Ri,0.0),1.0) - 2*min((WS-2.0),0.0)
+        theta = 0 + 45*4*min(max(Ri,0.0),0.25) !- 2*min((WS-2.0),0.0)
         
         !Only allow separation for a max angle of 10º
         theta = max(theta,0.0)

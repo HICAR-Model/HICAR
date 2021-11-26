@@ -365,11 +365,12 @@ contains
         real, allocatable, dimension(:,:)   :: winddir, Sx_curr
         real, allocatable, dimension(:,:,:)   :: Sx_U, Sx_V
 
-        integer ::  i, j, k, ims, ime, jms, jme, CV_u, CV_v
-        real    :: TPI_corr, Sx_U_corr, Sx_V_corr, thresh_ang, Ri_num, WS        
+        integer ::  i, j, k, ims, ime, jms, jme, kms, CV_u, CV_v
+        real    :: TPI_corr, Sx_U_corr, Sx_V_corr, thresh_ang, Ri_num, WS, DEFAULT_SCALE_ANG, max_spd, ang_scale_u, ang_scale_v
                 
         ims = lbound(w,1)
         ime = ubound(w,1)
+        kms = lbound(w,2)
         jms = lbound(w,3)
         jme = ubound(w,3)
         
@@ -386,8 +387,11 @@ contains
         CV_u = 0
         CV_v = 0
         
-        thresh_ang = 0
-
+        thresh_ang = 0.
+        max_spd = 0.
+        DEFAULT_SCALE_ANG = 20.0 !This means that for a 20-degree difference between threshold and Sx, reversal starts. 
+                                 ! Can be thought of as minimum terrain slope necesarry for flow reversal
+        
         !Pick appropriate Sx for wind direction and interpolate Sx to staggered grids
         do k = 1, 30
             call pick_Sx(Sx(:,:,k,:), Sx_curr, u(:,k,:), v(:,k,:))
@@ -412,24 +416,48 @@ contains
                     Ri_num = Ri(i,1,j)
                     WS = sqrt( u(i,1,j)**2 + v(i,1,j)**2 )
                     thresh_ang = calc_thresh_ang(Ri_num,WS)
+                    
+                    if (Ri_num <= 0.) then
+                        max_spd = 0.3*Ri_num+0.3
+                    else if (Ri_num < 0.25) then
+                        max_spd = 1/(13.9*(Ri_num+0.15)) - 0.18
+                    else
+                        max_spd = 0.0
+                    endif
+                    max_spd = max(max_spd,0.0)
+                    max_spd = max_spd/sqrt(2.) !sqrt(2) added since max_speed will be compared component-wise
                 end if
-            
+                
+                ang_scale_u = DEFAULT_SCALE_ANG
+                ang_scale_v = DEFAULT_SCALE_ANG
+                
                 !Loop through vertical column
-                do k = 1, 30
+                do k = kms, 30
 
                     !Consider sheltering corrections
                     !If surface was sheltered and we are still sheltered: U-grid
-                    if ((Sx_U(i,1,j) > thresh_ang) .and. (Sx_U(i,k,j) > thresh_ang)) then
+                    if ((Sx_U(i,kms,j) > thresh_ang) .and. (Sx_U(i,k,j) > thresh_ang)) then
                         !Sheltered correction
-                        Sx_U_corr = (Sx_U(i,k,j)-thresh_ang)/10.0 !Sx_U(i,k,j) / (Sx_U(i,k,j)+5)
+                        if (k==kms) then
+                            if ( ((Sx_U(i,k,j)-thresh_ang)/ang_scale_u) > (1+max_spd)) then
+                                ang_scale_u = (Sx_U(i,k,j)-thresh_ang)/(1+max_spd)
+                            endif
+                        endif
+                        Sx_U_corr = (Sx_U(i,k,j)-thresh_ang)/ang_scale_u !Sx_V(i,k,j) / (Sx_V(i,k,j)+5)
                     else 
                         Sx_U_corr = 0
                     end if
                     
                     !If surface was sheltered and we are still sheltered: V-grid
-                    if ((Sx_V(i,1,j) > thresh_ang) .and. (Sx_V(i,k,j) > thresh_ang)) then
+                    if ((Sx_V(i,kms,j) > thresh_ang) .and. (Sx_V(i,k,j) > thresh_ang)) then
                         !Sheltered correction
-                        Sx_V_corr = (Sx_V(i,k,j)-thresh_ang)/10.0 !Sx_V(i,k,j) / (Sx_V(i,k,j)+5)
+                        
+                        if (k==kms) then
+                            if ( ((Sx_V(i,k,j)-thresh_ang)/ang_scale_v) > (1+max_spd)) then
+                                ang_scale_v = (Sx_V(i,k,j)-thresh_ang)/(1+max_spd)
+                            endif
+                        endif
+                        Sx_V_corr = (Sx_V(i,k,j)-thresh_ang)/ang_scale_v !Sx_V(i,k,j) / (Sx_V(i,k,j)+5)
                     else
                         Sx_V_corr = 0
                     end if
@@ -439,19 +467,22 @@ contains
                     if (k <= 10) then
                         !Scale TPI correction and exposure with height so we smoothly merge with forcing data
                         TPI_corr = (TPI(i,j)/200) * ((11-k)/10.0) !This is setup such that ridges are >= 100, valleys <= -100
-                        if (TPI_corr > 0.5) TPI_corr = 0.5
+
                         if (TPI_corr < -0.5) TPI_corr = -0.5
+                        
+                        !Outdated -- TPI and Sx-based speed up. Leaving in case it is later desired 
+                        !if (TPI_corr > 0.5) TPI_corr = 0.5
                         
                         !Consider exposure, only for first 10-levels
                         ! If Sx is negative, compute exposure correction
-                        if (Sx_U(i,1,j) < 0) then
-                            Sx_U_corr = -((11-k)/10.0) * 0.0 !(Sx_U(i,1,j)/45) * ((11-k)/10.0) 
-                        end if
+                        ! if (Sx_U(i,1,j) < 0) then
+                        !    Sx_U_corr = -((11-k)/10.0) * 0.0 !(Sx_U(i,1,j)/45) * ((11-k)/10.0) 
+                        !end if
                         
                         ! If Sx is negative, compute exposure correction
-                        if (Sx_V(i,1,j) < 0) then
-                            Sx_V_corr = -((11-k)/10.0) * 0.0 !(Sx_V(i,1,j)/45) * ((11-k)/10.0)
-                        end if
+                        !if (Sx_V(i,1,j) < 0) then
+                        !    Sx_V_corr = -((11-k)/10.0) * 0.0 !(Sx_V(i,1,j)/45) * ((11-k)/10.0)
+                        !end if
                     else 
                         TPI_corr = 0
                     end if
@@ -460,11 +491,11 @@ contains
                     !If we have no correction to apply, we are done with this cell
                     if ( Sx_U_corr == 0 .and. Sx_V_corr == 0 .and. TPI_corr == 0 ) exit
                     
-                    TPI_corr = 0
+                    TPI_corr = min(TPI_corr,0.0)
                     
                     !Dummy bounding of Sx corrections
-                    Sx_U_corr = min(max(Sx_U_corr,-1.0),2.0)
-                    Sx_V_corr = min(max(Sx_V_corr,-1.0),2.0)
+                    Sx_U_corr = min(max(Sx_U_corr,-0.0),1.3)
+                    Sx_V_corr = min(max(Sx_V_corr,-0.0),1.3)
                     
                     !Finally, apply TPI and Sx corrections
                     u(i,k,j) = u(i,k,j) * (1 + TPI_corr - Sx_U_corr)

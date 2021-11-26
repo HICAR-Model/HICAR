@@ -7,8 +7,9 @@
 !!  Ethan Gutmann (gutmann@ucar.edu)
 !!
 !!------------------------------------------------------------
-module wind
+module wind    
     use linear_theory_winds, only : linear_perturb
+    use wind_iterative,      only : calc_iter_winds
     !use mod_blocking,        only : update_froude_number, initialize_blocking
     use data_structures
     use exchangeable_interface,   only : exchangeable_t
@@ -24,6 +25,7 @@ module wind
     public::update_winds, init_winds
     real, parameter::deg2rad=0.017453293 !2*pi/360
     real, parameter :: rad2deg=57.2957779371
+    real, parameter :: DEFAULT_FR_L = 1000.0
 contains
 
     !>------------------------------------------------------------
@@ -298,9 +300,17 @@ contains
         type(domain_t), intent(inout) :: domain
         type(options_t),intent(in)    :: options
 
-        real, allocatable, dimension(:,:,:) :: temparray
+        real, allocatable, dimension(:,:,:) :: temparray, alpha, div
         integer :: nx, ny, nz, i, j
-        
+        integer :: ims, ime, jms, jme, kms, kme
+
+        ims = lbound(domain%w%data_3d,1)
+        ime = ubound(domain%w%data_3d,1)
+        kms = lbound(domain%w%data_3d,2)
+        kme = ubound(domain%w%data_3d,2)
+        jms = lbound(domain%w%data_3d,3)
+        jme = ubound(domain%w%data_3d,3)
+
         if (.not.allocated(domain%advection_dz)) then
 
             call init_winds(domain, options)
@@ -316,7 +326,6 @@ contains
             ! endif
 
             if (options%wind%Sx) then
-                !call iterative_winds(domain, options)
                 call apply_Sx(domain%Sx,domain%TPI,domain%u%data_3d, domain%v%data_3d, domain%w%data_3d,domain%Ri)
             endif 
 
@@ -332,7 +341,23 @@ contains
                     call mass_conservative_acceleration(domain%u%data_3d, domain%v%data_3d, domain%zr_u, domain%zr_v)
                 endif    
             elseif (options%physics%windtype==kITERATIVE_WINDS) then
-                call iterative_winds(domain, options)
+            
+                allocate(alpha(ims:ime,kms:kme,jms:jme))
+                allocate(div(ims:ime,kms:kme,jms:jme))
+                alpha=2
+                
+                call calc_w_real(domain% u %data_3d,      &
+                             domain% v %data_3d,      &
+                             domain% w %data_3d,      &
+                             domain% w_real %data_3d,      &
+                             domain%dzdx, domain%dzdy,    &
+                             domain%jacobian)
+                          
+                domain%w%data_3d = domain%w_real%data_3d
+                call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
+                                domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
+                                domain%jacobian,domain%density%data_3d,domain%smooth_height,options,horz_only=.False.)
+                call calc_iter_winds(domain,alpha,div)
 
             endif
             ! else assumes even flow over the mountains
@@ -354,7 +379,6 @@ contains
             !call make_winds_grid_relative(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d, domain%grid, domain%sintheta, domain%costheta)
             
             if (options%wind%Sx) then
-                !call iterative_winds(domain, options, update_in=.True.)
                 call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d,domain%Ri)
             endif 
 
@@ -370,7 +394,25 @@ contains
                     call mass_conservative_acceleration(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%zr_u, domain%zr_v)
                 endif   
             elseif (options%physics%windtype==kITERATIVE_WINDS) then
-                call iterative_winds(domain, options, update_in=.True.)
+            
+                allocate(alpha(ims:ime,kms:kme,jms:jme))
+                allocate(div(ims:ime,kms:kme,jms:jme))
+                alpha=2
+                
+                             
+                call calc_w_real(domain% u %meta_data%dqdt_3d,      &
+                             domain% v %meta_data%dqdt_3d,      &
+                             domain% w %meta_data%dqdt_3d,      &
+                             domain% w_real %data_3d,      &
+                             domain%dzdx, domain%dzdy,    &
+                             domain%jacobian)
+                             
+                domain%w%meta_data%dqdt_3d = domain%w_real%data_3d
+                
+                call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
+                                domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
+                                domain%jacobian,domain%density%data_3d,domain%smooth_height,options,horz_only=.False.)
+                call calc_iter_winds(domain,alpha,div,update_in=.True.)
 
             endif
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
@@ -452,455 +494,6 @@ contains
         end do
     end subroutine calc_w_real
     
-    subroutine iterative_winds(domain, options, update_in)
-        implicit none
-        type(domain_t), intent(inout) :: domain
-        type(options_t),intent(in)    :: options
-        logical, optional, intent(in) :: update_in
-        
-        ! interal parameters
-        real, allocatable, dimension(:,:,:) :: div, div_h, dial_weights, temp_dw, ADJ1, ADJ2U, ADJ2V, U_D_cor, V_D_cor, current_u, current_v, current_w
-        real, allocatable, dimension(:,:,:) :: u_m, v_m, w_m, dzdx_m, dzdy_m, SLOPE, rot_ang, terr_ang, dw_tend, temp_w, u_orig, v_orig, w_step, w_2step
-        real, allocatable, dimension(:,:)   :: temp_div
-        real    :: global_max, old_max, tol, trunc_err, h, eps
-        integer :: it, k, j, i, ims, ime, jms, jme, kms, kme, wind_k, n, xmin, xmax, ymin, ymax, kmin, kmax, i_start1, i_end1, j_start1, j_end1, i_start2, i_end2, j_start2, j_end2
-        logical :: update
-        character(len=4) :: img
-        
-        update=.False.
-        if (present(update_in)) update=update_in
-
-        ims = lbound(domain%w%data_3d,1)
-        ime = ubound(domain%w%data_3d,1)
-        kms = lbound(domain%w%data_3d,2)
-        kme = ubound(domain%w%data_3d,2)
-        jms = lbound(domain%w%data_3d,3)
-        jme = ubound(domain%w%data_3d,3)
-
-        !If we are doing an update, we need to swap meta data into data_3d fields so it can be exchanged while balancing
-        !First, we save a copy of the current data_3d so that we can substitute it back in later
-        if (update) then
-             current_u = domain%u%data_3d
-             current_v = domain%v%data_3d
-             current_w = domain%w%data_3d
-             
-             domain%u%data_3d = domain%u%meta_data%dqdt_3d
-             domain%v%data_3d = domain%v%meta_data%dqdt_3d
-             domain%w%data_3d = domain%w%meta_data%dqdt_3d
-        endif
-        
-        allocate(div(ims:ime,kms:kme,jms:jme))
-        allocate(div_h(ims:ime,kms:kme,jms:jme))
-        allocate(ADJ1(ims:ime,kms:kme,jms:jme))
-        allocate(ADJ2U(ims:ime,kms:kme,jms:jme))
-        allocate(ADJ2V(ims:ime,kms:kme,jms:jme))
-        allocate(U_D_cor(ims:ime,kms:kme,jms:jme))
-        allocate(V_D_cor(ims:ime,kms:kme,jms:jme))
-        allocate(dzdx_m(ims:ime,kms:kme,jms:jme))
-        allocate(dzdy_m(ims:ime,kms:kme,jms:jme))
-        allocate(u_m(ims:ime,kms:kme,jms:jme))
-        allocate(v_m(ims:ime,kms:kme,jms:jme))
-        allocate(w_m(ims:ime,kms:kme,jms:jme))
-        allocate(temp_dw(ims:ime,kms:kme,jms:jme))
-        allocate(temp_w(ims:ime,kms:kme,jms:jme))
-        allocate(rot_ang(ims:ime,kms:kme,jms:jme))
-        allocate(terr_ang(ims:ime,kms:kme,jms:jme))
-        allocate(dw_tend(ims:ime,kms:kme,jms:jme))
-        allocate(SLOPE(ims:ime,kms:kme,jms:jme))
-        allocate(u_orig(ims:ime+1,kms:kme,jms:jme))
-        allocate(v_orig(ims:ime,kms:kme,jms:jme+1))
-        allocate(w_step(ims:ime,kms:kme,jms:jme))
-        allocate(w_2step(ims:ime,kms:kme,jms:jme))
-        allocate(temp_div(ims:ime,jms:jme))
-        
-        it = 0
-        
-        ADJ1 = 0
-        ADJ2U = 0
-        ADJ2V = 0
-  
-        global_max = 1
-        old_max = 0
-        
-        eps = 0.001
-        tol = eps
-        trunc_err = 0
-        h = 0.5
-        
-        i_start1 = ims+2
-        i_start2 = ims+2
-        i_end1 = ime
-        i_end2 = ime
-        j_start1 = jms+2
-        j_start2 = jms+2
-        j_end1 = jme
-        j_end2 = jme
-                
-
-        if (options%wind%Dial) then
-            allocate(dial_weights(ims:ime,kms:kme,jms:jme))
-            
-            !Dial of 100% (all vertical) at Fr 0.75, 0% (all horizontal) at Fr <= 0.25
-            dial_weights = domain%froude!/50.0 !max((domain%froude-0.5),0.0) !0.25 !0.2
-            
-            !Sanity-bounding to min of 0.0, max of 1.0
-            dial_weights = max(min(dial_weights,1.0),0.0)
-            
-            write (img,'(I3.3)') this_image()
-            call io_write("dial_weights"//trim(img)//".nc","data",dial_weights)
-            if (this_image()==1) call io_write("froude.nc","froude",domain%froude)
-            if (this_image()==1) call io_write("Dick.nc","Ri",domain%Ri)
-        endif
-                
-                
-        if (domain%its==(domain%ids+1)) then
-            i_start1 = ims+1
-            i_start2 = ims
-        endif
-        if (domain%ite==(domain%ide-1)) then
-            i_end1 = ime+1
-            i_end2 = ime
-        endif
-        if (domain%jts==(domain%jds+1)) then
-            j_start1 = jms+1
-            j_start2 = jms
-        endif
-        if (domain%jte==(domain%jde-1)) then
-            j_end1 = jme+1
-            j_end2 = jme
-        endif
-
-        !Do an initial exchange to make sure the U and V grids are similar for calculating w
-        call domain%u%exchange_u()
-        call domain%v%exchange_v()
-        
-        if (this_image()==1) call io_write("ySlope.nc","ySlope",SIN(ATAN(domain%dzdy(:,:,jms+1:jme))))
-        if (this_image()==1) call io_write("xSlope.nc","xSlope",SIN(ATAN(domain%dzdx(ims+1:ime,:,:))))  
-            
-        !Do some setup for solver
-        dzdx_m = ( domain%dzdx(ims+1:ime+1,:,jms:jme) + domain%dzdx(ims:ime,:,jms:jme) )/2
-        dzdy_m = ( domain%dzdy(ims:ime,:,jms+1:jme+1) + domain%dzdy(ims:ime,:,jms:jme) )/2
-        
-        terr_ang = -sign(PI/2.0,dzdx_m)
-        where ( .not.(dzdy_m==0) ) terr_ang = -ATAN(dzdx_m/dzdy_m)
-        if (this_image()==1) call io_write("terr_ang.nc","terr_ang",terr_ang)  
-        SLOPE = SIN(ATAN(sqrt(dzdx_m**2 + dzdy_m**2)))!https://desktop.arcgis.com/en/arcmap/10.3/tools/spatial-analyst-toolbox/how-slope-works.htm
-
-        
-        !Balance uvw to get initial state of w_grid
-        call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
-
-                
-        do while ( (it < 3000))! .and. ((abs(global_max-old_max)/global_max) > 0.0001) )
-           
-            write (img,'(I4.4)') it
-            !if ((it < 5000)) call io_write("./../debug_out/w_grid"//trim(img)//".nc","w_grid",domain%w%data_3d)
-            !if ((it < 4000)) call io_write("./../debug_out/v_grid"//trim(img)//".nc","v_grid",domain%v%data_3d)
-            !if ((it < 5000)) call io_write("./../debug_out/u_grid"//trim(img)//".nc","u_grid",domain%u%data_3d)
-            !if ((it < 2000)) call io_write("./../debug_out/div"//trim(img)//".nc","div",div)
-            !if ((it < 4000)) call io_write("./../debug_out/w_real"//trim(img)//".nc","w_real",domain%w_real%data_3d)
-            
-            w_m(:,kms,:) = domain%w%data_3d(:,kms,:)*domain%jacobian_w(:,kms,:)/2
-            w_m(:,kms+1:kme,:) = (domain%w%data_3d(:,kms+1:kme,:)*domain%jacobian_w(:,kms+1:kme,:) + &
-                                  domain%w%data_3d(:,kms:kme-1,:)*domain%jacobian_w(:,kms:kme-1,:))/2
-
-
-            u_m = (domain%u%data_3d(ims+1:ime+1,:,jms:jme)+domain%u%data_3d(ims:ime,:,jms:jme))/2
-            v_m = (domain%v%data_3d(ims:ime,:,jms+1:jme+1)+domain%v%data_3d(ims:ime,:,jms:jme))/2
-            
-            !ADJ1 = sqrt( u_m**2 + v_m**2 + w_m**2 )
-
-            
-            !U_D_cor = 0.5
-            !where ( .not.((abs(u_m)+abs(v_m))==0)) U_D_cor = 0.5 - 0.5*sign(v_m,u_m)/(abs(u_m)+abs(v_m))
-            !where ( .not.((abs(u_m)+abs(v_m))==0)) U_D_cor = abs(v_m)/(abs(u_m)+abs(v_m))
-            !U_D_cor = max(U_D_cor,0.1)
-            !V_D_cor = 1.0-U_D_cor
-            !div = (u_m*dzdx_m+v_m*dzdy_m)
-
-            !temp_w = 0!sign(PI/2.0,w_m)
-            !where ( .not.((sqrt(u_m**2+v_m**2)*SLOPE)==0) ) temp_w = ATAN(w_m/(sqrt(u_m**2+v_m**2)*SLOPE))
-
-            !rot_ang = (sign(PI/2.0,v_m) + terr_ang)*(1-dial_weights) !- sign(PI/2.0,dzdx_m)
-            !where ( .not.(u_m==0)) rot_ang = -ATAN(v_m/u_m) !- ATAN((dzdx_m/dzdy_m)) + ATAN(w_m/abs(u_m*v_m))
-
-            !temp_w = 0!sign(temp_w,(rot_ang+terr_ang)*(div)*w_m)
-            !rot_ang = (rot_ang + terr_ang + temp_w)!*SLOPE
-
-            !ADJ2U = ((COS(rot_ang)-1)*u_m - SIN(rot_ang)*v_m)
-            !ADJ2V = ((COS(rot_ang)-1)*v_m + SIN(rot_ang)*u_m)
-            
-            U_D_cor = 0.5
-            !where ( .not.((abs(ADJ2V)+abs(ADJ2U)) == 0) ) U_D_cor = 0.5 + SLOPE*0.5*(ADJ2U/(abs(ADJ2V)+abs(ADJ2U)))
-            V_D_cor = 1 - U_D_cor !ADJ2V/ADJ2U
-
-
-            trunc_err = tol + 1
-            
-            u_orig = domain%u%data_3d
-            v_orig = domain%v%data_3d
-            
-            do while (trunc_err > tol)
-            
-            !If this is a repeat loop and we need to reset u and v
-            if (.not.(ALL(u_orig==domain%u%data_3d))) then
-                domain%u%data_3d = u_orig
-                domain%v%data_3d = v_orig
-            endif
-
-            w_step = domain%w%data_3d
-            w_2step = domain%w%data_3d
-            
-            w_m(:,kms,:) = w_step(:,kms,:)*domain%jacobian_w(:,kms,:)/2
-            w_m(:,kms+1:kme,:) = (w_step(:,kms+1:kme,:)*domain%jacobian_w(:,kms+1:kme,:) + &
-                                  w_step(:,kms:kme-1,:)*domain%jacobian_w(:,kms:kme-1,:))/2
-                
-
-            !Compute mass-grid components of w_real
-            !u_m = ( SIN(ATAN(domain%dzdx(ims+1:ime+1,:,jms:jme)))*domain%u%data_3d(ims+1:ime+1,:,jms:jme) + &
-            !        SIN(ATAN(domain%dzdx(ims:ime,:,jms:jme)))*domain%u%data_3d(ims:ime,:,jms:jme) ) / 2
-            !v_m = ( SIN(ATAN(domain%dzdy(ims:ime,:,jms+1:jme+1)))*domain%v%data_3d(ims:ime,:,jms+1:jme+1) + &
-            !        SIN(ATAN(domain%dzdy(ims:ime,:,jms:jme)))*domain%v%data_3d(ims:ime,:,jms:jme) ) / 2
-                
-            u_m = ( domain%u%data_3d(ims:ime,:,jms:jme)+ domain%u%data_3d(ims+1:ime+1,:,jms:jme)) * &
-                    (SIN(ATAN(domain%dzdx(ims:ime,:,jms:jme)))+SIN(ATAN(domain%dzdx(ims+1:ime+1,:,jms:jme)))) / 4
-                    
-            v_m = ( SIN(ATAN(domain%dzdy(ims:ime,:,jms+1:jme+1)))+SIN(ATAN(domain%dzdy(ims:ime,:,jms:jme)))) * &
-                    (domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) ) / 4
-                    
-            call calc_divergence(div_h,domain%u%data_3d,domain%v%data_3d,w_step,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w, &
-            domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options,horz_only=.True.)
-            
-            !do k=kms+1,kme div_h(:,k,:) = div_h(:,k,:) + div_h(:,k-1,:) enddo
-            
-            !Take a big step
-            do k=kms,kme
-                !if (k==kms) then
-                !    w_m(:,k,:) = domain%w%data_3d(:,k,:)*domain%jacobian_w(:,k,:)/2
-                !else
-                !    w_m(:,k,:) = (domain%w%data_3d(:,k,:)*domain%jacobian_w(:,k,:) + &
-                !                  domain%w%data_3d(:,k-1,:)*domain%jacobian_w(:,k-1,:))/2
-                !endif
-                
-           !   temp_w(:,k,:) = 2*(w_m(:,k,:)/(2-dial_weights(:,k,:)) - &
-           !(u_m(:,k,:)+v_m(:,k,:))*dw_factor(:,k,:)*(1-dial_weights(:,k,:))/( domain%jacobian(:,k,:)*(2-dial_weights(:,k,:))))
-               !temp_w(:,k,:) = 2*(w_m(:,k,:) - &
-           ! (u_m(:,k,:)+v_m(:,k,:) + w_m(:,k,:))*dw_factor(:,k,:)*(1-dial_weights(:,k,:))/( domain%jacobian(:,k,:)))
-                       
-               temp_w(:,k,:) = 2*(w_m(:,k,:) - &
-            (u_m(:,k,:)+v_m(:,k,:) + w_m(:,k,:))*(1-dial_weights(:,k,:))/(domain%jacobian(:,k,:)))
-                                                     
-               if (k > kms) temp_w(:,k,:) = temp_w(:,k,:) - 2*(w_step(:,k-1,:))
-               
-               div(:,k,:) = ( h*domain%dx/(domain%advection_dz(:,k,:) * domain%jacobian(:,k,:))) * &
-               ( -div_h(:,k,:)*domain%advection_dz(:,k,:) - temp_w(:,k,:)/(2))
-               
-
-            !Apply adjustment
-            
-            domain%u%data_3d(i_start1:i_end1,k,j_start1-1:j_end1-1) = &
-                                                        domain%u%data_3d(i_start1:i_end1,k,j_start1-1:j_end1-1) + &
-                                                        div(i_start1-1:i_end1-1,k,j_start1-1:j_end1-1) * &
-                                                        U_D_cor(i_start1-1:i_end1-1,k,j_start1-1:j_end1-1)
-  
-            domain%u%data_3d(i_start2:i_end2,k,j_start1-1:j_end1-1) = &
-                                                        domain%u%data_3d(i_start2:i_end2,k,j_start1-1:j_end1-1) - &
-                                                        div(i_start2:i_end2,k,j_start1-1:j_end1-1) * &
-                                                        U_D_cor(i_start2:i_end2,k,j_start1-1:j_end1-1)
-
-            domain%v%data_3d(i_start1-1:i_end1-1,k,j_start1:j_end1) = &
-                                                        domain%v%data_3d(i_start1-1:i_end1-1,k,j_start1:j_end1) + &
-                                                        div(i_start1-1:i_end1-1,k,j_start1-1:j_end1-1) * &
-                                                        V_D_cor(i_start1-1:i_end1-1,k,j_start1-1:j_end1-1)
-
-            domain%v%data_3d(i_start1-1:i_end1-1,k,j_start2:j_end2) = &
-                                                        domain%v%data_3d(i_start1-1:i_end1-1,k,j_start2:j_end2) - &
-                                                        div(i_start1-1:i_end1-1,k,j_start2:j_end2) * &
-                                                        V_D_cor(i_start1-1:i_end1-1,k,j_start2:j_end2)
-                         
-                         
-            !Update w_grid             
-            temp_div = (domain%u%data_3d(ims+1:ime+1,k,:)*domain%jacobian_u(ims+1:ime+1,k,:) - &
-                        domain%u%data_3d(ims:ime,k,:)*domain%jacobian_u(ims:ime,k,:) + &
-                        domain%v%data_3d(:,k,jms+1:jme+1)*domain%jacobian_v(:,k,jms+1:jme+1) - &
-                        domain%v%data_3d(:,k,jms:jme)*domain%jacobian_v(:,k,jms:jme)) &
-                        / domain%dx 
-                        
-            if (k==kms) then
-                w_step(:,k,:) = (0 - temp_div * domain%advection_dz(:,k,:))/domain%jacobian_w(:,k,:) 
-            else
-                w_step(:,k,:) = (w_step(:,k-1,:) * domain%jacobian_w(:,k-1,:) - &
-                                            temp_div * domain%advection_dz(:,k,:))/domain%jacobian_w(:,k,:)
-            endif
-
-
-                enddo !end big step
-                
-                domain%u%data_3d = u_orig
-                domain%v%data_3d = v_orig
-            
-                do n=1,2 !Take 2 small steps
-
-                do k=kms,kme
-                !if (k==kms) then
-                !    w_m(:,k,:) = domain%w%data_3d(:,k,:)*domain%jacobian_w(:,k,:)/2
-                !else
-                !    w_m(:,k,:) = (domain%w%data_3d(:,k,:)*domain%jacobian_w(:,k,:) + &
-                !                  domain%w%data_3d(:,k-1,:)*domain%jacobian_w(:,k-1,:))/2
-                !endif
-                
-           !   temp_w(:,k,:) = 2*(w_m(:,k,:)/(2-dial_weights(:,k,:)) - &
-           !(u_m(:,k,:)+v_m(:,k,:))*dw_factor(:,k,:)*(1-dial_weights(:,k,:))/( domain%jacobian(:,k,:)*(2-dial_weights(:,k,:))))
-               !temp_w(:,k,:) = 2*(w_m(:,k,:) - &
-           ! (u_m(:,k,:)+v_m(:,k,:) + w_m(:,k,:))*dw_factor(:,k,:)*(1-dial_weights(:,k,:))/( domain%jacobian(:,k,:)))
-                       
-               temp_w(:,k,:) = 2*(w_m(:,k,:) - &
-            (u_m(:,k,:)+v_m(:,k,:) + w_m(:,k,:))*(1-dial_weights(:,k,:))/(domain%jacobian(:,k,:)))
-                                                     
-               if (k > kms) temp_w(:,k,:) = temp_w(:,k,:) - 2*(w_2step(:,k-1,:))
-               
-               div(:,k,:) = ( (h/2.0)*domain%dx/(domain%advection_dz(:,k,:) * domain%jacobian(:,k,:))) * &
-               ( -div_h(:,k,:)*domain%advection_dz(:,k,:) - temp_w(:,k,:)/(2))
-               
-
-            !Apply adjustment
-            
-            domain%u%data_3d(i_start1:i_end1,k,j_start1-1:j_end1-1) = &
-                                                        domain%u%data_3d(i_start1:i_end1,k,j_start1-1:j_end1-1) + &
-                                                        div(i_start1-1:i_end1-1,k,j_start1-1:j_end1-1) * &
-                                                        U_D_cor(i_start1-1:i_end1-1,k,j_start1-1:j_end1-1)
-  
-            domain%u%data_3d(i_start2:i_end2,k,j_start1-1:j_end1-1) = &
-                                                        domain%u%data_3d(i_start2:i_end2,k,j_start1-1:j_end1-1) - &
-                                                        div(i_start2:i_end2,k,j_start1-1:j_end1-1) * &
-                                                        U_D_cor(i_start2:i_end2,k,j_start1-1:j_end1-1)
-
-            domain%v%data_3d(i_start1-1:i_end1-1,k,j_start1:j_end1) = &
-                                                        domain%v%data_3d(i_start1-1:i_end1-1,k,j_start1:j_end1) + &
-                                                        div(i_start1-1:i_end1-1,k,j_start1-1:j_end1-1) * &
-                                                        V_D_cor(i_start1-1:i_end1-1,k,j_start1-1:j_end1-1)
-
-            domain%v%data_3d(i_start1-1:i_end1-1,k,j_start2:j_end2) = &
-                                                        domain%v%data_3d(i_start1-1:i_end1-1,k,j_start2:j_end2) - &
-                                                        div(i_start1-1:i_end1-1,k,j_start2:j_end2) * &
-                                                        V_D_cor(i_start1-1:i_end1-1,k,j_start2:j_end2)
-                         
-                         
-            !Update w_grid             
-            temp_div = (domain%u%data_3d(ims+1:ime+1,k,:)*domain%jacobian_u(ims+1:ime+1,k,:) - &
-                        domain%u%data_3d(ims:ime,k,:)*domain%jacobian_u(ims:ime,k,:) + &
-                        domain%v%data_3d(:,k,jms+1:jme+1)*domain%jacobian_v(:,k,jms+1:jme+1) - &
-                        domain%v%data_3d(:,k,jms:jme)*domain%jacobian_v(:,k,jms:jme)) &
-                        / domain%dx 
-                        
-            if (k==kms) then
-                w_2step(:,k,:) = (0 - temp_div * domain%advection_dz(:,k,:))/domain%jacobian_w(:,k,:) 
-            else
-                w_2step(:,k,:) = (w_2step(:,k-1,:) * domain%jacobian_w(:,k-1,:) - &
-                                            temp_div * domain%advection_dz(:,k,:))/domain%jacobian_w(:,k,:)
-            endif
-
-
-            enddo !end single k loop
-            
-            !if (domain%jts==(domain%jds+1)) domain%v%data_3d(ims:ime-1,:,jms) = domain%v%data_3d(ims:ime-1,:,jms+1)
-                        
-            !if (domain%its==(domain%ids+1)) domain%u%data_3d(ims,:,jms+1:jme) = domain%u%data_3d(ims+1,:,jms+1:jme)
-
-            !if (domain%jte==(domain%jde-1)) domain%v%data_3d(ims+1:ime,:,jme+1) = domain%v%data_3d(ims+1:ime,:,jme)
-
-            !if (domain%ite==(domain%ide-1)) domain%u%data_3d(ime+1,:,jms:jme-1) = domain%u%data_3d(ime,:,jms:jme-1)
-
-            !call domain%u%exchange_u()
-            !call domain%v%exchange_v()
-                
-            if (n==1) then
-                w_m(:,kms,:) = w_2step(:,kms,:)*domain%jacobian_w(:,kms,:)/2
-                w_m(:,kms+1:kme,:) = (w_2step(:,kms+1:kme,:)*domain%jacobian_w(:,kms+1:kme,:) + &
-                                  w_2step(:,kms:kme-1,:)*domain%jacobian_w(:,kms:kme-1,:))/2
-                
-                u_m = ( domain%u%data_3d(ims:ime,:,jms:jme)+ domain%u%data_3d(ims+1:ime+1,:,jms:jme)) * &
-                    (SIN(ATAN(domain%dzdx(ims:ime,:,jms:jme)))+SIN(ATAN(domain%dzdx(ims+1:ime+1,:,jms:jme)))) / 4
-                    
-                v_m = ( SIN(ATAN(domain%dzdy(ims:ime,:,jms+1:jme+1)))+SIN(ATAN(domain%dzdy(ims:ime,:,jms:jme)))) * &
-                    (domain%v%data_3d(ims:ime,:,jms+1:jme+1) + domain%v%data_3d(ims:ime,:,jms:jme) ) / 4
-
-                call calc_divergence(div_h,domain%u%data_3d,domain%v%data_3d,w_2step,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w,&
-            domain%advection_dz,domain%dx,domain%jacobian,domain%density%data_3d,domain%smooth_height,options,horz_only=.True.)
-            
-                !do k=kms+1,kme div_h(:,k,:) = div_h(:,k,:) + div_h(:,k-1,:) enddo
-
-            endif
-
-                enddo ! end 2 small steps
-                
-                !Calculate trunc_error
-                trunc_err = maxval(abs(w_2step - w_step))
-                
-                
-                temp_dw = domain%w%data_3d - w_2step
-                tol = max(eps,eps*(maxval(abs(domain%w%data_3d))+maxval(abs(h*temp_dw))+0.000001))
-                !Calc next step size, bounding to a min/max increase of 5 fold
-                !h = (h)*min(max( (0.9*tol*(maxval(abs(domain%w%data_3d))+maxval(abs(h*temp_dw))+0.000001)/trunc_err) ,0.2),5.0)
-                
-                h = h*min(max( (0.5*tol/trunc_err) ,0.2),5.0)
-                
-                call CO_MAX(trunc_err)
-                call CO_MIN(tol)
-                call CO_MIN(h)
-
-                !h = min(max(h,0.0001),0.5)
-                !write(*,*) "trunc_err: ",trunc_err
-                !write(*,*) "step_size: ",h
-            enddo !end tolerance loop
-            
-            ! If trunc error was sufficiently small, we save the result of the 2 smaller step sizes 
-                                                 
-            !Update U,V, W after step
-            !domain%u%data_3d = u_new
-            !domain%v%data_3d = v_new
-                                     
-            if (domain%jts==(domain%jds+1)) domain%v%data_3d(ims:ime-1,:,jms) = domain%v%data_3d(ims:ime-1,:,jms+1)
-            if (domain%its==(domain%ids+1)) domain%u%data_3d(ims,:,jms+1:jme) = domain%u%data_3d(ims+1,:,jms+1:jme)
-            if (domain%jte==(domain%jde-1)) domain%v%data_3d(ims+1:ime,:,jme+1) = domain%v%data_3d(ims+1:ime,:,jme)
-            if (domain%ite==(domain%ide-1)) domain%u%data_3d(ime+1,:,jms:jme-1) = domain%u%data_3d(ime,:,jms:jme-1)
-
-            call domain%u%exchange_u()
-            call domain%v%exchange_v()
-
-            call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
-            
-            
-            
-            if (this_image()==1) write(*,*) "ADJ: ",global_max
-            if (this_image()==1) write(*,*) "vert: ",maxval(abs(u_m+v_m+w_m))
-            if (this_image()==1) write(*,*) "v_comps: ",maxval(abs(u_m+v_m))
-            if (this_image()==1) write(*,*) "w_grid: ",maxval(abs(w_m))
-            if (this_image()==1) write(*,*) "div: ",maxval(abs(div))
-            if (this_image()==1) write(*,*) "step_size: ",h
-            if (this_image()==1) write(*,*) "trunc_err: ",trunc_err
-            !Update loop controls
-            old_max = global_max
-            global_max = maxval(abs(ADJ1))
-            call CO_MAX(global_max)
-            it = it+1
-            ADJ1 = 0
-            
-        enddo
-
-        !If an update loop, swap meta_data and data_3d fields back
-        if (update) then
-            domain%u%meta_data%dqdt_3d = domain%u%data_3d
-            domain%v%meta_data%dqdt_3d = domain%v%data_3d
-            domain%w%meta_data%dqdt_3d = domain%w%data_3d
-            
-            domain%u%data_3d = current_u
-            domain%v%data_3d = current_v
-            domain%w%data_3d = current_w
-        endif
-        
-    end subroutine iterative_winds
-
     subroutine mass_conservative_acceleration(u, v, u_accel, v_accel)
         implicit none
         real, intent(inout) :: u(:,:,:)
@@ -978,11 +571,11 @@ contains
         implicit none
         type(domain_t), intent(inout) :: domain
 
-        real, allocatable, dimension(:,:,:) :: wind_speed, temp_froude, u_m, v_m, winddir
+        real, allocatable, dimension(:,:,:) :: wind_speed, temp_froude, u_m, v_m, u_shear, v_shear, winddir, stability
         integer,  allocatable, dimension(:,:,:) :: dir_indices
         
-        integer :: k, j, i, n, ims, ime, jms, jme, kms, kme
-        real :: z_top, z_bot, th_top, th_bot, stability
+        integer :: k, j, i, n, ims, ime, jms, jme, kms, kme, ob_k
+        real :: z_top, z_bot, th_top, th_bot, obstacle_height
         integer :: ymin, ymax, xmin, xmax, n_smoothing_passes, nsmooth_gridcells
         
         n_smoothing_passes = 5
@@ -1007,13 +600,21 @@ contains
        
         allocate(u_m(ims:ime,kms:kme,jms:jme))
         allocate(v_m(ims:ime,kms:kme,jms:jme))
+        allocate(u_shear(ims:ime,kms:kme,jms:jme))
+        allocate(v_shear(ims:ime,kms:kme,jms:jme))
         allocate(winddir(ims:ime,kms:kme,jms:jme))
         allocate(dir_indices(ims:ime,kms:kme,jms:jme))
         allocate(wind_speed(ims:ime,kms:kme,jms:jme))
         allocate(temp_froude(ims:ime,kms:kme,jms:jme))       
+        allocate(stability(ims:ime,kms:kme,jms:jme))  
         
         u_m = (domain%u%data_3d(ims:ime,:,:) + domain%u%data_3d(ims+1:ime+1,:,:))/2
         v_m = (domain%v%data_3d(:,:,jms:jme) + domain%v%data_3d(:,:,jms+1:jme+1))/2
+        
+        u_shear(:,kms,:) = u_m(:,kms+4,:)
+        u_shear(:,kms+1:kme,:) = u_m(:,kms+1:kme,:) - u_m(:,kms:kme-1,:)
+        v_shear(:,kms,:) = v_m(:,kms+4,:)
+        v_shear(:,kms+1:kme,:) = v_m(:,kms+1:kme,:) - v_m(:,kms:kme-1,:)
         
         !Compute wind direction for each cell on mass grid
         winddir = atan2(-u_m,-v_m)*rad2deg
@@ -1025,7 +626,7 @@ contains
         do i = ims, ime
             do j = jms, jme
                 do k=kms, kme
-                    temp_froude(i,k,j) = domain%froude_terrain(dir_indices(i,k,j),i,k,j)*10
+                    temp_froude(i,k,j) = domain%froude_terrain(dir_indices(i,k,j),i,k,j)
                 enddo
             end do
         end do
@@ -1041,20 +642,45 @@ contains
         do i = ims,ime
             do j = jms,jme
                 do k = kms,kme-1
+                    th_bot = domain%potential_temperature%data_3d(i,kms,j)
+                    th_top = domain%potential_temperature%data_3d(i,kms+4,j)
+                    z_bot  = domain%z%data_3d(i,kms,j)
+                    z_top  = domain%z%data_3d(i,kms+4,j)
+                    stability(i,k,j) = calc_dry_stability(th_top, th_bot, z_top, z_bot) 
+                    
+                    domain%Ri(i,k,j) =  calc_Ri(stability(i,k,j), u_shear(i,kms,j), v_shear(i,kms,j), (z_top-z_bot))
+                    
                     th_bot = domain%potential_temperature%data_3d(i,k,j)
                     th_top = domain%potential_temperature%data_3d(i,k+1,j)
                     z_bot  = domain%z%data_3d(i,k,j)
                     z_top  = domain%z%data_3d(i,k+1,j)
-                    stability = calc_dry_stability(th_top, th_bot, z_top, z_bot) 
+                    stability(i,k,j) = calc_dry_stability(th_top, th_bot, z_top, z_bot) 
                     
-                    domain%Ri(i,k,j) =  calc_Ri(stability, wind_speed(i,k,j), temp_froude(i,k,j))
+                    ! If we have an upwind obstacle, use the obstacle height to calculate a bulk Froude Number over the column
+                    ! If there is nothing blocking, we calculate a local bulk Froude Number, using the local th and z indexed 
+                    ! above
+                    if (.not.(temp_froude(i,k,j) == DEFAULT_FR_L)) then
+                    !The height of the obstacle is calculated from the blocking terrain height (z_obst-z_loc+1000)
+                        obstacle_height = temp_froude(i,k,j)-DEFAULT_FR_L+z_bot
 
-                    stability = sqrt(max(stability, 0.))
-                    domain%froude(i,k,j) = calc_froude(stability, temp_froude(i,k,j), wind_speed(i,k,j))
+                        do ob_k = k+1,kme
+                            if (domain%z%data_3d(i,ob_k,j) > obstacle_height) exit
+                        enddo
+                        
+                        th_top = domain%potential_temperature%data_3d(i,ob_k,j)
+                        z_top  = domain%z%data_3d(i,ob_k,j)
+
+                        stability(i,k,j) = calc_dry_stability(th_top, th_bot, z_top, z_bot) 
+
+                    endif
+
+                    !Above function calculates N^2, but froude number wants just N
+                    stability(i,k,j) = sqrt(max(stability(i,k,j), 0.))
+                    domain%froude(i,k,j) = calc_froude(stability(i,k,j), temp_froude(i,k,j), wind_speed(i,k,j))
                 enddo
             enddo
         enddo
-
+        call io_write("stability.nc","data",stability)
         temp_froude = domain%froude
 
         !do n = 1,n_smoothing_passes
@@ -1091,16 +717,11 @@ contains
         integer           :: i, j, k, kms, kme, ang, i_s, j_s, i_start_buffer, i_end_buffer, j_start_buffer, j_end_buffer
         integer           :: rear_ang, fore_ang, test_ang, rear_ang_diff, fore_ang_diff, ang_diff, k_max, window_rear, window_fore, window_width
         integer :: nx, ny, x, y
-        integer :: xs,xe, ys,ye, n, np
-        integer :: window_size, smooth_window, n_smoothing_passes, search_max
+        integer :: xs,xe, ys,ye, n, np, search_max
         real, allocatable :: temp_terrain(:,:), f_terrain(:,:)
         real              :: pt_height, temp_ft, maxFTVal
-        
-        n_smoothing_passes = 5
-        window_size   = int(max(5000.0/domain%dx,1.0)) !Compute Froude-terrain as the diff in min and max over a 5000m search window
-        smooth_window = 5
 
-        search_max = floor(2000/domain%dx)
+        search_max = int(max(4000.0/domain%dx,1.0))
 
         nx = size(domain%global_terrain,1)
         ny = size(domain%global_terrain,2)
@@ -1113,21 +734,9 @@ contains
         
         temp_ft_array = -100000.0
         
-        ! first compute lightly smoothed terrain
-        !do y=1,ny
-        !    ys = max( y - smooth_window, 1)
-        !    ye = min( y + smooth_window, ny)
-        !    do x=1,nx
-        !        xs = max( x - smooth_window, 1)
-        !        xe = min( x + smooth_window, nx)
-        !        n = (xe-xs+1) * (ye-ys+1)
-        !        temp_terrain(x,y) = sum(domain%global_terrain(xs:xe,ys:ye)) / n
-        !    enddo
-        !enddo
-        
-        
         allocate(azm( 2*search_max+1, 2*search_max+1 ))
         allocate(azm_indices( 2*search_max+1, 2*search_max+1 ))
+
         azm = 0
                 
         !Setup azm so that it is looking along wind direction (i.e. negatives here)
@@ -1147,9 +756,9 @@ contains
         do i=domain%grid2d%ims, domain%grid2d%ime
             do j=domain%grid2d%jms, domain%grid2d%jme
                 do k=kms,kme
-                    if (k == 1) then
+                    if (k == kms) then
                         pt_height = domain%global_terrain(i,j)
-                    else if (k > 1) then
+                    else if (k > kms) then
                         pt_height = pt_height + domain%global_dz_interface(i,k,j)
                     end if
                     
@@ -1164,22 +773,22 @@ contains
                     do i_s = 1+i_start_buffer, (search_max*2+1)+i_end_buffer
                         do j_s = 1+j_start_buffer, (search_max*2+1)+j_end_buffer
                         
-                            temp_ft = domain%global_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1))) - pt_height
+                            temp_ft = DEFAULT_FR_L + domain%global_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1))) - pt_height
                             
                             if (temp_ft > temp_ft_array(azm_indices(i_s,j_s),i,k,j)) then
-                            
-                                !Only save scale length if it is greater than the vertical dz -- otherwise copy that over
-                                if (temp_ft > domain%dz_interface%data_3d(i,k,j)) then
+                                                        
+                                !Only save scale length if it is greater than the default -- otherwise copy that over
+                                if (temp_ft > DEFAULT_FR_L) then
                                     temp_ft_array(azm_indices(i_s,j_s),i,k,j) = temp_ft
                                 else
-                                    temp_ft_array(azm_indices(i_s,j_s),i,k,j) = domain%dx
+                                    temp_ft_array(azm_indices(i_s,j_s),i,k,j) = DEFAULT_FR_L
                                 end if
                             end if
                         enddo
                     enddo
 
-                    !After finding Sx in each absolute direction around grid cell, 
-                    !Pick max for each 30º window and perform interpolation to other directions if necesarry
+                    !After finding Fr-Terrain in each absolute direction around grid cell, 
+                    !Pick max for each 20º window and perform interpolation to other directions if necesarry
                     
                     rear_ang = 1 
                     fore_ang = 1
@@ -1218,7 +827,7 @@ contains
                         do ang = 1, 72
                             !Determine indices for interpolation
                             if ( (ang==fore_ang) ) then
-                                !Update indices for interpolated Sx's
+                                !Update indices for interpolated Fr-Terrain's
                                 rear_ang = ang
                             
                                 fore_ang = ang+1
@@ -1238,9 +847,9 @@ contains
                                 end do
                             end if
                     
-                            !If we did not calculate Sx for a given direction
+                            !If we did not calculate Fr-Terrain for a given direction
                             if (domain%froude_terrain(ang,i,k,j) == -100000.0) then
-                                !Weight the two surrounding Sx values based on our angular-distance to them
+                                !Weight the two surrounding Fr-Terrain values based on our angular-distance to them
                                 rear_ang_diff = ang-rear_ang
                                 fore_ang_diff = fore_ang-ang
                                 ang_diff = fore_ang-rear_ang
@@ -1255,15 +864,12 @@ contains
                                 domain%froude_terrain(ang,i,k,j) = (domain%froude_terrain(rear_ang,i,k,j)*fore_ang_diff + &
                                                     domain%froude_terrain(fore_ang,i,k,j)*rear_ang_diff)/ang_diff
 
-                                !if (domain%Sx(ang,i,k,j) > 0) sheltering_TPI(ang,i,k,j) = (sheltering_TPI(rear_ang,i,k,j)*fore_ang_diff + &
-                                !                    sheltering_TPI(fore_ang,i,k,j)*rear_ang_diff)/ang_diff
-
                             end if
                         end do
 
                     else
                         !IF we only have -100000 for all entries, set to dz
-                        domain%froude_terrain(:,i,k,j) = domain%dz_interface%data_3d(i,k,j)
+                        domain%froude_terrain(:,i,k,j) = DEFAULT_FR_L
                     end if
                 enddo
 
@@ -1283,39 +889,7 @@ contains
                                         domain%froude_terrain(:,domain%grid2d%ime-1,:,:)
                                  
 
-        !domain%froude_terrain(x,y) = maxval(domain%global_terrain(xs:xe,ys:ye)) - &
-        !                                     minval(domain%global_terrain(xs:xe,ys:ye))        
-        
-        !do y=1,ny
-        !    ys = max( y - window_size, 1)
-        !    ye = min( y + window_size, ny)
-        !    do x=1,nx
-        !        xs = max( x - window_size, 1)
-        !        xe = min( x + window_size, nx)
-        !        domain%froude_terrain(:,x,:,y) = maxval(domain%global_terrain(xs:xe,ys:ye)) - &
-        !                                     minval(domain%global_terrain(xs:xe,ys:ye))
-        !    enddo
-        !enddo
-        ! call io_write("initial_terrain_delta.nc","data",temp_terrain)
 
-        ! finally smooth that terrain delta field a few times as well
-
-        !do np=1,n_smoothing_passes
-        !    do y=1,ny
-        !        ys = max( y - smooth_window, 1)
-        !        ye = min( y + smooth_window, ny)
-        !        do x=1,nx
-        !            xs = max( x - smooth_window, 1)
-        !            xe = min( x + smooth_window, nx)
-        !            n = (xe-xs+1) * (ye-ys+1)
-        !            temp_terrain(x,y) = sum(f_terrain(xs:xe,ys:ye)) / n
-        !        enddo
-        !    enddo
-        !    if (np /= n_smoothing_passes) then
-        !        f_terrain = temp_terrain
-        !    endif
-        !enddo
-        !domain%froude_terrain = temp_terrain(domain%its-1:domain%ite+1,domain%jts-1:domain%jte+1)
         call io_write("terrain_blocking.nc","data",domain%froude_terrain)
 
     end subroutine compute_terrain_blocking_heights

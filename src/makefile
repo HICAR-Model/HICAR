@@ -107,9 +107,15 @@ ifndef NETCDF
 		NETCDF=${NETCDF_DIR}
 	endif
 endif
+
 NCDF_PATH = ${NETCDF}
 LIBNETCDF = -L$(NCDF_PATH)/lib -lnetcdff -lnetcdf
 INCNETCDF = -I$(NCDF_PATH)/include
+
+ifdef PETSC_DIR
+	PETSC=$(PETSC_DIR)
+	include $(PETSC)/lib/petsc/conf/variables
+endif
 
 USE_ASSERTIONS:=.false.
 
@@ -321,8 +327,8 @@ ASSERT=-DUSE_ASSERTIONS=$(USE_ASSERTIONS)
 ###################################################################
 # copy required libraries into a directory accessible on compute nodes and set LD_RUN_PATH e.g.
 # export LD_RUN_PATH=$LD_RUN_PATH:/path/to/netcdf/libraries/lib:/path/to/fftw/libraries/lib
-LFLAGS=$(LINK) $(PROF) $(CAF_FLAG) $(CAF_LINK) $(LIBNETCDF) $(LIBFFT)
-FFLAGS=$(COMP) $(PROF) $(CAF_FLAG) $(PREPROC) -DVERSION=\"$(GIT_VERSION)\" $(INCNETCDF) $(INCFFT) $(MODOUTPUT) $(ASSERT)
+LFLAGS=$(LINK) $(PROF) $(CAF_FLAG) $(CAF_LINK) $(LIBNETCDF) $(LIBFFT) $(PETSC_LIB)
+FFLAGS=$(COMP) $(PROF) $(CAF_FLAG) $(PREPROC) -DVERSION=\"$(GIT_VERSION)\" $(INCNETCDF) $(INCFFT) $(PETSC_FC_INCLUDES)  $(MODOUTPUT) $(ASSERT)
 
 $(info $$NODENAME    = ${NODENAME})
 $(info $$FC          = ${F90})
@@ -374,6 +380,7 @@ OBJS=	$(BUILD)driver.o            \
 		$(BUILD)output_h.o			\
 		$(BUILD)output_obj.o		\
 		$(BUILD)wind.o				\
+		$(BUILD)wind_iterative.o        \
 		$(BUILD)wind_surf.o		\
 		$(BUILD)linear_winds.o		\
 		$(BUILD)fftshift.o			\
@@ -1033,10 +1040,13 @@ $(BUILD)adv_mpdata.o:$(PHYS)adv_mpdata.f90 $(PHYS)adv_mpdata_FCT_core.f90 $(BUIL
 #	Wind related code
 ###################################################################
 $(BUILD)wind.o:$(PHYS)wind.f90  $(BUILD)atm_utilities.o $(BUILD)data_structures.o $(BUILD)exchangeable_h.o \
-				$(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)linear_winds.o $(BUILD)wind_surf.o
+				$(BUILD)domain_h.o $(BUILD)wind_iterative.o $(BUILD)options_h.o $(BUILD)linear_winds.o $(BUILD)wind_surf.o
 
 $(BUILD)wind_surf.o:$(PHYS)wind_surf.f90 $(BUILD)data_structures.o $(BUILD)atm_utilities.o $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)io_routines.o
 
+ifdef PETSC_DIR
+$(BUILD)wind_iterative.o:$(PHYS)wind_iterative.f90  $(BUILD)domain_h.o $(BUILD)io_routines.o
+endif
 
 #########################
 # ${F90} ${FFLAGS} $(PHYS)wind.f90 -o $(BUILD)wind.o
