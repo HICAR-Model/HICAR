@@ -344,16 +344,19 @@ contains
             
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
                 allocate(div(ims:ime,kms:kme,jms:jme))
-                alpha=2
+                alpha=1.0
                 
+               
                 call calc_w_real(domain% u %data_3d,      &
                              domain% v %data_3d,      &
                              domain% w %data_3d,      &
                              domain% w_real %data_3d,      &
-                             domain%dzdx, domain%dzdy,    &
+                             domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian)
                           
-                domain%w%data_3d = domain%w_real%data_3d
+                domain%w%data_3d = -domain%w_real%data_3d/domain%jacobian
+                
+                
                 call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
                                 domain%jacobian,domain%density%data_3d,domain%smooth_height,options,horz_only=.False.)
@@ -369,7 +372,7 @@ contains
                              domain% v %data_3d,      &
                              domain% w %data_3d,      &
                              domain% w_real %data_3d,      &
-                             domain%dzdx, domain%dzdy,    &
+                             domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian)
         else
 
@@ -397,17 +400,17 @@ contains
             
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
                 allocate(div(ims:ime,kms:kme,jms:jme))
-                alpha=2
+                alpha=1.0
                 
                              
                 call calc_w_real(domain% u %meta_data%dqdt_3d,      &
                              domain% v %meta_data%dqdt_3d,      &
                              domain% w %meta_data%dqdt_3d,      &
                              domain% w_real %data_3d,      &
-                             domain%dzdx, domain%dzdy,    &
+                             domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian)
                              
-                domain%w%meta_data%dqdt_3d = domain%w_real%data_3d
+                domain%w%meta_data%dqdt_3d = -domain%w_real%data_3d/domain%jacobian
                 
                 call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
@@ -428,7 +431,7 @@ contains
                              domain% v %meta_data%dqdt_3d,      &
                              domain% w %meta_data%dqdt_3d,      &
                              domain% w_real %data_3d,      &
-                             domain%dzdx, domain%dzdy,    &
+                             domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian)
 
         endif
@@ -471,9 +474,9 @@ contains
             !     vw    = v(ims+1:ime-1, z, jms+1:jme  ) * domain%delta_dzdy(ims+1:ime-1,z,:)
             ! else    
                 ! compute the U * dz/dx component of vertical motion
-                uw    = u(ims+1:ime,   z, jms+1:jme-1) * SIN(ATAN(dzdx(ims+1:ime,z,jms+1:jme-1)))
+                uw    = u(ims+1:ime,   z, jms+1:jme-1) * dzdx(ims+1:ime,z,jms+1:jme-1)
                 ! compute the V * dz/dy component of vertical motion
-                vw    = v(ims+1:ime-1, z, jms+1:jme  ) * SIN(ATAN(dzdy(ims+1:ime-1,z,jms+1:jme)))
+                vw    = v(ims+1:ime-1, z, jms+1:jme  ) * dzdy(ims+1:ime-1,z,jms+1:jme)
             ! endif    
             ! ! convert the W grid relative motion to m/s
             ! currw = w(ims+1:ime-1, z, jms+1:jme-1) * dz_interface(ims+1:ime-1, z, jms+1:jme-1) / domain%dx
