@@ -561,7 +561,7 @@ contains
         character(len=*),             intent(in)    :: filename
         type(parameter_options_type), intent(inout) :: options
         integer :: name_unit, i, j
-        character(len=MAXVARLENGTH) :: landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,zvar,zbvar,  &
+        character(len=MAXVARLENGTH) :: landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar,zvar,zbvar,  &
                                         hgt_hi,lat_hi,lon_hi,ulat_hi,ulon_hi,vlat_hi,vlon_hi,           &
                                         pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qgvar,qsvar,hgtvar,shvar,lhvar,pblhvar,   &
                                         psvar, pslvar, &
@@ -571,7 +571,7 @@ contains
                                         lat_ext, lon_ext, swe_ext, hs_ext, tss_ext, z_ext, time_ext
 
         namelist /var_list/ pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qgvar,qsvar,hgtvar,shvar,lhvar,pblhvar,   &
-                            landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,zvar,zbvar, &
+                            landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar,zvar,zbvar, &
                             psvar, pslvar, &
                             hgt_hi,lat_hi,lon_hi,ulat_hi,ulon_hi,vlat_hi,vlon_hi,           &
                             soiltype_var, soil_t_var,soil_vwc_var,soil_deept_var,           &
@@ -590,6 +590,7 @@ contains
         vvar=""
         vlat=""
         vlon=""
+        wvar=""
         pslvar=""
         psvar=""
         pvar=""
@@ -689,6 +690,7 @@ contains
         options%vlon        = vlon      !; options%vars_to_read(i) = vlon;       options%dim_list(i) = 2;    i = i + 1
 
         ! Primary model variable names
+        options%wvar        = wvar      ; options%vars_to_read(i) = wvar;       options%dim_list(i) = 3;    i = i + 1
         options%pbvar       = pbvar     ; options%vars_to_read(i) = pbvar;      options%dim_list(i) = 3;    i = i + 1
         if (options%compute_p) then
             pvar = "air_pressure_computed"
@@ -1644,15 +1646,14 @@ contains
         integer :: name_unit, this_level
         real, allocatable, dimension(:) :: dz_levels
         real, dimension(45) :: fulldz
-        logical :: space_varying, fixed_dz_advection, dz_modifies_wind, sleve, use_terrain_difference
+        logical :: space_varying, dz_modifies_wind, sleve, use_terrain_difference
 
         real :: flat_z_height, terrain_smooth_windowsize, terrain_smooth_cycles, decay_rate_L_topo, decay_rate_S_topo, sleve_n
 
-        namelist /z_info/ dz_levels, space_varying, dz_modifies_wind, flat_z_height, fixed_dz_advection, sleve, terrain_smooth_windowsize, terrain_smooth_cycles, decay_rate_L_topo, decay_rate_S_topo, sleve_n, use_terrain_difference
+        namelist /z_info/ dz_levels, space_varying, dz_modifies_wind, flat_z_height, sleve, terrain_smooth_windowsize, terrain_smooth_cycles, decay_rate_L_topo, decay_rate_S_topo, sleve_n, use_terrain_difference
 
         this_level=1
         space_varying = .False.
-        fixed_dz_advection = .False.
         dz_modifies_wind = .False.
         flat_z_height = -1
         sleve = .False.
@@ -1712,7 +1713,6 @@ contains
         options%dz_modifies_wind = dz_modifies_wind
         options%space_varying_dz = space_varying
         options%flat_z_height = flat_z_height
-        options%fixed_dz_advection = fixed_dz_advection
         options%sleve = sleve
         options%terrain_smooth_windowsize = terrain_smooth_windowsize
         options%terrain_smooth_cycles = terrain_smooth_cycles
@@ -1721,11 +1721,6 @@ contains
         options%sleve_n = sleve_n
         options%use_terrain_difference = use_terrain_difference 
 
-        !if (fixed_dz_advection) then
-        !    print*, "WARNING: setting fixed_dz_advection to true is not recommended, use wind = 2 instead"
-        !    print*, "if you want to continue and enable this, you will need to change this code in the options_obj"
-        !    error stop
-        !endif
 
         if (dz_modifies_wind) then
             print*, "WARNING: setting dz_modifies_wind to true is not recommended, use wind = 2 instead"
@@ -1869,11 +1864,11 @@ contains
         integer :: name_unit                            ! logical unit number for namelist
         !Define parameters
         integer :: solver, roughness
-        logical :: terr_diff, Sx, Dial
+        logical :: terr_diff, Sx
         real    :: Sx_dmax
         
         !Make name-list
-        namelist /wind/ solver, terr_diff, Sx, Sx_dmax, Dial, roughness
+        namelist /wind/ solver, terr_diff, Sx, Sx_dmax, roughness
         
         !Set defaults
         solver = 0 ! 0 = Simple kinematic method (balance uvw),
@@ -1882,7 +1877,6 @@ contains
         Sx = .False.
         roughness = 0 ! No roughness correction, the only one implemented so far
         Sx_dmax = 300.0
-        Dial = .False.
         
         !Read namelist file
         open(io_newunit(name_unit), file=filename)
@@ -1897,7 +1891,6 @@ contains
         options%wind%terr_diff = terr_diff
         options%wind%Sx = Sx
         options%wind%Sx_dmax = Sx_dmax
-        options%wind%Dial = Dial
         options%wind%roughness = roughness
 
     
