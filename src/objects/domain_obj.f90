@@ -180,8 +180,8 @@ contains
         if (0<opt%vars_to_allocate( kVARS%u) )                          call setup(this%u_mass,                   this%grid)
         if (0<opt%vars_to_allocate( kVARS%v) )                          call setup(this%v,                        this%v_grid,   forcing_var=opt%parameters%vvar,       list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%v) )                          call setup(this%v_mass,                   this%grid)
-        if (0<opt%vars_to_allocate( kVARS%w) )                          call setup(this%w,                        this%grid )
-        if (0<opt%vars_to_allocate( kVARS%w) )                          call setup(this%w_real,                   this%grid )
+        if (0<opt%vars_to_allocate( kVARS%w) )                          call setup(this%w,                        this%grid)
+        if (0<opt%vars_to_allocate( kVARS%w) )                          call setup(this%w_real,                   this%grid,   forcing_var=opt%parameters%wvar,       list=this%variables_to_force, force_boundaries=.False. )
         if (0<opt%vars_to_allocate( kVARS%water_vapor) )                call setup(this%water_vapor,              this%grid,     forcing_var=opt%parameters%qvvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%potential_temperature) )      call setup(this%potential_temperature,    this%grid,     forcing_var=opt%parameters%tvar,       list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%cloud_water) )                call setup(this%cloud_water_mass,         this%grid,     forcing_var=opt%parameters%qcvar,      list=this%variables_to_force, force_boundaries=.True.)
@@ -1268,7 +1268,7 @@ contains
         this%dzdx(:,:,:) = global_dzdx(this%ims:this%ime,:,this%jms:this%jme)
                   
         
-        global_dzdx(this%ids+1:this%ide,:,:) = (global_dzdx(this%ids+1:this%ide,:,:) + global_dzdx(this%ids:this%ide-1,:,:))/2
+        global_dzdx(this%ids+1:this%ide,:,:) = (global_z(this%ids+1:this%ide,:,:) - global_z(this%ids:this%ide-1,:,:))/this%dx
         global_dzdx(this%ids,:,:) = global_dzdx(this%ids+1,:,:) 
         global_dzdx(this%ide+1,:,:) = global_dzdx(this%ide,:,:)
                 
@@ -1297,7 +1297,7 @@ contains
                                          4*global_z(:,:,this%jde-1) + global_z(:,:,this%jde-2)) / (2*this%dx)
         this%dzdy(:,:,:) = global_dzdy(this%ims:this%ime,:,this%jms:this%jme)
         
-        global_dzdy(:,:,this%jds+1:this%jde) = (global_dzdy(:,:,this%jds+1:this%jde) + global_dzdy(:,:,this%jds:this%jde-1))/2
+        global_dzdy(:,:,this%jds+1:this%jde) = (global_z(:,:,this%jds+1:this%jde) - global_z(:,:,this%jds:this%jde-1))/this%dx
         global_dzdy(:,:,this%jds) = global_dzdy(:,:,this%jds+1) 
         global_dzdy(:,:,this%jde+1) = global_dzdy(:,:,this%jde)
                 

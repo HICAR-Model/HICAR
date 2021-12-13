@@ -32,7 +32,6 @@ module options_types
         logical :: terr_diff
         logical :: Sx
         real    :: Sx_dmax
-        logical :: Dial
         integer :: roughness
     end type wind_type
     
@@ -165,7 +164,7 @@ module options_types
         character (len=MAXFILELENGTH) :: output_file,restart_file,output_file_frequency
 
         ! variable names from init/BC/wind/... files
-        character (len=MAXVARLENGTH) :: landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon, &
+        character (len=MAXVARLENGTH) :: landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar, &
                                         hgt_hi,lat_hi,lon_hi,ulat_hi,ulon_hi,vlat_hi,vlon_hi, &
                                         pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qsvar,qgvar,hgtvar, &
                                         pslvar, psvar, &
@@ -254,7 +253,6 @@ module options_types
         logical :: dz_modifies_wind     ! use spatial variability in dz (relative to the base dz) speed up (or slow down) the horizontal wind component proportionatly, decreased dz = faster winds
         real    :: flat_z_height        ! height above mean ground level [m] above which z levels are flat in space
         logical :: use_agl_height       ! interpolate from forcing to model layers using Z above ground level, not sea level
-        logical :: fixed_dz_advection   ! with variable dz, allows thinner model levels to accelerate the wind (maybe this should be wind=2)
         logical :: sleve                ! Using a sleve space_varying_dz offers control over the decay of terrain features in the vertical grid structure. See Schär et al 2002, Leuenberger et al 2009
         integer :: terrain_smooth_windowsize
         integer :: terrain_smooth_cycles

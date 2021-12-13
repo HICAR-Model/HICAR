@@ -391,13 +391,9 @@ contains
             return
         endif
 
-        if (options%parameters%fixed_dz_advection) then
-            do i=kms,kme
-                domain%advection_dz(:,i,:) = options%parameters%dz_levels(i)
-            enddo
-        else
-            domain%advection_dz = domain%dz_interface%data_3d
-        endif
+        do i=kms,kme
+            domain%advection_dz(:,i,:) = options%parameters%dz_levels(i)
+        enddo
 
     end subroutine setup_advection_dz
 

@@ -139,38 +139,6 @@ contains
             domain%ustar(ims+1:ime-1,jms+1:jme-1) = sqrt(u_mass(ims+1:ime-1,kms,jms+1:jme-1)**2 + v_mass(ims+1:ime-1,kms,jms+1:jme-1)**2) * currw
         endif
 
-        ! finally, calculate the real vertical motions (including U*dzdx + V*dzdy)
-        lastw = 0
-        do z = kms, kme
-            
-            ! ! if(options%parameters%use_terrain_difference) then
-            !                 ! compute the U * dz/dx component of vertical motion
-            !     uw    = u(ims+1:ime,   z, jms+1:jme-1) * domain%delta_dzdx(:,z,jms+1:jme-1)
-            !     ! compute the V * dz/dy component of vertical motion
-            !     vw    = v(ims+1:ime-1, z, jms+1:jme  ) * domain%delta_dzdy(ims+1:ime-1,z,:)
-            ! else    
-                ! compute the U * dz/dx component of vertical motion
-                uw    = u(ims+1:ime,   z, jms+1:jme-1) * domain%dzdx(ims+1:ime,z,jms+1:jme-1)
-                ! compute the V * dz/dy component of vertical motion
-                vw    = v(ims+1:ime-1, z, jms+1:jme  ) * domain%dzdy(ims+1:ime-1,z,jms+1:jme)
-            ! endif    
-            ! ! convert the W grid relative motion to m/s
-            ! currw = w(ims+1:ime-1, z, jms+1:jme-1) * dz_interface(ims+1:ime-1, z, jms+1:jme-1) / domain%dx
-
-            ! the W grid relative motion
-            currw = w(ims+1:ime-1, z, jms+1:jme-1)
-
-            ! if (options%physics%convection>0) then
-            !     currw = currw + domain%w_cu(2:nx-1,z,2:ny-1) * domain%dz_inter(2:nx-1,z,2:ny-1) / domain%dx
-            ! endif
-
-            ! compute the real vertical velocity of air by combining the different components onto the mass grid
-            ! includes vertical interpolation between w_z-1/2 and w_z+1/2
-            w_real(ims+1:ime-1, z, jms+1:jme-1) = (uw(ims+1:ime-1,:) + uw(ims+2:ime,:))*0.5 &
-                                                 +(vw(:,jms+1:jme-1) + vw(:,jms+2:jme))*0.5 &
-                                                 +domain%jacobian(ims+1:ime-1,z,jms+1:jme-1)*(lastw + currw) * 0.5
-            lastw = currw ! could avoid this memcopy cost using pointers or a single manual loop unroll
-        end do
 
         end associate
 

@@ -346,15 +346,18 @@ contains
                 allocate(div(ims:ime,kms:kme,jms:jme))
                 alpha=1.0
                 
-               
+                !Call this, passing 0 for w_grid, to get vertical components of vertical motion
                 call calc_w_real(domain% u %data_3d,      &
                              domain% v %data_3d,      &
-                             domain% w %data_3d,      &
-                             domain% w_real %data_3d,      &
+                             domain%w%data_3d*0.0,      &
+                             domain%w%data_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian)
-                          
-                domain%w%data_3d = -domain%w_real%data_3d/domain%jacobian
+                             
+                !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
+                if (options%parameters%wvar=="") domain%w_real%data_3d = 0.0  
+                
+                domain%w%data_3d = (domain%w_real%data_3d-domain%w%data_3d)/domain%jacobian
                 
                 
                 call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
@@ -401,16 +404,19 @@ contains
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
                 allocate(div(ims:ime,kms:kme,jms:jme))
                 alpha=1.0
-                
-                             
+                                
+                !Call this, passing 0 for w_grid, to get vertical components of vertical motion
                 call calc_w_real(domain% u %meta_data%dqdt_3d,      &
                              domain% v %meta_data%dqdt_3d,      &
-                             domain% w %meta_data%dqdt_3d,      &
-                             domain% w_real %data_3d,      &
+                             domain%w%meta_data%dqdt_3d*0.0,      &
+                             domain%w%meta_data%dqdt_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian)
                              
-                domain%w%meta_data%dqdt_3d = -domain%w_real%data_3d/domain%jacobian
+                !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
+                if (options%parameters%wvar=="") domain%w_real%data_3d = 0.0  
+                             
+                domain%w%meta_data%dqdt_3d = (domain%w_real%data_3d-domain%w%meta_data%dqdt_3d)/domain%jacobian
                 
                 call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
@@ -525,14 +531,10 @@ contains
 
         call allocate_winds(domain)
 
-        if (options%parameters%fixed_dz_advection) then
-            do i=domain%grid%kms, domain%grid%kme
-                domain%advection_dz(:,i,:) = options%parameters%dz_levels(i)
-            enddo
-        else
-            domain%advection_dz = domain%dz_interface%data_3d
-        endif
-
+        do i=domain%grid%kms, domain%grid%kme
+            domain%advection_dz(:,i,:) = options%parameters%dz_levels(i)
+        enddo
+        
 
     end subroutine init_winds
 
