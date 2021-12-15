@@ -35,25 +35,18 @@ contains
     !! Starts by setting w out of the ground=0 then works through layers
     !!
     !!------------------------------------------------------------
-    subroutine balance_uvw(u,v,w, jaco_u,jaco_v,jaco_w,dz,dx,jaco,rho,smooth_height, options, k_max, vert_weight)
+
+    subroutine balance_uvw(u,v,w, jaco_u,jaco_v,jaco_w,dz,dx,jaco,rho,smooth_height, options)
         implicit none
         real,           intent(inout) :: u(:,:,:), v(:,:,:), w(:,:,:)
         real,           intent(in)    :: jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), dz(:,:,:), jaco(:,:,:), rho(:,:,:)
         real,           intent(in)    :: dx, smooth_height
         type(options_t),intent(in)    :: options
-        integer, optional, intent(in) :: k_max
-        real, optional, intent(in)    :: vert_weight(:,:,:)
 
         real, allocatable, dimension(:,:) :: rhou, rhov, rhow
         real, allocatable, dimension(:,:,:) :: divergence
-        real, allocatable, dimension(:,:,:) :: vert_div_weight
         integer :: ims, ime, jms, jme, kms, kme, k
 
-        !if (this_image()==1) write(*,*) "vert_div_weight: ",vert_div_weight
-
-        ! associate(u => domain%u%data_3d,  &
-        !           v => domain%v%data_3d,  &
-        !           w => domain%w%data_3d  )
 
         ims = lbound(w,1)
         ime = ubound(w,1)
@@ -63,11 +56,6 @@ contains
         jme = ubound(w,3)
         
         w = 0
-        allocate(vert_div_weight(ims:ime,kms:kme,jms:jme))
-        
-        !Base assumption is to use same vertical splitting as Sherman 1978 (perfectly neuteral atmosphere)
-        vert_div_weight = 1.0000000000
-        if (present(vert_weight)) vert_div_weight=vert_weight
 
         !------------------------------------------------------------
         ! These could be module level to prevent lots of allocation/deallocation/reallocations
@@ -82,11 +70,8 @@ contains
         allocate(divergence(ims:ime,kms:kme,jms:jme))
 
         call calc_divergence(divergence,u,v,w,jaco_u,jaco_v,jaco_w,dz,dx,jaco,rho,smooth_height,options,horz_only=.True.)
-        !divergence = divergence * vert_div_weight
 
-        ! If this becomes a bottle neck in the code it could be parallelized over y
-        ! loop over domain levels
-        if (present(k_max)) kme=k_max
+
         !write(*,*) "maxval of div, in bal: ",maxval(abs(divergence(:,kme,:)))
         do k = kms,kme
             !------------------------------------------------------------
@@ -123,16 +108,11 @@ contains
                     else 
                         w(:,k,:) = ((w(:,k-1,:) * jaco_w(:,k-1,:) - divergence(:,k,:) * dz(:,k,:)))/ (jaco_w(:,k,:) )
                     end if
-                    !u(:,k,:) = (u(:,k,:) * jaco_u(:,k,:) - divergence(:,k,:) * 0.25 * dx) / jaco_u(:,k,:)
-                    !v(:,k,:) = (v(:,k,:) * jaco_v(:,k,:) - divergence(:,k,:) * 0.25 * dx) / jaco_v(:,k,:)
-
                 
                 end if
+
             end do
-            if (present(vert_weight) .and. this_image()==1) then
-                !call io_write("ideal_vert_div.nc","vert_div",divergence)
-                !call io_write("ideal_w_grid.nc","w_grid",w)
-            endif
+
             !------------------------------------------------------------
             ! Now do the same for the convective wind field if needed
             !------------------------------------------------------------
@@ -194,7 +174,7 @@ contains
             u_met = u * jaco_u
             v_met = v * jaco_v
         end if
-        
+
         diff_U = u_met(ims+1:ime+1, :, jms:jme) - u_met(ims:ime, :, jms:jme)
         diff_V = v_met(ims:ime, :, jms+1:jme+1) - v_met(ims:ime, :, jms:jme)
 
@@ -207,7 +187,7 @@ contains
             else
                 w_met = w*jaco_w
             end if
-            
+
             do k = kms,kme
                 if (k == kms) then
                     div(ims:ime, k, jms:jme) = div(ims:ime, k, jms:jme) + w_met(ims:ime, k, jms:jme)/(dz(ims:ime, k, jms:jme))
@@ -216,11 +196,7 @@ contains
                                    (w_met(ims:ime,k,jms:jme)-w_met(ims:ime,k-1,jms:jme))/(dz(ims:ime,k,jms:jme))
                 endif
             enddo
-            !if (options%parameters%advect_density) then
-            !    div = div/(jaco*rho)
-            !else
-            !    div = div/jaco
-            !end if
+
         endif
 
     end subroutine calc_divergence
@@ -369,6 +345,7 @@ contains
             ! else assumes even flow over the mountains
 
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
+
             call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
             
             call calc_w_real(domain% u %data_3d,      &
@@ -422,6 +399,7 @@ contains
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
                                 domain%jacobian,domain%density%data_3d,domain%smooth_height,options,horz_only=.False.)
                 call calc_iter_winds(domain,alpha,div,update_in=.True.)
+
 
             endif
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)

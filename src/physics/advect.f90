@@ -101,6 +101,7 @@ contains
 !     end subroutine flux2
 
     subroutine advect3d(q,u,v,w,rho_in,dz,dx,nx,nz,ny,jaco,options)
+
         implicit none
         real, dimension(1:nx,  1:nz,1:ny),  intent(inout)   :: q
         real, dimension(1:nx,  1:nz,1:ny),  intent(in)      :: w
@@ -123,7 +124,6 @@ contains
         
         rho = 1
         if (options%parameters%advect_density) rho = rho_in
-        
         
         ! Multiply dz by jacobian so that all advection terms will be divided by mass-centered jacobian
 
@@ -181,6 +181,7 @@ contains
                q(2:nx-1,1,i)      = q(2:nx-1,1,i)       - f5(:,1) / (dz(2:nx-1,1,i)*jaco(2:nx-1,1,i) * rho(2:nx-1,1,i) )
                ! add fluxes to top layer
                q(2:nx-1,nz,i)     = q(2:nx-1,nz,i)      - (qin(2:nx-1,nz,i) * w(2:nx-1,nz,i) - f5(:,nz-1)) / (dz(2:nx-1,nz,i)*jaco(2:nx-1,nz,i)*rho(2:nx-1,nz,i))
+
            ! endif
         enddo
         !$omp end do

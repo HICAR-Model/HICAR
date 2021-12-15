@@ -139,7 +139,6 @@ contains
             domain%ustar(ims+1:ime-1,jms+1:jme-1) = sqrt(u_mass(ims+1:ime-1,kms,jms+1:jme-1)**2 + v_mass(ims+1:ime-1,kms,jms+1:jme-1)**2) * currw
         endif
 
-
         end associate
 
     end subroutine diagnostic_update

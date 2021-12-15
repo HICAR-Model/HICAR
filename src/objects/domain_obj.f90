@@ -727,7 +727,7 @@ contains
         allocate(this%dzdy_v(this% ims : this% ime, &
                            this% kms : this% kme, &
                            this% jms : this% jme+1) )
-                           
+
         allocate(this%dz_scl( this%kms : this%kme))
         
         allocate(this%zr_u( this%u_grid2d_ext% ims : this%u_grid2d_ext% ime,   &
@@ -1129,8 +1129,7 @@ contains
         endif
 
     end subroutine initialize_core_variables
-    
-    
+        
     subroutine setup_grid_rotations(this,options)
         type(domain_t),  intent(inout) :: this
         type(options_t), intent(in)    :: options
@@ -1222,7 +1221,6 @@ contains
 
 
     end subroutine setup_grid_rotations
-    
     
     subroutine setup_dzdxy(this,options)
         implicit none
@@ -1522,7 +1520,6 @@ contains
         !deallocate(temporary_data)
         
     end subroutine setup_Sx
-    
     
     !>------------------------------------------------------------
     !! Calculate the ZNU and ZNW variables
