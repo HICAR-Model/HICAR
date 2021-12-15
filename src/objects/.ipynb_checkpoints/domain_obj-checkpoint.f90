@@ -13,19 +13,17 @@ submodule(domain_interface) domain_implementation
     use icar_constants,       only : kVARS, kLC_LAND
     use string,               only : str
     use co_util,              only : broadcast
-    use io_routines,          only : io_write
+    use io_routines,          only : io_read, io_write
     use geo,                  only : geo_lut, geo_interp, geo_interp2d, standardize_coordinates
     use array_utilities,      only : array_offset_x, array_offset_y, smooth_array, smooth_array_2d, array_offset_x_2d, array_offset_y_2d
     use vertical_interpolation,only : vinterp, vLUT
-    use wind_surf,            only : calc_Sx, calc_TPI
 
     implicit none
 
     interface setup
         module procedure setup_var, setup_exch
     end interface
-    
-    real, parameter::deg2rad=0.017453293 !2*pi/360
+
     ! primary public routines : init, get_initial_conditions, halo_send, halo_retrieve, or halo_exchange
 contains
 
@@ -180,8 +178,8 @@ contains
         if (0<opt%vars_to_allocate( kVARS%u) )                          call setup(this%u_mass,                   this%grid)
         if (0<opt%vars_to_allocate( kVARS%v) )                          call setup(this%v,                        this%v_grid,   forcing_var=opt%parameters%vvar,       list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%v) )                          call setup(this%v_mass,                   this%grid)
-        if (0<opt%vars_to_allocate( kVARS%w) )                          call setup(this%w,                        this%grid)
-        if (0<opt%vars_to_allocate( kVARS%w) )                          call setup(this%w_real,                   this%grid,   forcing_var=opt%parameters%wvar,       list=this%variables_to_force, force_boundaries=.False. )
+        if (0<opt%vars_to_allocate( kVARS%w) )                          call setup(this%w,                        this%grid )
+        if (0<opt%vars_to_allocate( kVARS%w) )                          call setup(this%w_real,                   this%grid )
         if (0<opt%vars_to_allocate( kVARS%water_vapor) )                call setup(this%water_vapor,              this%grid,     forcing_var=opt%parameters%qvvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%potential_temperature) )      call setup(this%potential_temperature,    this%grid,     forcing_var=opt%parameters%tvar,       list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%cloud_water) )                call setup(this%cloud_water_mass,         this%grid,     forcing_var=opt%parameters%qcvar,      list=this%variables_to_force, force_boundaries=.True.)
@@ -712,19 +710,11 @@ contains
                                     this% kms : this% kme, &
                                     this% jms : this% jme) )
                                                                 
-        allocate(this%dzdx(this% ims : this% ime, &
+        allocate(this%dzdx(this% ims : this% ime+1, &
                            this% kms : this% kme, &
                            this% jms : this% jme) )
 
         allocate(this%dzdy(this% ims : this% ime, &
-                           this% kms : this% kme, &
-                           this% jms : this% jme) )
-                           
-        allocate(this%dzdx_u(this% ims : this% ime+1, &
-                           this% kms : this% kme, &
-                           this% jms : this% jme) )
-
-        allocate(this%dzdy_v(this% ims : this% ime, &
                            this% kms : this% kme, &
                            this% jms : this% jme+1) )
 
@@ -763,12 +753,6 @@ contains
 
         allocate(this%terrain_v( this%v_grid2d_ext% ims : this%v_grid2d_ext% ime,   &
                                  this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
-
-        allocate(this%sintheta( this% ids : this% ide, &
-                                this% jds : this% jde) )
-
-        allocate(this%costheta( this% ids : this% ide, &
-                                this% jds : this% jde) )
 
 
     end subroutine allocate_z_arrays
@@ -820,6 +804,8 @@ contains
                   global_dz_interface   => this%global_dz_interface,            &
                   global_terrain        => this%global_terrain,                 &
                   global_jacobian       => this%global_jacobian,                &
+                  dzdx                  => this%dzdx,                           &
+                  dzdy                  => this%dzdy,                           &
                   jacobian              => this%jacobian,                       &
                   jacobian_u                  => this%jacobian_u,                           &
                   jacobian_v                  => this%jacobian_v,                           &
@@ -1054,6 +1040,7 @@ contains
                     zr_v(:,i,:) = 1
 
                     global_jacobian(:,i,:) = 1
+
                 endif
 
                 dz_mass(:,i,:)     = (dz(i)/2 * jacobian(:,i,:) + dz(i-1)/2 * jacobian(:,i-1,:))
@@ -1120,108 +1107,10 @@ contains
         deallocate(temp)
 
         call setup_geo(this%geo,   this%latitude%data_2d,   this%longitude%data_2d,   this%z%data_3d, options%parameters%longitude_system)
-        
-        call setup_grid_rotations(this, options)
-        
-        ! Setup variables applicable to near-surface wind modifications
-        if (options%wind%Sx) then
-            call setup_Sx(this, options)
-        endif
+
 
     end subroutine initialize_core_variables
-        
-    subroutine setup_grid_rotations(this,options)
-        type(domain_t),  intent(inout) :: this
-        type(options_t), intent(in)    :: options
-
-        integer :: i, j, ims, ime, jms, jme, smooth_loops
-        integer :: starti, endi
-        double precision :: dist, dlat, dlon
-
-        real, allocatable :: lat(:,:), lon(:,:), costheta(:,:), sintheta(:,:)
-
-        if (options%parameters%sinalpha_var /= "") then
-            ims = lbound(this%latitude%data_2d, 1)
-            ime = ubound(this%latitude%data_2d, 1)
-            jms = lbound(this%latitude%data_2d, 2)
-            jme = ubound(this%latitude%data_2d, 2)
-
-            if (this_image()==1) print*, "Reading Sinalpha/cosalpha"
-
-            call io_read(options%parameters%init_conditions_file, options%parameters%sinalpha_var, lon)
-            this%sintheta = lon(ims:ime, jms:jme)
-
-            call io_read(options%parameters%init_conditions_file, options%parameters%cosalpha_var, lon)
-            this%costheta = lon(ims:ime, jms:jme)
-
-            deallocate(lon)
-        else
-
-            call load_data(options%parameters%init_conditions_file,   &
-                           options%parameters%lat_hi,                 &
-                           lat, this%grid)
-            call load_data(options%parameters%init_conditions_file,   &
-                           options%parameters%lon_hi,                 &
-                           lon, this%grid)
-
-            ims = lbound(lat,1)
-            ime = ubound(lat,1)
-            jms = lbound(lat,2)
-            jme = ubound(lat,2)
-
-            allocate(sintheta(ims:ime,jms:jme))
-            allocate(costheta(ims:ime,jms:jme))
-
-            do j = jms, jme
-                do i = ims, ime
-                    ! in case we are in the first or last grid, reset boundaries
-                    starti = max(ims, i-2)
-                    endi   = min(ime, i+2)
-
-                    ! change in latitude
-                    dlat = DBLE(lat(endi,j) - lat(starti,j))
-                    ! change in longitude
-                    dlon = DBLE(lon(endi,j) - lon(starti,j)) * cos(deg2rad*DBLE(lat(i,j)))
-                    !if (abs(dlat) > 1) write(*,*) 'dlat:  ', dlat, '  ', ims, '  ', ime, '  ', jms, '  ', jme
-                    !if (abs(dlon) > 1) write(*,*) 'dlon:  ', dlon, '  ', ims, '  ', ime, '  ', jms, '  ', jme
-                    
-                    ! distance between two points
-                    dist = sqrt(DBLE(dlat)**2 + DBLE(dlon)**2) 
-
-                    ! sin/cos of angles for use in rotating fields later
-                    costheta(i, j) = abs(dlon / dist)
-                    sintheta(i, j) =  (-1) * dlat / dist
-
-                enddo
-            enddo
-            
-            !Smooth cos/sin in case there are jumps from the lat/lon grids (more likely at low resolutions)
-            smooth_loops = int(1000/this%dx)
-            
-            do i=1,smooth_loops
-             call smooth_array_2d( costheta , windowsize  =  20)
-             call smooth_array_2d( sintheta , windowsize  =  20)
-            enddo
-            this%costheta = costheta
-            this%sintheta = sintheta
-            
-            deallocate(costheta)
-            deallocate(sintheta)
- 
-        endif
-        if (options%parameters%debug .and.(this_image()==1)) then
-            print*, ""
-            print*, "Domain Geometry"
-            print*, "MAX / MIN SIN(theta) (ideally 0)"
-            print*, "   ", maxval(this%sintheta), minval(this%sintheta)
-            print*, "MAX / MIN COS(theta) (ideally 1)"
-            print*, "   ", maxval(this%costheta), minval(this%costheta)
-            print*, ""
-        endif
-
-
-    end subroutine setup_grid_rotations
-
+    
     subroutine setup_dzdxy(this,options)
         implicit none
         class(domain_t), intent(inout)  :: this
@@ -1241,66 +1130,17 @@ contains
         do i=2,this%kme
             global_z(:,i,:) = global_z(:,i-1,:) + (((options%parameters%dz_levels(i)) / 2)*this%global_jacobian(:,i,:)) + &
                                                   (((options%parameters%dz_levels(i-1)) / 2)*this%global_jacobian(:,i-1,:))
-                                                  
-            !global_z(:,i,:) = global_z(:,i-1,:) + (((options%parameters%dz_levels(i)) / 2)) + &
-            !                                      (((options%parameters%dz_levels(i-1)) / 2))        
         enddo
         
         global_dzdx = 0
         global_dzdy = 0
-
-        !For dzdx
-        global_dzdx(this%ids+1:this%ide-1,:,:) = (global_z(this%ids+2:this%ide,:,:) - &
-                                                           global_z(this%ids:this%ide-2,:,:))/(2*this%dx)
-                                                           
-       ! global_dzdx(this%ids+2:this%ide-2,:,:) = (global_z(this%ids:this%ide-4,:,:) - &
-       !                                                    8*global_z(this%ids+1:this%ide-3,:,:) + &
-       !                                                    8*global_z(this%ids+3:this%ide-1,:,:) - &
-       !                                                    global_z(this%ids+4:this%ide,:,:))/(12*this%dx)
-                                                                                                                      
-        global_dzdx(this%ids,:,:) = (-3*global_z(this%ids,:,:) + &
-                                          4*global_z(this%ids+1,:,:) - global_z(this%ids+2,:,:)) / (2*this%dx)
-                                          
-        global_dzdx(this%ide,:,:) = (3*global_z(this%ide,:,:) - &
-                                         4*global_z(this%ide-1,:,:) + global_z(this%ide-2,:,:)) / (2*this%dx)
-        this%dzdx(:,:,:) = global_dzdx(this%ims:this%ime,:,this%jms:this%jme)
-                  
         
-        global_dzdx(this%ids+1:this%ide,:,:) = (global_z(this%ids+1:this%ide,:,:) - global_z(this%ids:this%ide-1,:,:))/this%dx
-        global_dzdx(this%ids,:,:) = global_dzdx(this%ids+1,:,:) 
-        global_dzdx(this%ide+1,:,:) = global_dzdx(this%ide,:,:)
-                
-        this%dzdx_u(:,:,:) = global_dzdx(this%ims:this%ime+1,:,this%jms:this%jme)
+        global_dzdx(this%ids+1:this%ide,:,:) = (global_z(this%ids+1:this%ide,:,:) - global_z(this%ids:this%ide-1,:,:)) / this%dx
+        global_dzdy(:,:,this%jds+1:this%jde) = (global_z(:,:,this%jds+1:this%jde) - global_z(:,:,this%jds:this%jde-1)) / this%dx
 
-
-        !global_dzdx(this%ims+1:this%ime,:,this%jms:this%jme) = (this%geo_u%z(this%ims+2:this%ime+1,:,:) - &
-        !                                                   this%geo_u%z(this%ims:this%ime-1,:,:))/(2*this%dx)
+        this%dzdx(:,:,:) = global_dzdx(this%ims:this%ime+1,:,this%jms:this%jme)
+        this%dzdy(:,:,:) = global_dzdy(this%ims:this%ime,:,this%jms:this%jme+1)
         
-        !global_dzdx(this%ims,:,this%jms:this%jme) = (-3*this%geo_u%z(this%ims,:,:) + &
-        !                                  4*this%geo_u%z(this%ims+1,:,:) - this%geo_u%z(this%ims+2,:,:)) / (2*this%dx)
-                                          
-        !global_dzdx(this%ime+1,:,this%jms:this%jme) = (3*this%geo_u%z(this%ime+1,:,:) - &
-        !                                  4*this%geo_u%z(this%ime,:,:) + this%geo_u%z(this%ime-1,:,:)) / (2*this%dx)
-                                         
-        !this%dzdx_u(:,:,:) = global_dzdx(this%ims:this%ime+1,:,this%jms:this%jme)
-
-
-        !For dzdy
-        global_dzdy(:,:,this%jds+1:this%jde-1) = (global_z(:,:,this%jds+2:this%jde) - &
-                                                           global_z(:,:,this%jds:this%jde-2))/(2*this%dx)
-        global_dzdy(:,:,this%jds) = (-3*global_z(:,:,this%jms) + &
-                                          4*global_z(:,:,this%jms+1) - global_z(:,:,this%jms+2)) / (2*this%dx)
-                                          
-        global_dzdy(:,:,this%jde) = (3*global_z(:,:,this%jde) - &
-                                         4*global_z(:,:,this%jde-1) + global_z(:,:,this%jde-2)) / (2*this%dx)
-        this%dzdy(:,:,:) = global_dzdy(this%ims:this%ime,:,this%jms:this%jme)
-        
-        global_dzdy(:,:,this%jds+1:this%jde) = (global_z(:,:,this%jds+1:this%jde) - global_z(:,:,this%jds:this%jde-1))/this%dx
-        global_dzdy(:,:,this%jds) = global_dzdy(:,:,this%jds+1) 
-        global_dzdy(:,:,this%jde+1) = global_dzdy(:,:,this%jde)
-                
-        this%dzdy_v(:,:,:) = global_dzdy(this%ims:this%ime,:,this%jms:this%jme+1)
-
         deallocate(global_z)
         deallocate(global_dzdx)
         deallocate(global_dzdy)
@@ -1487,40 +1327,7 @@ contains
     end subroutine
 
 
-    subroutine setup_Sx(this, options)
-        implicit none
-        class(domain_t), intent(inout)  :: this
-        type(options_t), intent(in)     :: options
-        
-        character(len=(len(trim(options%parameters%init_conditions_file))+3)) :: filename
-        logical          :: fexist
-        real, allocatable :: temporary_data(:,:,:,:)
-        
-        filename = trim(options%parameters%init_conditions_file)
-        filename = filename(1:(len(filename)-6))//'_Sx.nc'
-        !Check if we already have an Sx file
-        inquire(file=filename,exist=fexist)
-        
-        !If we don't have an Sx file saved, build one
-        !if (.not.(fexist)) then
-        if (this_image()==1) write(*,*) "    Calculating Sx and TPI for wind modification"
-        call calc_TPI(this)
-        call calc_Sx(this, options, filename)
-        !endif
     
-        !Load Sx from file into domain_array
-        !Assume 8 wind-directions for Sx
-        !allocate(this%Sx( 1:72, this%grid2d% ims : this%grid2d% ime, 1:30,&
-        !                       this%grid2d% jms : this%grid2d% jme) )        
-
-        !call io_read(filename, 'Sx', temporary_data)
-
-        !this%Sx = temporary_data(:,this%grid%ims:this%grid%ime, 1:30, this%grid%jms:this%grid%jme)
-        
-        !deallocate(temporary_data)
-        
-    end subroutine setup_Sx
-
     
     !>------------------------------------------------------------
     !! Calculate the ZNU and ZNW variables
@@ -2007,9 +1814,9 @@ contains
                 ! Step in reverse so that the bottom level is preserved until it is no longer needed
                 do i=AGL_nz,1,-1
                     ! Multiply subtraction of base-topography by a factor that scales from 1 at surface to 0 at AGL_cap height
-                    this%geo_u%z(:,i,:) = this%geo_u%z(:,i,:)-(this%geo_u%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))
-                    this%geo_v%z(:,i,:) = this%geo_v%z(:,i,:)-(this%geo_v%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))
-                    forcing%z(:,i,:) = forcing%z(:,i,:)-(forcing%original_geo%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))   
+                    this%geo_u%z(:,i,:) = this%geo_u%z(:,i,:)-(this%geo_u%z(:,1,:)*((AGL_nz-i)/AGL_nz))
+                    this%geo_v%z(:,i,:) = this%geo_v%z(:,i,:)-(this%geo_v%z(:,1,:)*((AGL_nz-i)/AGL_nz))
+                    forcing%z(:,i,:) = forcing%z(:,i,:)-(forcing%original_geo%z(:,1,:)*((AGL_nz-i)/AGL_nz))    
                 enddo
 
             endif
@@ -2021,8 +1828,6 @@ contains
             call geo_interp(forcing%geo_u%z, forcing%z, forc_u_from_mass%geolut)
             call vLUT(this%geo_u, forcing%geo_u)
 
-            call io_write("eo_u_vLUT.nc","data",forcing%geo_u%vert_lut%w)
-            
             nx = size(this%geo_v%z, 1)
             ny = size(this%geo_v%z, 3)
             allocate(forcing%geo_v%z(nx,nz,ny))
@@ -2033,7 +1838,7 @@ contains
         
                 !! Add back terrain-subtracted portions to forcing%z
                 do i=AGL_nz,1,-1
-                    forcing%z(:,i,:) = forcing%z(:,i,:)+(forcing%original_geo%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))
+                    forcing%z(:,i,:) = forcing%z(:,i,:)+(forcing%original_geo%z(:,1,:)*((AGL_nz-i)/AGL_nz))
                 enddo
             endif
             
@@ -2042,7 +1847,6 @@ contains
             allocate(forcing%geo%z(nx, nz, ny))
             call geo_interp(forcing%geo%z, forcing%z, forcing%geo%geolut)
             call vLUT(this%geo,   forcing%geo)
-            call io_write("eo_vLUT.nc","data",forcing%geo%vert_lut%w)
 
         end if
 
@@ -2189,7 +1993,6 @@ contains
     
     end subroutine
 
-
     !> -------------------------------
     !! Loop through all variables for which forcing data have been supplied and interpolate the forcing data to the domain
     !!
@@ -2199,7 +2002,7 @@ contains
         class(domain_t),  intent(inout) :: this
         type(boundary_t), intent(in)    :: forcing
         logical,          intent(in),   optional :: update
-        
+
         ! internal field always present for value of optional "update"
         logical :: update_only
         logical :: var_is_not_pressure
@@ -2275,7 +2078,7 @@ contains
     subroutine interpolate_variable(var_data, input_data, forcing, dom, vert_interp, var_is_u, var_is_v, nsmooth)
         implicit none
         real,               intent(inout) :: var_data(:,:,:)
-        type(variable_t),   intent(in) :: input_data
+        type(variable_t),   intent(in)    :: input_data
         type(boundary_t),   intent(in)    :: forcing
         type(domain_t),     intent(in)    :: dom
         logical,            intent(in),   optional :: vert_interp
@@ -2345,9 +2148,9 @@ contains
             ! temp_3d = pre_smooth(:,:nz,:) ! no vertical interpolation option
 
             call smooth_array(temp_3d, windowsize=windowsize, ydim=3)
-                        
+
             var_data = temp_3d(dom%u_grid%ims-dom%u_grid2d_ext%ims+1 : dom%u_grid%ime-dom%u_grid2d_ext%ims+1,    &
-                               :,   &
+                                :,   &
                                dom%u_grid%jms-dom%u_grid2d_ext%jms+1 : dom%u_grid%jme-dom%u_grid2d_ext%jms+1)
         ! Interpolate to the v staggered grid
         else if (vvar) then
@@ -2373,6 +2176,8 @@ contains
         endif
 
     end subroutine
+
+
 
 
     !> -------------------------------

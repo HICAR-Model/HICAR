@@ -188,6 +188,7 @@ contains
                 w_met = w*jaco_w
             end if
 
+
             do k = kms,kme
                 if (k == kms) then
                     div(ims:ime, k, jms:jme) = div(ims:ime, k, jms:jme) + w_met(ims:ime, k, jms:jme)/(dz(ims:ime, k, jms:jme))
@@ -400,7 +401,6 @@ contains
                                 domain%jacobian,domain%density%data_3d,domain%smooth_height,options,horz_only=.False.)
                 call calc_iter_winds(domain,alpha,div,update_in=.True.)
 
-
             endif
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
 
@@ -423,6 +423,7 @@ contains
     end subroutine update_winds
     
     subroutine calc_w_real(u,v,w_grid,w_real,dzdx,dzdy,jacobian)
+
         implicit none
         real, intent(in), dimension(:,:,:) :: u,v,w_grid,dzdx,dzdy,jacobian
         real, intent(inout)                :: w_real(:,:,:)
