@@ -292,7 +292,7 @@ contains
 
             call init_winds(domain, options)
             !call initialize_blocking(domain, options)
-            !call update_stability(domain)
+            call update_stability(domain)
 
             ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
             !call make_winds_grid_relative(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%grid, domain%sintheta, domain%costheta)
