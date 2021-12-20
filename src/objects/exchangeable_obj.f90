@@ -37,10 +37,10 @@ contains
     if (err /= 0) stop "exchangeable:dqdt_3d: Allocation request failed"
     this%data_3d = 0
 
-    allocate( this%halo_south_in( grid%ns_halo_nx+halo_size*2, grid%halo_nz,   halo_size+1      )[*])
-    allocate( this%halo_north_in( grid%ns_halo_nx+halo_size*2, grid%halo_nz,   halo_size+1      )[*])
-    allocate( this%halo_east_in(    halo_size+1,     grid%halo_nz, grid%ew_halo_ny+halo_size*2  )[*])
-    allocate( this%halo_west_in(    halo_size+1,     grid%halo_nz, grid%ew_halo_ny+halo_size*2  )[*])
+    allocate( this%halo_south_in( grid%ns_halo_nx+halo_size*2, grid%halo_nz,   halo_size      )[*])
+    allocate( this%halo_north_in( grid%ns_halo_nx+halo_size*2, grid%halo_nz,   halo_size      )[*])
+    allocate( this%halo_east_in(    halo_size,     grid%halo_nz, grid%ew_halo_ny+halo_size*2  )[*])
+    allocate( this%halo_west_in(    halo_size,     grid%halo_nz, grid%ew_halo_ny+halo_size*2  )[*])
 
 
     if (.not.allocated(neighbors)) call this%set_neighbors(grid)
@@ -168,31 +168,45 @@ contains
     if (.not. this%north_boundary) then
         n = ubound(this%data_3d,3)
         nx = size(this%data_3d,1)
-        this%halo_south_in(1:nx,:,1:(halo_size+1))[north_neighbor] = this%data_3d(:,:,n-(halo_size)*2:n-(halo_size))
+        this%halo_south_in(1:nx,:,1:(halo_size))[north_neighbor] = this%data_3d(:,:,n-(halo_size)-1:n-(halo_size)-1)
     endif
     if (.not. this%south_boundary) then
         start = lbound(this%data_3d,3)
         nx = size(this%data_3d,1)
 
-        this%halo_north_in(1:nx,:,1:halo_size)[south_neighbor] = this%data_3d(:,:,start+halo_size*2:start+halo_size*2)
+        this%halo_north_in(1:nx,:,1:halo_size)[south_neighbor] = this%data_3d(:,:,start+halo_size+1:start+halo_size+1)
     endif
-    if (.not. this%east_boundary)  call this%put_east
-    if (.not. this%west_boundary)  call this%put_west
-        
+
     sync images( neighbors ) !all
     
     if (.not. this%north_boundary) call this%retrieve_north_halo
+    if (.not. this%south_boundary) call this%retrieve_south_halo
 
+  end subroutine
+  
+    module subroutine exchange_v_metadata(this)
+    class(exchangeable_t), intent(inout) :: this
+    integer :: n, nx, start
+    !When exchanging for the v-field, we want a full exchange in the y-direction,
+    ! and an exchange in the x-direction of just the outer-most values
+    
+    if (.not. this%north_boundary) then
+        n = ubound(this%data_3d,3)
+        nx = size(this%data_3d,1)
+        this%halo_south_in(1:nx,:,1:(halo_size))[north_neighbor] = this%meta_data%dqdt_3d(:,:,n-(halo_size)-1:n-(halo_size)-1)
+    endif
     if (.not. this%south_boundary) then
         start = lbound(this%data_3d,3)
         nx = size(this%data_3d,1)
 
-        this%data_3d(:,:,start:start+halo_size) = this%halo_south_in(:nx,:,1:halo_size+1)
+        this%halo_north_in(1:nx,:,1:halo_size)[south_neighbor] = this%meta_data%dqdt_3d(:,:,start+halo_size+1:start+halo_size+1)
     endif
 
-    if (.not. this%east_boundary) call this%retrieve_east_halo
-    if (.not. this%west_boundary) call this%retrieve_west_halo
+    sync images( neighbors ) !all
     
+    if (.not. this%north_boundary) call this%retrieve_north_halo_metadata
+    if (.not. this%south_boundary) call this%retrieve_south_halo_metadata
+
   end subroutine
   
   module subroutine exchange_u(this)
@@ -200,34 +214,50 @@ contains
     integer :: n, ny, start
     !When exchanging for the u-field, we want a full exchange in the x-direction,
     ! and an exchange in the y-direction of just the outer-most values
-    
-    if (.not. this%north_boundary)  call this%put_north
-    if (.not. this%south_boundary)  call this%put_south
-    
+
     if (.not. this%east_boundary) then
         n = ubound(this%data_3d,1)
         ny = size(this%data_3d,3)
-        this%halo_west_in(1:halo_size+1,:,1:ny)[east_neighbor] = this%data_3d(n-(halo_size)*2:n-(halo_size),:,:)
+        this%halo_west_in(1:halo_size,:,1:ny)[east_neighbor] = this%data_3d(n-(halo_size)-1:n-(halo_size)-1,:,:)
     endif
     
     if (.not. this%west_boundary) then
         start = lbound(this%data_3d,1)
         ny = size(this%data_3d,3)
-        this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%data_3d(start+halo_size*2:start+halo_size*2,:,:)
+        this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%data_3d(start+halo_size+1:start+halo_size+1,:,:)
     endif  
 
     sync images( neighbors ) !all
     
-    if (.not. this%north_boundary) call this%retrieve_north_halo  
-    if (.not. this%south_boundary) call this%retrieve_south_halo
     if (.not. this%east_boundary) call this%retrieve_east_halo
+    if (.not. this%west_boundary) call this%retrieve_west_halo
 
-    if (.not. this%west_boundary)  then
-        start = lbound(this%data_3d,1)
+ 
+  end subroutine
+  
+    module subroutine exchange_u_metadata(this)
+    class(exchangeable_t), intent(inout) :: this
+    integer :: n, ny, start
+    !When exchanging for the u-field, we want a full exchange in the x-direction,
+    ! and an exchange in the y-direction of just the outer-most values
+
+    if (.not. this%east_boundary) then
+        n = ubound(this%data_3d,1)
         ny = size(this%data_3d,3)
-        this%data_3d(start:start+halo_size,:,:) = this%halo_west_in(1:halo_size+1,:,1:ny)
+        this%halo_west_in(1:halo_size,:,1:ny)[east_neighbor] = this%meta_data%dqdt_3d(n-(halo_size)-1:n-(halo_size)-1,:,:)
     endif
     
+    if (.not. this%west_boundary) then
+        start = lbound(this%data_3d,1)
+        ny = size(this%data_3d,3)
+        this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%meta_data%dqdt_3d(start+halo_size+1:start+halo_size+1,:,:)
+    endif  
+
+    sync images( neighbors ) !all
+    
+    if (.not. this%east_boundary) call this%retrieve_east_halo_metadata
+    if (.not. this%west_boundary) call this%retrieve_west_halo_metadata
+
  
   end subroutine
   
@@ -353,6 +383,47 @@ contains
       ny = size(this%data_3d,3)
 
       this%data_3d(start:start+halo_size-1,:,:) = this%halo_west_in(1:halo_size,:,1:ny)
+  end subroutine
+
+
+  module subroutine retrieve_north_halo_metadata(this)
+      class(exchangeable_t), intent(inout) :: this
+
+      integer :: n, nx
+      n = ubound(this%meta_data%dqdt_3d,3)
+      nx = size(this%meta_data%dqdt_3d,1)
+
+      this%meta_data%dqdt_3d(:,:,n-halo_size+1:n) = this%halo_north_in(:nx,:,1:halo_size)
+  end subroutine
+
+  module subroutine retrieve_south_halo_metadata(this)
+      class(exchangeable_t), intent(inout) :: this
+
+      integer :: start, nx
+      start = lbound(this%meta_data%dqdt_3d,3)
+      nx = size(this%meta_data%dqdt_3d,1)
+
+      this%meta_data%dqdt_3d(:,:,start:start+halo_size-1) = this%halo_south_in(:nx,:,1:halo_size)
+  end subroutine
+
+  module subroutine retrieve_east_halo_metadata(this)
+      class(exchangeable_t), intent(inout) :: this
+
+      integer :: n, ny
+      n = ubound(this%meta_data%dqdt_3d,1)
+      ny = size(this%meta_data%dqdt_3d,3)
+
+      this%meta_data%dqdt_3d(n-halo_size+1:n,:,:) = this%halo_east_in(1:halo_size,:,1:ny)
+  end subroutine
+
+  module subroutine retrieve_west_halo_metadata(this)
+      class(exchangeable_t), intent(inout) :: this
+
+      integer :: start, ny
+      start = lbound(this%meta_data%dqdt_3d,1)
+      ny = size(this%meta_data%dqdt_3d,3)
+
+      this%meta_data%dqdt_3d(start:start+halo_size-1,:,:) = this%halo_west_in(1:halo_size,:,1:ny)
   end subroutine
 
 end submodule
