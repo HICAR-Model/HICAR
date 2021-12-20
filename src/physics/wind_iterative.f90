@@ -175,8 +175,13 @@ contains
         call calc_updated_winds(domain, lambda, update)
         
         !Exchange u and v, since the outer points are not updated in above function
-        call domain%u%exchange()
-        call domain%v%exchange()
+        if (update) then 
+            call domain%u%exchange_u_metadata()
+            call domain%v%exchange_v_metadata()
+        else
+            call domain%u%exchange_u()
+            call domain%v%exchange_v()
+        endif
         
         call DMDAVecRestoreArrayF90(da,x,lambda, ierr)
         call DMDestroy(da,ierr)
@@ -326,7 +331,7 @@ contains
         call DMDAVecRestoreArrayF90(dm,vec_b,barray, ierr)
     end subroutine ComputeRHS
 
-    subroutine ComputeInitialGuess(ksp,vec_b,ctx,ierr)!,void *ctx)
+    subroutine ComputeInitialGuess(ksp,vec_b,ctx,ierr)
         implicit none
         PetscErrorCode  ierr
         KSP ksp
@@ -339,7 +344,7 @@ contains
         call VecSet(vec_b,i_guess,ierr)
     end subroutine ComputeInitialGuess
 
-    subroutine ComputeMatrix(ksp,arr_A,arr_B,dummy,ierr)!,void *ctx)
+    subroutine ComputeMatrix(ksp,arr_A,arr_B,dummy,ierr)
         implicit none
         PetscErrorCode  ierr
         KSP ksp

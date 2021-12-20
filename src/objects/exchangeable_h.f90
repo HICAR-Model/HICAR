@@ -32,7 +32,9 @@ module exchangeable_interface
     procedure, public :: retrieve
     procedure, public :: exchange
     procedure, public :: exchange_u
+    procedure, public :: exchange_u_metadata
     procedure, public :: exchange_v
+    procedure, public :: exchange_v_metadata
     procedure, public :: set_outputdata
     generic,   public :: initialize=>const
 
@@ -44,6 +46,11 @@ module exchangeable_interface
     procedure :: retrieve_south_halo
     procedure :: retrieve_west_halo
     procedure :: retrieve_east_halo
+
+    procedure :: retrieve_north_halo_metadata
+    procedure :: retrieve_south_halo_metadata
+    procedure :: retrieve_west_halo_metadata
+    procedure :: retrieve_east_halo_metadata
   end type
 
   integer, parameter :: space_dim=3
@@ -87,7 +94,13 @@ module exchangeable_interface
       class(exchangeable_t), intent(inout) :: this
     end subroutine
 
+
     module subroutine exchange_u(this)
+      implicit none
+      class(exchangeable_t), intent(inout) :: this
+    end subroutine
+    
+    module subroutine exchange_u_metadata(this)
       implicit none
       class(exchangeable_t), intent(inout) :: this
     end subroutine
@@ -96,6 +109,12 @@ module exchangeable_interface
       implicit none
       class(exchangeable_t), intent(inout) :: this
     end subroutine
+    
+    module subroutine exchange_v_metadata(this)
+      implicit none
+      class(exchangeable_t), intent(inout) :: this
+    end subroutine
+    
     
     module subroutine put_north(this)
         implicit none
@@ -138,6 +157,28 @@ module exchangeable_interface
         class(exchangeable_t), intent(inout) :: this
     end subroutine
 
+
+
+    module subroutine retrieve_north_halo_metadata(this)
+        implicit none
+        class(exchangeable_t), intent(inout) :: this
+    end subroutine
+
+    module subroutine retrieve_south_halo_metadata(this)
+        implicit none
+        class(exchangeable_t), intent(inout) :: this
+    end subroutine
+
+
+    module subroutine retrieve_east_halo_metadata(this)
+        implicit none
+        class(exchangeable_t), intent(inout) :: this
+    end subroutine
+
+    module subroutine retrieve_west_halo_metadata(this)
+        implicit none
+        class(exchangeable_t), intent(inout) :: this
+    end subroutine
 
   end interface
 
