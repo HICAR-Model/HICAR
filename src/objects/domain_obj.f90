@@ -78,7 +78,7 @@ contains
       call this%interpolate_forcing(forcing)
 
       call initialize_internal_variables(this, options)
-
+      call this%enforce_limits()
       this%model_time = forcing%current_time
 
 
@@ -1944,21 +1944,41 @@ contains
     !! Need to add more variables to the list
     !!
     !! -------------------------------
-    module subroutine enforce_limits(this)
+    module subroutine enforce_limits(this,update_in)
       class(domain_t), intent(inout) :: this
-      if (associated(this%water_vapor%data_3d)           ) where(this%water_vapor%data_3d < 0)             this%water_vapor%data_3d = 0
-      if (associated(this%potential_temperature%data_3d) ) where(this%potential_temperature%data_3d < 0)   this%potential_temperature%data_3d = 0
-      if (associated(this%cloud_water_mass%data_3d)      ) where(this%cloud_water_mass%data_3d < 0)        this%cloud_water_mass%data_3d = 0
-      if (associated(this%cloud_number%data_3d)          ) where(this%cloud_number%data_3d < 0)            this%cloud_number%data_3d = 0
-      if (associated(this%cloud_ice_mass%data_3d)        ) where(this%cloud_ice_mass%data_3d < 0)          this%cloud_ice_mass%data_3d = 0
-      if (associated(this%cloud_ice_number%data_3d)      ) where(this%cloud_ice_number%data_3d < 0)        this%cloud_ice_number%data_3d = 0
-      if (associated(this%rain_mass%data_3d)             ) where(this%rain_mass%data_3d < 0)               this%rain_mass%data_3d = 0
-      if (associated(this%rain_number%data_3d)           ) where(this%rain_number%data_3d < 0)             this%rain_number%data_3d = 0
-      if (associated(this%snow_mass%data_3d)             ) where(this%snow_mass%data_3d < 0)               this%snow_mass%data_3d = 0
-      if (associated(this%snow_number%data_3d)           ) where(this%snow_number%data_3d < 0)             this%snow_number%data_3d = 0
-      if (associated(this%graupel_mass%data_3d)          ) where(this%graupel_mass%data_3d < 0)            this%graupel_mass%data_3d = 0
-      if (associated(this%graupel_number%data_3d)        ) where(this%graupel_number%data_3d < 0)          this%graupel_number%data_3d = 0
+      logical, optional,  intent(in) :: update_in
 
+      logical update
+      update = .False.
+      if (present(update_in)) update = update_in
+
+      if (update) then
+        if (associated(this%water_vapor%meta_data%dqdt_3d)           ) where(this%water_vapor%meta_data%dqdt_3d < 0)             this%water_vapor%meta_data%dqdt_3d = 0
+        if (associated(this%potential_temperature%meta_data%dqdt_3d) ) where(this%potential_temperature%meta_data%dqdt_3d < 0)   this%potential_temperature%meta_data%dqdt_3d = 0
+        if (associated(this%cloud_water_mass%meta_data%dqdt_3d)      ) where(this%cloud_water_mass%meta_data%dqdt_3d < 0)        this%cloud_water_mass%meta_data%dqdt_3d = 0
+        if (associated(this%cloud_number%meta_data%dqdt_3d)          ) where(this%cloud_number%meta_data%dqdt_3d < 0)            this%cloud_number%meta_data%dqdt_3d = 0
+        if (associated(this%cloud_ice_mass%meta_data%dqdt_3d)        ) where(this%cloud_ice_mass%meta_data%dqdt_3d < 0)          this%cloud_ice_mass%meta_data%dqdt_3d = 0
+        if (associated(this%cloud_ice_number%meta_data%dqdt_3d)      ) where(this%cloud_ice_number%meta_data%dqdt_3d < 0)        this%cloud_ice_number%meta_data%dqdt_3d = 0
+        if (associated(this%rain_mass%meta_data%dqdt_3d)             ) where(this%rain_mass%meta_data%dqdt_3d < 0)               this%rain_mass%meta_data%dqdt_3d = 0
+        if (associated(this%rain_number%meta_data%dqdt_3d)           ) where(this%rain_number%meta_data%dqdt_3d < 0)             this%rain_number%meta_data%dqdt_3d = 0
+        if (associated(this%snow_mass%meta_data%dqdt_3d)             ) where(this%snow_mass%meta_data%dqdt_3d < 0)               this%snow_mass%meta_data%dqdt_3d = 0
+        if (associated(this%snow_number%meta_data%dqdt_3d)           ) where(this%snow_number%meta_data%dqdt_3d < 0)             this%snow_number%meta_data%dqdt_3d = 0
+        if (associated(this%graupel_mass%meta_data%dqdt_3d)          ) where(this%graupel_mass%meta_data%dqdt_3d < 0)            this%graupel_mass%meta_data%dqdt_3d = 0
+        if (associated(this%graupel_number%meta_data%dqdt_3d)        ) where(this%graupel_number%meta_data%dqdt_3d < 0)          this%graupel_number%meta_data%dqdt_3d = 0
+      else
+        if (associated(this%water_vapor%data_3d)           ) where(this%water_vapor%data_3d < 0)             this%water_vapor%data_3d = 0
+        if (associated(this%potential_temperature%data_3d) ) where(this%potential_temperature%data_3d < 0)   this%potential_temperature%data_3d = 0
+        if (associated(this%cloud_water_mass%data_3d)      ) where(this%cloud_water_mass%data_3d < 0)        this%cloud_water_mass%data_3d = 0
+        if (associated(this%cloud_number%data_3d)          ) where(this%cloud_number%data_3d < 0)            this%cloud_number%data_3d = 0
+        if (associated(this%cloud_ice_mass%data_3d)        ) where(this%cloud_ice_mass%data_3d < 0)          this%cloud_ice_mass%data_3d = 0
+        if (associated(this%cloud_ice_number%data_3d)      ) where(this%cloud_ice_number%data_3d < 0)        this%cloud_ice_number%data_3d = 0
+        if (associated(this%rain_mass%data_3d)             ) where(this%rain_mass%data_3d < 0)               this%rain_mass%data_3d = 0
+        if (associated(this%rain_number%data_3d)           ) where(this%rain_number%data_3d < 0)             this%rain_number%data_3d = 0
+        if (associated(this%snow_mass%data_3d)             ) where(this%snow_mass%data_3d < 0)               this%snow_mass%data_3d = 0
+        if (associated(this%snow_number%data_3d)           ) where(this%snow_number%data_3d < 0)             this%snow_number%data_3d = 0
+        if (associated(this%graupel_mass%data_3d)          ) where(this%graupel_mass%data_3d < 0)            this%graupel_mass%data_3d = 0
+        if (associated(this%graupel_number%data_3d)        ) where(this%graupel_number%data_3d < 0)          this%graupel_number%data_3d = 0
+      endif
     end subroutine
 
 
@@ -2063,6 +2083,9 @@ contains
 
         ! temporary to hold the variable to be interpolated to
         type(variable_t) :: var_to_update
+        
+        !Ensure that input data for hydrometeors after interpolation have been forced to 0-minimum
+        call this%enforce_limits(update_in=.True.)
 
         ! make sure the dictionary is reset to point to the first variable
         call this%variables_to_force%reset_iterator()
