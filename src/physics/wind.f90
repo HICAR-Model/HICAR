@@ -392,9 +392,9 @@ contains
                              domain%jacobian)
                              
                 !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
-                if (options%parameters%wvar=="") domain%w_real%data_3d = 0.0  
+                if (options%parameters%wvar=="") domain%w_real%dqdt_3d = 0.0  
                              
-                domain%w%meta_data%dqdt_3d = (domain%w_real%data_3d-domain%w%meta_data%dqdt_3d)/domain%jacobian
+                domain%w%meta_data%dqdt_3d = (domain%w_real%dqdt_3d-domain%w%meta_data%dqdt_3d)/domain%jacobian
                 
                 call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
@@ -414,7 +414,7 @@ contains
             call calc_w_real(domain% u %meta_data%dqdt_3d,      &
                              domain% v %meta_data%dqdt_3d,      &
                              domain% w %meta_data%dqdt_3d,      &
-                             domain% w_real %data_3d,      &
+                             domain% w_real %dqdt_3d,           &
                              domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian)
 

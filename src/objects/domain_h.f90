@@ -268,9 +268,10 @@ module domain_interface
     end subroutine
 
     ! Make sure no hydrometeors are getting below 0
-    module subroutine enforce_limits(this)
+    module subroutine enforce_limits(this,update_in)
         implicit none
         class(domain_t), intent(inout) :: this
+        logical, optional, intent(in)  :: update_in
     end subroutine
 
     module subroutine update_delta_fields(this, dt)
