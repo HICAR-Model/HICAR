@@ -12,4 +12,4 @@ docs/doxygen_sqlite3.db
 *~
 *.pyc
 *.ipynb
-*.ipynb_checkpoints*
+*-checkpoint.f90
