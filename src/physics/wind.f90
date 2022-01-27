@@ -303,7 +303,7 @@ contains
             ! endif
 
             if (options%wind%Sx) then
-                call apply_Sx(domain%Sx,domain%TPI,domain%u%data_3d, domain%v%data_3d, domain%w%data_3d,domain%Ri)
+                call apply_Sx(domain%Sx,domain%TPI,domain%u%data_3d, domain%v%data_3d, domain%w%data_3d,domain%Ri,domain%dzdx,domain%dzdy)
             endif 
 
             ! linear winds
@@ -321,7 +321,12 @@ contains
             
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
                 allocate(div(ims:ime,kms:kme,jms:jme))
-                alpha=1.0
+                
+                alpha = 1.0
+                !Following Moussiopoulos, et al. (1988). Bounding low Fr to avoid /0 error and negative Fr
+                alpha = 1.0 - 0.5*(1./max(domain%froude**4,0.00001))*(sqrt(1.0+4.0*max(domain%froude**4,0.00001)) - 1.0) 
+                alpha = sqrt(max(alpha,0.0))
+                alpha = min(max(alpha,0.1),1.0)
 
                 !Call this, passing 0 for w_grid, to get vertical components of vertical motion
                 call calc_w_real(domain% u %data_3d,      &
@@ -335,7 +340,6 @@ contains
                 if (options%parameters%wvar=="") domain%w_real%data_3d = 0.0  
                 
                 domain%w%data_3d = (domain%w_real%data_3d-domain%w%data_3d)/domain%jacobian
-                
                 
                 call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
@@ -363,7 +367,7 @@ contains
             !call make_winds_grid_relative(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d, domain%grid, domain%sintheta, domain%costheta)
             
             if (options%wind%Sx) then
-                call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d,domain%Ri)
+                call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d,domain%Ri,domain%dzdx,domain%dzdy)
             endif 
 
             ! linear winds
@@ -381,8 +385,13 @@ contains
             
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
                 allocate(div(ims:ime,kms:kme,jms:jme))
-                alpha=1.0
-                                
+
+                alpha = 1.0
+                !Following Moussiopoulos, et al. (1988). Bounding low Fr to avoid /0 error and negative Fr
+                alpha = 1.0 - 0.5*(1./max(domain%froude**4,0.00001))*(sqrt(1.0+4.0*max(domain%froude**4,0.00001)) - 1.0) 
+                alpha = sqrt(max(alpha,0.0))
+                alpha = min(max(alpha,0.1),1.0)
+
                 !Call this, passing 0 for w_grid, to get vertical components of vertical motion
                 call calc_w_real(domain% u %meta_data%dqdt_3d,      &
                              domain% v %meta_data%dqdt_3d,      &
@@ -664,9 +673,9 @@ contains
                 enddo
             enddo
         enddo
-        call io_write("stability.nc","data",stability)
         temp_froude = domain%froude
-
+        call io_write("froude.nc","data",domain%froude)
+        call io_write("richardson.nc","richardson",domain%Ri)
         !do n = 1,n_smoothing_passes
         !    do j=jms,jme
         !        ymin = max(j-nsmooth_gridcells, jms)

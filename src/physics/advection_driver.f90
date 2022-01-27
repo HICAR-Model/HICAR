@@ -40,9 +40,11 @@ contains
         implicit none
         type(options_t),intent(inout) :: options
 
-        if (options%physics%advection==kADV_UPWIND) then
+        !if (options%physics%advection==kADV_UPWIND) then
+        !    call upwind_var_request(options)
+        if (options%physics%advection==kADV_MPDATA) then
             call upwind_var_request(options)
-        else if (options%physics%advection==kADV_MPDATA) then
+        else
             call upwind_var_request(options)
         endif
 
