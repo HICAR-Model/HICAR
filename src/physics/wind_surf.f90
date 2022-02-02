@@ -395,8 +395,10 @@ contains
                                  !reversal starts. Can be thought of as minimum terrain slope necesarry for flow reversal
         
         !Calculate horizontal normal vector components of terrain
-        x_norm = -dzdx(ims:ime,kms,jms:jme)/sqrt( dzdx(ims:ime,kms,jms:jme)**2+dzdy(ims:ime,kms,jms:jme)**2)
-        y_norm = -dzdy(ims:ime,kms,jms:jme)/sqrt( dzdx(ims:ime,kms,jms:jme)**2+dzdy(ims:ime,kms,jms:jme)**2)
+        thresh_ang = sqrt( dzdx(ims:ime,kms,jms:jme)**2+dzdy(ims:ime,kms,jms:jme)**2)
+        where(.not.(thresh_ang == 0.)) x_norm = -dzdx(ims:ime,kms,jms:jme)/thresh_ang
+        where(.not.(thresh_ang == 0.)) y_norm = -dzdy(ims:ime,kms,jms:jme)/thresh_ang
+        thresh_ang = 0.
         
         !Pick appropriate Sx for wind direction
         do k = kms, k_cor_top
