@@ -91,7 +91,7 @@ contains
             precip_delta=.True.
         elseif (options%physics%microphysics==kMP_MORRISON) then
             if (this_image()==1) write(*,*) "    Morrison Microphysics"
-            call MORR_TWO_MOMENT_INIT(hail_opt=0)
+            call MORR_TWO_MOMENT_INIT(hail_opt=1)
             precip_delta=.False.
         elseif (options%physics%microphysics==kMP_WSM6) then
             if (this_image()==1) write(*,*) "    WSM6 Microphysics"
@@ -394,6 +394,10 @@ contains
         integer,        intent(in)    :: ims,ime, jms,jme, kms,kme
         integer,        intent(in)    :: ids,ide, jds,jde, kds,kde
 
+        !if (ALL(domain%snow_number%data_3d==0)) domain%snow_number%data_3d=7000
+        !if (ALL(domain%cloud_ice_number%data_3d==0)) domain%cloud_ice_number%data_3d=7000
+        !if (ALL(domain%rain_number%data_3d==0)) domain%rain_number%data_3d=7000
+        !if (ALL(domain%graupel_number%data_3d==0)) domain%graupel_number%data_3d=7000
 
         ! run the thompson microphysics
         if (options%physics%microphysics==kMP_THOMPSON) then
@@ -494,7 +498,7 @@ contains
                              RHO = domain%density%data_3d,                &
                              PII = domain%exner%data_3d,                  &
                              P = domain%pressure%data_3d,                 &
-                             DT_IN = dt, DZ = domain%dz_mass%data_3d,     &
+                             DT_IN = dt, DZ = domain%dz_interface%data_3d,     &
                              W = domain%w%data_3d,                        &
                              RAINNC = domain%accumulated_precipitation%data_2d, &
                              RAINNCV = last_rain, SR=SR,                  &
