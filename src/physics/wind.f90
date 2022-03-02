@@ -36,14 +36,13 @@ contains
     !!
     !!------------------------------------------------------------
 
-    subroutine balance_uvw(u,v,w, jaco_u,jaco_v,jaco_w,dz,dx,jaco,rho,smooth_height, options)
+    subroutine balance_uvw(u,v,w, jaco_u,jaco_v,jaco_w,dz,dx,rho, options)
         implicit none
         real,           intent(inout) :: u(:,:,:), v(:,:,:), w(:,:,:)
-        real,           intent(in)    :: jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), dz(:,:,:), jaco(:,:,:), rho(:,:,:)
-        real,           intent(in)    :: dx, smooth_height
+        real,           intent(in)    :: jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), dz(:,:,:), rho(:,:,:)
+        real,           intent(in)    :: dx
         type(options_t),intent(in)    :: options
 
-        real, allocatable, dimension(:,:) :: rhou, rhov, rhow
         real, allocatable, dimension(:,:,:) :: divergence
         integer :: ims, ime, jms, jme, kms, kme, k
 
@@ -69,7 +68,7 @@ contains
 
         allocate(divergence(ims:ime,kms:kme,jms:jme))
 
-        call calc_divergence(divergence,u,v,w,jaco_u,jaco_v,jaco_w,dz,dx,jaco,rho,smooth_height,options,horz_only=.True.)
+        call calc_divergence(divergence,u,v,w,jaco_u,jaco_v,jaco_w,dz,dx,rho,options,horz_only=.True.)
 
 
         !write(*,*) "maxval of div, in bal: ",maxval(abs(divergence(:,kme,:)))
@@ -98,15 +97,15 @@ contains
                     if (k==kms) then
                         w(:,k,:) = 0 - divergence(:,k,:) * dz(:,k,:) / (jaco_w(:,k,:) * (rho(:,k,:)+rho(:,k+1,:))/2 )
                     elseif (k==kme) then
-                        w(:,k,:) = (w(:,k-1,:) * jaco_w(:,k-1,:) - divergence(:,k,:) * dz(:,k,:))/ (jaco_w(:,k,:) * rho(:,k,:))
+                        w(:,k,:) = (w(:,k-1,:) * ((rho(:,k,:)+rho(:,k-1,:))/2) * jaco_w(:,k-1,:) - divergence(:,k,:) * dz(:,k,:))/ (jaco_w(:,k,:) * rho(:,k,:))
                     else
-                        w(:,k,:) = (w(:,k-1,:) * jaco_w(:,k-1,:) - divergence(:,k,:) * dz(:,k,:))/ (jaco_w(:,k,:) *  (rho(:,k,:)+rho(:,k+1,:))/2 )
+                        w(:,k,:) = (w(:,k-1,:) * ((rho(:,k,:)+rho(:,k-1,:))/2) * jaco_w(:,k-1,:) - divergence(:,k,:) * dz(:,k,:))/ (jaco_w(:,k,:) *  (rho(:,k,:)+rho(:,k+1,:))/2 )
                     endif
                 else
                     if (k==kms) then
                         w(:,k,:) = (0 - divergence(:,k,:) * dz(:,k,:)) / (jaco_w(:,k,:) )
                     else 
-                        w(:,k,:) = ((w(:,k-1,:) * jaco_w(:,k-1,:) - divergence(:,k,:) * dz(:,k,:)))/ (jaco_w(:,k,:) )
+                        w(:,k,:) = (w(:,k-1,:) * jaco_w(:,k-1,:) - divergence(:,k,:) * dz(:,k,:))/ (jaco_w(:,k,:) )
                     end if
                 
                 end if
@@ -136,11 +135,11 @@ contains
     end subroutine balance_uvw
 
 
-    subroutine calc_divergence(div, u, v, w, jaco_u, jaco_v, jaco_w, dz, dx, jaco, rho, smooth_height,options,horz_only)
+    subroutine calc_divergence(div, u, v, w, jaco_u, jaco_v, jaco_w, dz, dx, rho,options,horz_only)
         implicit none
         real,           intent(inout) :: div(:,:,:)
-        real,           intent(in)    :: u(:,:,:), v(:,:,:), w(:,:,:), dz(:,:,:), jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), jaco(:,:,:), rho(:,:,:)
-        real,           intent(in)    :: dx, smooth_height
+        real,           intent(in)    :: u(:,:,:), v(:,:,:), w(:,:,:), dz(:,:,:), jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), rho(:,:,:)
+        real,           intent(in)    :: dx
         logical, optional, intent(in)  :: horz_only
         type(options_t),intent(in)    :: options
 
@@ -168,8 +167,14 @@ contains
         !Constant jacobian at edges
         
         if (options%parameters%advect_density) then
-            u_met = u * jaco_u * (rho(ims:ime-1,:,jms:jme) + rho(ims+1:ime,:,jms:jme))/2
-            v_met = v * jaco_v * (rho(ims:ime,:,jms:jme-1) + rho(ims:ime,:,jms+1:jme))/2
+            u_met(ims+1:ime,:,:) = u(ims+1:ime,:,:) * jaco_u(ims+1:ime,:,:) * (rho(ims:ime-1,:,jms:jme) + rho(ims+1:ime,:,jms:jme))/2
+            u_met(ims,:,:) = u(ims,:,:) * jaco_u(ims,:,:) * rho(ims,:,jms:jme)
+            u_met(ime+1,:,:) = u(ime+1,:,:) * jaco_u(ime+1,:,:) * rho(ime,:,jms:jme)
+
+            v_met(:,:,jms+1:jme) = v(:,:,jms+1:jme) * jaco_v(:,:,jms+1:jme) * (rho(ims:ime,:,jms:jme-1) + rho(ims:ime,:,jms+1:jme))/2
+            v_met(:,:,jms) = v(:,:,jms) * jaco_v(:,:,jms) * rho(:,:,jms)
+            v_met(:,:,jme+1) = v(:,:,jme+1) * jaco_v(:,:,jme+1) * rho(:,:,jme)
+
         else
             u_met = u * jaco_u
             v_met = v * jaco_v
@@ -343,7 +348,7 @@ contains
                 
                 call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
-                                domain%jacobian,domain%density%data_3d,domain%smooth_height,options,horz_only=.False.)
+                                domain%density%data_3d,options,horz_only=.False.)
                 call calc_iter_winds(domain,alpha,div)
 
             endif
@@ -351,7 +356,7 @@ contains
 
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
 
-            call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
+            call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%density%data_3d, options)
             
             call calc_w_real(domain% u %data_3d,      &
                              domain% v %data_3d,      &
@@ -407,7 +412,7 @@ contains
                 
                 call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
-                                domain%jacobian,domain%density%data_3d,domain%smooth_height,options,horz_only=.False.)
+                                domain%density%data_3d,options,horz_only=.False.)
                 call calc_iter_winds(domain,alpha,div,update_in=.True.)
 
             endif
@@ -418,7 +423,7 @@ contains
                              domain% w %meta_data%dqdt_3d,      &
                              domain%jacobian_u, domain%jacobian_v, domain%jacobian_w,         &
                              domain%advection_dz, domain%dx,    &
-                             domain%jacobian, domain%density%data_3d, domain%smooth_height, options)
+                             domain%density%data_3d,options)
                              
             call calc_w_real(domain% u %meta_data%dqdt_3d,      &
                              domain% v %meta_data%dqdt_3d,      &

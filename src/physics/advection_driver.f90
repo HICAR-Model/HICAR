@@ -47,7 +47,6 @@ contains
         else
             call upwind_var_request(options)
         endif
-
     end subroutine
 
     subroutine advect(domain,options,dt)

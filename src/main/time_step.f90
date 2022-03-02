@@ -27,121 +27,7 @@ module time_step
     private
     public :: step
 
-    !  temporary variables used to update the w_real state. This should move to mod_atm_utilities
-    real, allocatable :: lastw(:,:)
-    real, allocatable :: currw(:,:)
-    real, allocatable :: uw(:,:)
-    real, allocatable :: vw(:,:)
-
 contains
-
-
-    !>------------------------------------------------------------
-    !! Update model diagnostic fields
-    !!
-    !! Calculates most model diagnostic fields such as Psfc, 10m height winds and ustar
-    !!
-    !! @param domain    Model domain data structure to be updated
-    !! @param options   Model options (not used at present)
-    !!
-    !!------------------------------------------------------------
-    subroutine diagnostic_update(domain, options)
-        implicit none
-        type(domain_t),  intent(inout)   :: domain
-        type(options_t), intent(in)      :: options
-        integer :: z
-
-        logical :: use_delta_terrain
-
-        associate(ims => domain%ims, ime => domain%ime,                         &
-                  jms => domain%jms, jme => domain%jme,                         &
-                  kms => domain%kms, kme => domain%kme,                         &
-                  exner                 => domain%exner%data_3d,                &
-                  pressure              => domain%pressure%data_3d,             &
-                  pressure_i            => domain%pressure_interface%data_3d,   &
-                  dz_interface          => domain%dz_interface%data_3d,         &
-                  psfc                  => domain%surface_pressure%data_2d,     &
-                  density               => domain%density%data_3d,              &
-                  temperature           => domain%temperature%data_3d,          &
-                  u                     => domain%u%data_3d,                    &
-                  v                     => domain%v%data_3d,                    &
-                  w                     => domain%w%data_3d,                    &
-                  w_real                => domain%w_real%data_3d,               &
-                  u_mass                => domain%u_mass%data_3d,               &
-                  v_mass                => domain%v_mass%data_3d,               &
-                  potential_temperature => domain%potential_temperature%data_3d )
-
-        exner = exner_function(pressure)
-
-        ! domain%p_inter=domain%p
-        ! call update_pressure(domain%p_inter, domain%z, domain%z_inter, domain%t)
-        pressure_i(:,kms+1:kme, :) = (pressure(:,kms:kme-1, :) + pressure(:,kms+1:kme, :)) / 2
-        pressure_i(:, kms, :) = pressure(:, kms, :) + (pressure(:, kms, :) - pressure(:, kms+1, :)) / 2
-        ! this isn't correct, we should be using update_pressure or similar to solve this
-        ! domain%ptop = 2*domain%p(:,nz,:) - domain%p(:,nz-1,:)
-        if (associated(domain%surface_pressure%data_2d)) then
-            psfc = pressure_i(:, kms, :)
-        endif
-
-        temperature = potential_temperature * exner
-
-        if (associated(domain%density%data_3d)) then
-            density =  pressure / &
-                        (Rd * temperature) ! kg/m^3
-        endif
-        if (associated(domain%u_mass%data_3d)) then
-            u_mass = (u(ims+1:ime+1,:,:) + u(ims:ime,:,:)) / 2
-        endif
-        if (associated(domain%v_mass%data_3d)) then
-            v_mass = (v(:,:,jms+1:jme+1) + v(:,:,jms:jme)) / 2
-        endif
-
-
-    ! NOTE: all code below is not implemented in ICAR 2.0 yet
-    ! it is left as a reminder of what needs to be done, and example when the time comes
-    !
-    !     ! update mut
-    !
-    !     domain%p_inter=domain%p
-    !     call update_pressure(domain%p_inter, domain%z, domain%z_inter, domain%t)
-    !     domain%psfc = domain%p_inter(:,1,:)
-    !     ! technically this isn't correct, we should be using update_pressure or similar to solve this
-    !     domain%ptop = 2*domain%p(:,nz,:) - domain%p(:,nz-1,:)
-    !
-    !     ! dry mass in the gridcell is equivalent to the difference in pressure from top to bottom
-    !     domain%mut(:,1:nz-1,:) = domain%p_inter(:,1:nz-1,:) - domain%p_inter(:,2:nz,:)
-    !     domain%mut(:,nz,:) = domain%p_inter(:,nz,:) - domain%ptop
-    !
-        if (.not.allocated(lastw)) then
-            allocate( lastw( ims+1:ime-1, jms+1:jme-1))
-            allocate( currw( ims+1:ime-1, jms+1:jme-1))
-            allocate(    uw( ims+1:ime,   jms+1:jme-1))
-            allocate(    vw( ims+1:ime-1, jms+1:jme  ))
-        endif
-
-        ! temporary constant
-        if (associated(domain%roughness_z0%data_2d)) then
-            ! use log-law of the wall to convert from first model level to surface
-            currw = karman / log((domain%z%data_3d(ims+1:ime-1,kms,jms+1:jme-1) - domain%terrain%data_2d(ims+1:ime-1,jms+1:jme-1)) / domain%roughness_z0%data_2d(ims+1:ime-1,jms+1:jme-1))
-            ! use log-law of the wall to convert from surface to 10m height
-            lastw = log(10.0 / domain%roughness_z0%data_2d(ims+1:ime-1,jms+1:jme-1)) / karman
-        endif
-
-        if (associated(domain%u_10m%data_2d)) then
-            domain%ustar        (ims+1:ime-1,jms+1:jme-1) = u_mass      (ims+1:ime-1,kms,jms+1:jme-1) * currw
-            domain%u_10m%data_2d(ims+1:ime-1,jms+1:jme-1) = domain%ustar(ims+1:ime-1,jms+1:jme-1)     * lastw
-            domain%ustar        (ims+1:ime-1,jms+1:jme-1) = v_mass      (ims+1:ime-1,kms,jms+1:jme-1) * currw
-            domain%v_10m%data_2d(ims+1:ime-1,jms+1:jme-1) = domain%ustar(ims+1:ime-1,jms+1:jme-1)     * lastw
-        endif
-
-        if (allocated(domain%ustar)) then
-            ! now calculate master ustar based on U and V combined in quadrature
-            domain%ustar(ims+1:ime-1,jms+1:jme-1) = sqrt(u_mass(ims+1:ime-1,kms,jms+1:jme-1)**2 + v_mass(ims+1:ime-1,kms,jms+1:jme-1)**2) * currw
-        endif
-
-        end associate
-
-    end subroutine diagnostic_update
 
 
     !>------------------------------------------------------------
@@ -418,9 +304,6 @@ contains
                 dt = end_time - domain%model_time
             endif
 
-            ! ensure internal model consistency
-            call diagnostic_update(domain, options)
-
 
             ! if an interactive run was requested than print status updates everytime at least 5% of the progress has been made
             if (options%parameters%interactive .and. (this_image()==1)) then
@@ -468,7 +351,7 @@ contains
 
                 ! ! apply/update boundary conditions including internal wind and pressure changes.
                 call domain%apply_forcing(dt)
-                                
+ 
                 !If we are in the last ~10 updates of a time step and a variable drops below 0, we have probably over-shot a value of 0. Force back to 0
                 if ((end_time%seconds() - domain%model_time%seconds()) < (dt%seconds()*10)) then
                     call domain%enforce_limits()

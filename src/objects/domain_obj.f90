@@ -10,7 +10,7 @@
 submodule(domain_interface) domain_implementation
     use assertions_mod,       only : assert, assertions
     use mod_atm_utilities,    only : exner_function, update_pressure
-    use icar_constants,       only : kVARS, kLC_LAND
+    use icar_constants,       only : Rd, karman, kVARS, kLC_LAND
     use string,               only : str
     use co_util,              only : broadcast
     use io_routines,          only : io_write
@@ -95,11 +95,111 @@ contains
       endif
 
       ! - - - - - - - - - - - - - - - - - - -  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      call diagnostic_update(this,options)
 
     end subroutine
 
 
+    !>------------------------------------------------------------
+    !! Update model diagnostic fields
+    !!
+    !! Calculates most model diagnostic fields such as Psfc, 10m height winds and ustar
+    !!
+    !! @param domain    Model domain data structure to be updated
+    !! @param options   Model options (not used at present)
+    !!
+    !!------------------------------------------------------------
+    subroutine diagnostic_update(this, options)
+        implicit none
+        class(domain_t),  intent(inout)   :: this
+        type(options_t), intent(in)      :: options
+        integer :: z
+        real, allocatable :: temp_1(:,:), temp_2(:,:)
+        logical :: use_delta_terrain
 
+        associate(ims => this%ims, ime => this%ime,                         &
+                  jms => this%jms, jme => this%jme,                         &
+                  kms => this%kms, kme => this%kme,                         &
+                  exner                 => this%exner%data_3d,                &
+                  pressure              => this%pressure%data_3d,             &
+                  pressure_i            => this%pressure_interface%data_3d,   &
+                  dz_interface          => this%dz_interface%data_3d,         &
+                  psfc                  => this%surface_pressure%data_2d,     &
+                  density               => this%density%data_3d,              &
+                  temperature           => this%temperature%data_3d,          &
+                  u                     => this%u%data_3d,                    &
+                  v                     => this%v%data_3d,                    &
+                  u_mass                => this%u_mass%data_3d,               &
+                  v_mass                => this%v_mass%data_3d,               &
+                  potential_temperature => this%potential_temperature%data_3d )
+
+        exner = exner_function(pressure)
+
+        ! domain%p_inter=domain%p
+        ! call update_pressure(domain%p_inter, domain%z, domain%z_inter, domain%t)
+        pressure_i(:,kms+1:kme, :) = (pressure(:,kms:kme-1, :) + pressure(:,kms+1:kme, :)) / 2
+        pressure_i(:, kms, :) = pressure(:, kms, :) + (pressure(:, kms, :) - pressure(:, kms+1, :)) / 2
+        ! this isn't correct, we should be using update_pressure or similar to solve this
+        ! domain%ptop = 2*domain%p(:,nz,:) - domain%p(:,nz-1,:)
+        if (associated(this%surface_pressure%data_2d)) then
+            psfc = pressure_i(:, kms, :)
+        endif
+
+        temperature = potential_temperature * exner
+
+        if (associated(this%density%data_3d)) then
+            density =  pressure / &
+                        (Rd * temperature) ! kg/m^3
+        endif
+        if (associated(this%u_mass%data_3d)) then
+            u_mass = (u(ims+1:ime+1,:,:) + u(ims:ime,:,:)) / 2
+        endif
+        if (associated(this%v_mass%data_3d)) then
+            v_mass = (v(:,:,jms+1:jme+1) + v(:,:,jms:jme)) / 2
+        endif
+
+
+    ! NOTE: all code below is not implemented in ICAR 2.0 yet
+    ! it is left as a reminder of what needs to be done, and example when the time comes
+    !
+    !     ! update mut
+    !
+    !     domain%p_inter=domain%p
+    !     call update_pressure(domain%p_inter, domain%z, domain%z_inter, domain%t)
+    !     domain%psfc = domain%p_inter(:,1,:)
+    !     ! technically this isn't correct, we should be using update_pressure or similar to solve this
+    !     domain%ptop = 2*domain%p(:,nz,:) - domain%p(:,nz-1,:)
+    !
+    !     ! dry mass in the gridcell is equivalent to the difference in pressure from top to bottom
+    !     domain%mut(:,1:nz-1,:) = domain%p_inter(:,1:nz-1,:) - domain%p_inter(:,2:nz,:)
+    !     domain%mut(:,nz,:) = domain%p_inter(:,nz,:) - domain%ptop
+    !
+        allocate( temp_1( ims+1:ime-1, jms+1:jme-1))
+        allocate( temp_2( ims+1:ime-1, jms+1:jme-1))
+
+        ! temporary constant
+        if (associated(this%roughness_z0%data_2d)) then
+            ! use log-law of the wall to convert from first model level to surface
+            temp_1 = karman / log((this%z%data_3d(ims+1:ime-1,kms,jms+1:jme-1) - this%terrain%data_2d(ims+1:ime-1,jms+1:jme-1)) / this%roughness_z0%data_2d(ims+1:ime-1,jms+1:jme-1))
+            ! use log-law of the wall to convert from surface to 10m height
+            temp_2 = log(10.0 / this%roughness_z0%data_2d(ims+1:ime-1,jms+1:jme-1)) / karman
+        endif
+
+        if (associated(this%u_10m%data_2d)) then
+            this%ustar        (ims+1:ime-1,jms+1:jme-1) = u_mass      (ims+1:ime-1,kms,jms+1:jme-1) * temp_1
+            this%u_10m%data_2d(ims+1:ime-1,jms+1:jme-1) = this%ustar(ims+1:ime-1,jms+1:jme-1)     * temp_2
+            this%ustar        (ims+1:ime-1,jms+1:jme-1) = v_mass      (ims+1:ime-1,kms,jms+1:jme-1) * temp_1
+            this%v_10m%data_2d(ims+1:ime-1,jms+1:jme-1) = this%ustar(ims+1:ime-1,jms+1:jme-1)     * temp_2
+        endif
+
+        if (allocated(this%ustar)) then
+            ! now calculate master ustar based on U and V combined in quadrature
+            this%ustar(ims+1:ime-1,jms+1:jme-1) = sqrt(u_mass(ims+1:ime-1,kms,jms+1:jme-1)**2 + v_mass(ims+1:ime-1,kms,jms+1:jme-1)**2) * temp_1
+        endif
+
+        end associate
+
+    end subroutine diagnostic_update
 
 
 
@@ -185,15 +285,15 @@ contains
         if (0<opt%vars_to_allocate( kVARS%water_vapor) )                call setup(this%water_vapor,              this%grid,     forcing_var=opt%parameters%qvvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%potential_temperature) )      call setup(this%potential_temperature,    this%grid,     forcing_var=opt%parameters%tvar,       list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%cloud_water) )                call setup(this%cloud_water_mass,         this%grid,     forcing_var=opt%parameters%qcvar,      list=this%variables_to_force, force_boundaries=.True.)
-        if (0<opt%vars_to_allocate( kVARS%cloud_number_concentration))  call setup(this%cloud_number,             this%grid )
+        if (0<opt%vars_to_allocate( kVARS%cloud_number_concentration))  call setup(this%cloud_number,             this%grid,     forcing_var=opt%parameters%qncvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%cloud_ice) )                  call setup(this%cloud_ice_mass,           this%grid,     forcing_var=opt%parameters%qivar,      list=this%variables_to_force, force_boundaries=.True.)
-        if (0<opt%vars_to_allocate( kVARS%ice_number_concentration))    call setup(this%cloud_ice_number,         this%grid )
+        if (0<opt%vars_to_allocate( kVARS%ice_number_concentration))    call setup(this%cloud_ice_number,         this%grid,     forcing_var=opt%parameters%qnivar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%rain_in_air) )                call setup(this%rain_mass,                this%grid,     forcing_var=opt%parameters%qrvar,      list=this%variables_to_force, force_boundaries=.True.)
-        if (0<opt%vars_to_allocate( kVARS%rain_number_concentration))   call setup(this%rain_number,              this%grid )
+        if (0<opt%vars_to_allocate( kVARS%rain_number_concentration))   call setup(this%rain_number,              this%grid,     forcing_var=opt%parameters%qnrvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%snow_in_air) )                call setup(this%snow_mass,                this%grid,     forcing_var=opt%parameters%qsvar,      list=this%variables_to_force, force_boundaries=.True.)
-        if (0<opt%vars_to_allocate( kVARS%snow_number_concentration) )  call setup(this%snow_number,              this%grid )
+        if (0<opt%vars_to_allocate( kVARS%snow_number_concentration) )  call setup(this%snow_number,              this%grid,     forcing_var=opt%parameters%qnsvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%graupel_in_air) )             call setup(this%graupel_mass,             this%grid,     forcing_var=opt%parameters%qgvar,      list=this%variables_to_force, force_boundaries=.True.)
-        if (0<opt%vars_to_allocate( kVARS%graupel_number_concentration))call setup(this%graupel_number,           this%grid )
+        if (0<opt%vars_to_allocate( kVARS%graupel_number_concentration))call setup(this%graupel_number,           this%grid,     forcing_var=opt%parameters%qngvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%precipitation) )              call setup(this%accumulated_precipitation,this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%convective_precipitation) )   call setup(this%accumulated_convective_pcp,this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%snowfall) )                   call setup(this%accumulated_snowfall,     this%grid2d )

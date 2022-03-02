@@ -563,14 +563,16 @@ contains
         integer :: name_unit, i, j
         character(len=MAXVARLENGTH) :: landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar,zvar,zbvar,  &
                                         hgt_hi,lat_hi,lon_hi,ulat_hi,ulon_hi,vlat_hi,vlon_hi,           &
-                                        pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qgvar,qsvar,hgtvar,shvar,lhvar,pblhvar,   &
+                                        pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qgvar,qsvar,            &
+                                        qncvar,qnivar,qnrvar,qngvar,qnsvar,hgtvar,shvar,lhvar,pblhvar,  &
                                         psvar, pslvar, &
                                         soiltype_var, soil_t_var,soil_vwc_var,soil_deept_var,           &
                                         vegtype_var,vegfrac_var, linear_mask_var, nsq_calibration_var,  &
                                         swdown_var, lwdown_var, sst_var, rain_var, time_var, sinalpha_var, cosalpha_var, &
                                         lat_ext, lon_ext, swe_ext, hs_ext, tss_ext, z_ext, time_ext
 
-        namelist /var_list/ pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qgvar,qsvar,hgtvar,shvar,lhvar,pblhvar,   &
+        namelist /var_list/ pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qgvar,qsvar,qncvar,qnivar,qnrvar,qngvar,qnsvar,&
+                            hgtvar,shvar,lhvar,pblhvar,                                     &
                             landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar,zvar,zbvar, &
                             psvar, pslvar, &
                             hgt_hi,lat_hi,lon_hi,ulat_hi,ulon_hi,vlat_hi,vlon_hi,           &
@@ -602,6 +604,11 @@ contains
         qrvar=""
         qsvar=""
         qgvar=""
+        qncvar=""
+        qnivar=""
+        qnrvar=""
+        qnsvar=""
+        qngvar=""
         zvar=""
         zbvar=""
         shvar=""
@@ -707,6 +714,11 @@ contains
         options%qrvar       = qrvar     ; options%vars_to_read(i) = qrvar;      options%dim_list(i) = 3;    i = i + 1
         options%qsvar       = qsvar     ; options%vars_to_read(i) = qsvar;      options%dim_list(i) = 3;    i = i + 1
         options%qgvar       = qgvar     ; options%vars_to_read(i) = qgvar;      options%dim_list(i) = 3;    i = i + 1
+        options%qncvar       = qncvar     ; options%vars_to_read(i) = qncvar;      options%dim_list(i) = 3;    i = i + 1
+        options%qnivar       = qnivar     ; options%vars_to_read(i) = qnivar;      options%dim_list(i) = 3;    i = i + 1
+        options%qnrvar       = qnrvar     ; options%vars_to_read(i) = qnrvar;      options%dim_list(i) = 3;    i = i + 1
+        options%qnsvar       = qnsvar     ; options%vars_to_read(i) = qnsvar;      options%dim_list(i) = 3;    i = i + 1
+        options%qngvar       = qngvar     ; options%vars_to_read(i) = qngvar;      options%dim_list(i) = 3;    i = i + 1
 
         ! vertical coordinate
         ! if (options%time_varying_z) then
