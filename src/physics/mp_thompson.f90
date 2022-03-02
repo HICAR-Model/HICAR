@@ -38,7 +38,7 @@
 !+---+-----------------------------------------------------------------+
 !
       MODULE module_mp_thompson
-	  use options_types, only: mp_options_type
+        use options_types, only: mp_options_type
 
 !       USE module_wrf_error
 ! 		USE module_mp_radar
@@ -56,7 +56,7 @@
 !..Densities of rain, snow, graupel, and cloud ice.
       REAL, PARAMETER, PRIVATE:: rho_w = 1000.0
       REAL, PARAMETER, PRIVATE:: rho_s = 100.0
- !     REAL, PARAMETER, PRIVATE:: rho_g = 500.0   ! trude commented out for changing from parameter to input variable
+!      REAL, PARAMETER, PRIVATE:: rho_g = 500.0   ! trude commented out for changing from parameter to input variable
       REAL, PARAMETER, PRIVATE:: rho_i = 890.0
 
 !..Prescribed number of cloud droplets.  Set according to known data or

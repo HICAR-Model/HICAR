@@ -125,6 +125,7 @@ program icar
             if (this_image()==1) write(*,*) "Updating Boundary conditions"
             call boundary%update_forcing(options)
             call domain%interpolate_forcing(boundary, update=.True.)
+            call domain%diagnostic_update(options)
             call wind_timer%start()
             call update_winds(domain, options)
             call wind_timer%stop()

@@ -201,6 +201,7 @@ module domain_interface
     procedure :: enforce_limits
 
     procedure :: get_initial_conditions
+    procedure :: diagnostic_update
     procedure :: interpolate_forcing
     procedure :: interpolate_external
     procedure :: update_delta_fields
@@ -227,6 +228,12 @@ module domain_interface
         class(domain_t),  intent(inout) :: this
         type(boundary_t), intent(inout) :: forcing
         type(boundary_t), intent(inout), optional :: external_conditions  ! external data such as SWE
+        type(options_t),  intent(in)    :: options
+    end subroutine
+
+    module subroutine diagnostic_update(this,options)
+        implicit none
+        class(domain_t),  intent(inout) :: this
         type(options_t),  intent(in)    :: options
     end subroutine
 
