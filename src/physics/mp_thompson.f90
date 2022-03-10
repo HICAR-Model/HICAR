@@ -1274,6 +1274,7 @@
             L_qi(k) = .false.
          endif
 
+         mvd_r(k) = 0.0 ! must be initialized or a later test can crash where qr1d(k)<=R1
          if (qr1d(k) .gt. R1) then
             no_micro = .false.
             rr(k) = qr1d(k)*rho(k)

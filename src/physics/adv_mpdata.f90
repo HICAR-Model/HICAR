@@ -151,7 +151,7 @@ contains
                             (q(ims+1:ime,j,i+1) + q(ims+1:ime,j,i-1) + &
                              q(ims:ime-1,j,i+1) + q(ims:ime-1,j,i-1)+ 1e-10)
                         edge_v(ims+1:ime) = (1/4.0)*(v(ims+1:ime,j,i) + v(ims+1:ime,j,i+1) + v(ims:ime-1,j,i) + v(ims:ime-1,j,i+1))
-                        u2(:,j,i) = u2(:,j,i) - u(:,j,i)*edge_v(ims+1:ime)*edge_q(ims+1:ime)/( G(ims+1:ime,j,i) + G(ims:ime-1,j,i) )
+                        u2(:,j,i) = u2(:,j,i) - 0.5*u(:,j,i)*edge_v(ims+1:ime)*edge_q(ims+1:ime)/( G(ims+1:ime,j,i) + G(ims:ime-1,j,i) )
                     endif
                     
                     edge_v = 0
@@ -163,7 +163,7 @@ contains
                             (q(ims+1:ime,j+1,i) + q(ims+1:ime,j-1,i) + &
                              q(ims:ime-1,j+1,i) + q(ims:ime-1,j-1,i)+ 1e-10)
                         edge_v(ims+1:ime) = (1/4.0)*(w(ims+1:ime,j,i) + w(ims+1:ime,j-1,i) + w(ims:ime-1,j,i) + w(ims:ime-1,j-1,i))
-                        u2(:,j,i) = u2(:,j,i) - u(:,j,i)*edge_v(ims+1:ime)*edge_q(ims+1:ime)/( G(ims+1:ime,j,i) + G(ims:ime-1,j,i) )
+                        u2(:,j,i) = u2(:,j,i) - 0.5*u(:,j,i)*edge_v(ims+1:ime)*edge_q(ims+1:ime)/( G(ims+1:ime,j,i) + G(ims:ime-1,j,i) )
                     endif
                 endif
                 
@@ -192,7 +192,7 @@ contains
                              q(ims:ime-2,j,i) + q(ims:ime-2,j,i-1)+ 1e-10)
                     edge_v(ims+1:ime-1) = (1/4.0)* &
                                         (u(ims+2:ime,j,i) + u(ims+2:ime,j,i-1) + u(ims+1:ime-1,j,i) + u(ims+1:ime-1,j,i-1))
-                    v2(:,j,i) = v2(:,j,i) - v(:,j,i)*edge_v*edge_q/( G(:,j,i) + G(:,j,i-1) )
+                    v2(:,j,i) = v2(:,j,i) - 0.5*v(:,j,i)*edge_v*edge_q/( G(:,j,i) + G(:,j,i-1) )
                     
                     edge_v = 0
                     edge_q = 0
@@ -203,7 +203,7 @@ contains
                             (q(:,j+1,i-1) + q(:,j-1,i) + &
                              q(:,j+1,i) + q(:,j-1,i-1)+ 1e-10)
                         edge_v = (1/4.0)*(w(:,j,i) + w(:,j-1,i) + w(:,j,i-1) + w(:,j-1,i-1))
-                        v2(:,j,i) = v2(:,j,i) - v(:,j,i)*edge_v*edge_q/( G(:,j,i) + G(:,j,i-1) )
+                        v2(:,j,i) = v2(:,j,i) - 0.5*v(:,j,i)*edge_v*edge_q/( G(:,j,i) + G(:,j,i-1) )
                     endif
                 endif
                 
@@ -233,7 +233,7 @@ contains
                              q(ims:ime-2,j,i) + q(ims:ime-2,j+1,i)+ 1e-10)
                     edge_v(ims+1:ime-1) = (1/4.0)* &
                                         (u(ims+2:ime,j,i) + u(ims+2:ime,j+1,i) + u(ims+1:ime-1,j,i) + u(ims+1:ime-1,j+1,i))
-                    w2(:,j,i) = w2(:,j,i) - w(:,j,i)*edge_v*edge_q/( G(:,j+1,i) + G(:,j,i) )
+                    w2(:,j,i) = w2(:,j,i) - 0.5*w(:,j,i)*edge_v*edge_q/( G(:,j+1,i) + G(:,j,i) )
                     
                     edge_v = 0
                     edge_q = 0
@@ -244,7 +244,7 @@ contains
                             (q(:,j,i+1) + q(:,j+1,i-1) + &
                              q(:,j+1,i+1) + q(:,j,i-1)+ 1e-10)
                         edge_v = (1/4.0)*(v(:,j,i) + v(:,j+1,i) + v(:,j,i+1) + v(:,j+1,i+1))
-                        w2(:,j,i) = w2(:,j,i) - w(:,j,i)*edge_v*edge_q/( G(:,j+1,i) + G(:,j,i) )
+                        w2(:,j,i) = w2(:,j,i) - 0.5*w(:,j,i)*edge_v*edge_q/( G(:,j+1,i) + G(:,j,i) )
                     endif
                 endif
             end do
@@ -375,7 +375,9 @@ contains
                 ! so do that here before passing to pseudo-velocity calculations
                 call mpdata_fluxes(q2, U_m, V_m, (W_m/dz), u2,v2,w2, ims,ime,kms,kme,jms,jme,(jaco*rho))
                 ! and un-normalize, since upwind advection scheme includes dz
-                call upwind_advection(q2, 0.6*u2, 0.6*v2, 0.6*(w2*dz), rho, q,dz,ims,ime,kms,kme,jms,jme,jaco)
+                ! Since pseudo-velocities cannot be gaurenteed to be non-divergent, we assume worst-case and multiply by 0.5 to
+                ! ensure stability (from Smolarkiewicz 1984, after Eq. 24)
+                call upwind_advection(q2, 0.5*u2, 0.5*v2, 0.5*(w2*dz), rho, q,dz,ims,ime,kms,kme,jms,jme,jaco)
             endif
             
             !  
@@ -413,6 +415,40 @@ contains
         ! originally used to permit the order of dimensions in advection to be rotated
         order    = 0
     end subroutine mpdata_init
+    
+    
+    subroutine test_divergence(dz, ims, ime, kms, kme, jms, jme)
+        implicit none
+        real, intent(in) :: dz(ims:ime,kms:kme,jms:jme)
+        integer, intent(in) :: ims, ime, jms, jme, kms, kme
+
+        real, allocatable :: du(:,:), dv(:,:), dw(:,:)
+        integer :: i,j,k
+
+        allocate(du(ims+1:ime-1,jms+1:jme-1))
+        allocate(dv(ims+1:ime-1,jms+1:jme-1))
+        allocate(dw(ims+1:ime-1,jms+1:jme-1))
+
+        do i=ims+1,ime-1
+            do j=jms+1,jme-1
+                do k=kms,kme
+                    du(i,j) = (U_m(i+1,k,j)-U_m(i,k,j))
+                    dv(i,j) = (V_m(i,k,j+1)-V_m(i,k,j))
+                    if (k==kms) then
+                        dw(i,j) = (W_m(i,k,j))/dz(i,k,j)
+                    else
+                        dw(i,j) = (W_m(i,k,j)-W_m(i,k-1,j))/dz(i,k,j)
+                    endif
+                    if (abs(du(i,j) + dv(i,j) + dw(i,j)) > 1e-3) then
+                        print*, this_image(), i,k,j , abs(du(i,j) + dv(i,j) + dw(i,j))
+                        print*, "Winds are not balanced on entry to advect"
+                        !error stop
+                    endif
+                enddo
+            enddo
+        enddo
+
+    end subroutine test_divergence
     
 !   primary entry point, advect all scalars in domain
     subroutine mpdata(domain,options,dt)
@@ -452,22 +488,18 @@ contains
         rho = 1
         if (options%parameters%advect_density) rho = domain%density%data_3d
         
-        !       calculate U,V,W normalized for dt/dx
-        !if (options%advect_density) then
-        !    U_m=domain%ur(2:nx,:,:)*(dt/dx**2)
-        !    V_m=domain%vr(:,:,2:ny)*(dt/dx**2)
-!           note, even though dz!=dx, W is computed from the divergence in U/V so it is scaled by dx/dz already
-        !    W_m=domain%wr*(dt/dx**2)
-        !else
-            U_m = domain%u%data_3d(ims+1:ime,:,:) * dt * (rho(ims+1:ime,:,:)+rho(ims:ime-1,:,:))*0.5 * &
+        U_m = domain%u%data_3d(ims+1:ime,:,:) * dt * (rho(ims+1:ime,:,:)+rho(ims:ime-1,:,:))*0.5 * &
                     domain%jacobian_u(ims+1:ime,:,:) / dx
-            V_m = domain%v%data_3d(:,:,jms+1:jme) * dt * (rho(:,:,jms+1:jme)+rho(:,:,jms:jme-1))*0.5 * &
+        V_m = domain%v%data_3d(:,:,jms+1:jme) * dt * (rho(:,:,jms+1:jme)+rho(:,:,jms:jme-1))*0.5 * &
                     domain%jacobian_v(:,:,jms+1:jme) / dx
-            W_m(:,kms:kme-1,:) = domain%w%data_3d(:,kms:kme-1,:) * dt * domain%jacobian_w(:,kms:kme-1,:) * &
+        W_m(:,kms:kme-1,:) = domain%w%data_3d(:,kms:kme-1,:) * dt * domain%jacobian_w(:,kms:kme-1,:) * &
                     (rho(:,kms+1:kme,:)+rho(:,kms:kme-1,:)) * 0.5
-            W_m(:,kme,:) = domain%w%data_3d(:,kme,:) * dt * domain%jacobian_w(:,kme,:) * rho(:,kme,:)
-        !endif
-        
+        W_m(:,kme,:) = domain%w%data_3d(:,kme,:) * dt * domain%jacobian_w(:,kme,:) * rho(:,kme,:)
+
+        if (options%parameters%debug) then
+            call test_divergence(domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme)
+        endif
+
         if (options%vars_to_advect(kVARS%water_vapor)>0)                  call advect3d(domain%water_vapor%data_3d,             rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
         if (options%vars_to_advect(kVARS%cloud_water)>0)                  call advect3d(domain%cloud_water_mass%data_3d,        rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
         if (options%vars_to_advect(kVARS%rain_in_air)>0)                  call advect3d(domain%rain_mass%data_3d,               rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)

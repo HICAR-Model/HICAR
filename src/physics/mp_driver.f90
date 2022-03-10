@@ -394,10 +394,10 @@ contains
         integer,        intent(in)    :: ims,ime, jms,jme, kms,kme
         integer,        intent(in)    :: ids,ide, jds,jde, kds,kde
 
-        !if (ALL(domain%snow_number%data_3d==0)) domain%snow_number%data_3d=7000
-        !if (ALL(domain%cloud_ice_number%data_3d==0)) domain%cloud_ice_number%data_3d=7000
-        !if (ALL(domain%rain_number%data_3d==0)) domain%rain_number%data_3d=7000
-        !if (ALL(domain%graupel_number%data_3d==0)) domain%graupel_number%data_3d=7000
+        where ((domain%snow_number%data_3d==0)) domain%snow_number%data_3d=7000
+        where ((domain%cloud_ice_number%data_3d==0)) domain%cloud_ice_number%data_3d=7000
+        where ((domain%rain_number%data_3d==0)) domain%rain_number%data_3d=7000
+        where ((domain%graupel_number%data_3d==0)) domain%graupel_number%data_3d=7000
 
         ! run the thompson microphysics
         if (options%physics%microphysics==kMP_THOMPSON) then
