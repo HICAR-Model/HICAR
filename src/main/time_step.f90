@@ -312,7 +312,7 @@ contains
                              domain% w %meta_data%dqdt_3d,      &
                              domain%jacobian_u, domain%jacobian_v, domain%jacobian_w,         &
                              domain%advection_dz, domain%dx,    &
-                             domain%density%data_3d,domain%jacobian,options) 
+                             domain%density%data_3d,options) 
             endif
 
             ! if an interactive run was requested than print status updates everytime at least 5% of the progress has been made
