@@ -288,9 +288,7 @@ contains
         real, allocatable, dimension(:,:,:) :: temparray, alpha, div
         integer :: nx, ny, nz, i, j
         integer :: ims, ime, jms, jme, kms, kme
-        character(len=10) :: file_id
 
-        write(file_id, '(i0)') this_image()
 
         ims = lbound(domain%w%data_3d,1)
         ime = ubound(domain%w%data_3d,1)
@@ -435,7 +433,6 @@ contains
                              domain%jacobian)
 
         endif
-        call io_write("alpha"//file_id//".nc", "alpha", alpha) 
 
     end subroutine update_winds
     
@@ -600,9 +597,6 @@ contains
         real :: z_top, z_bot, th_top, th_bot, obstacle_height
         integer :: ymin, ymax, xmin, xmax, n_smoothing_passes, nsmooth_gridcells
         
-        character(len=10) :: file_id
-
-        write(file_id, '(i0)') this_image()
 
         n_smoothing_passes = 5
         nsmooth_gridcells = 20 !int(500 / domain%dx)
@@ -706,9 +700,6 @@ contains
                 enddo
             enddo
         enddo
-        call io_write("froude"//file_id//".nc", "Froude", domain%froude) 
-        call io_write("temp_froude"//file_id//".nc", "temp_froude", temp_froude) 
-        call io_write("stability"//file_id//".nc", "stability", stability) 
         !do n = 1,n_smoothing_passes
         !    do j=jms,jme
         !        ymin = max(j-nsmooth_gridcells, jms)
