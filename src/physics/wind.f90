@@ -22,7 +22,7 @@ module wind
     
     implicit none
     private
-    public::update_winds, init_winds
+    public:: balance_uvw, update_winds, init_winds
     real, parameter::deg2rad=0.017453293 !2*pi/360
     real, parameter :: rad2deg=57.2957779371
     real, parameter :: DEFAULT_FR_L = 1000.0
@@ -287,6 +287,9 @@ contains
         real, allocatable, dimension(:,:,:) :: temparray, alpha, div
         integer :: nx, ny, nz, i, j
         integer :: ims, ime, jms, jme, kms, kme
+        character(len=10) :: file_id
+
+        write(file_id, '(i0)') this_image()
 
         ims = lbound(domain%w%data_3d,1)
         ime = ubound(domain%w%data_3d,1)
@@ -329,11 +332,10 @@ contains
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
                 allocate(div(ims:ime,kms:kme,jms:jme))
                 
-                alpha = 1.0
-                !Following Moussiopoulos, et al. (1988). Bounding low Fr to avoid /0 error and negative Fr
-                alpha = 1.0 - 0.5*(1./max(domain%froude**4,0.00001))*(sqrt(1.0+4.0*max(domain%froude**4,0.00001)) - 1.0) 
-                alpha = sqrt(max(alpha,0.0))
-                alpha = min(max(alpha,0.1),1.0)
+                call calc_alpha(alpha, domain%froude, &
+                            domain%ims, domain%ime,  domain%kms, domain%kme, domain%jms, domain%jme, &
+                            domain%its, domain%ite, domain%jts, domain%jte, &
+                            domain%ids, domain%ide, domain%jds, domain%jde)
 
                 !Call this, passing 0 for w_grid, to get vertical components of vertical motion
                 call calc_w_real(domain% u %data_3d,      &
@@ -345,7 +347,6 @@ contains
                              
                 !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
                 if (options%parameters%wvar=="") domain%w_real%data_3d = 0.0  
-                
                 domain%w%data_3d = (domain%w_real%data_3d-domain%w%data_3d)/domain%jacobian
                 
                 call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
@@ -393,11 +394,10 @@ contains
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
                 allocate(div(ims:ime,kms:kme,jms:jme))
 
-                alpha = 1.0
-                !Following Moussiopoulos, et al. (1988). Bounding low Fr to avoid /0 error and negative Fr
-                alpha = 1.0 - 0.5*(1./max(domain%froude**4,0.00001))*(sqrt(1.0+4.0*max(domain%froude**4,0.00001)) - 1.0) 
-                alpha = sqrt(max(alpha,0.0))
-                alpha = min(max(alpha,0.1),1.0)
+                call calc_alpha(alpha, domain%froude, &
+                            domain%ims, domain%ime,  domain%kms, domain%kme, domain%jms, domain%jme, &
+                            domain%its, domain%ite, domain%jts, domain%jte, &
+                            domain%ids, domain%ide, domain%jds, domain%jde)
 
                 !Call this, passing 0 for w_grid, to get vertical components of vertical motion
                 call calc_w_real(domain% u %meta_data%dqdt_3d,      &
@@ -409,7 +409,6 @@ contains
                              
                 !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
                 if (options%parameters%wvar=="") domain%w_real%dqdt_3d = 0.0  
-                             
                 domain%w%meta_data%dqdt_3d = (domain%w_real%dqdt_3d-domain%w%meta_data%dqdt_3d)/domain%jacobian
                 
                 call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
@@ -435,8 +434,30 @@ contains
                              domain%jacobian)
 
         endif
+        call io_write("alpha"//file_id//".nc", "alpha", alpha) 
 
     end subroutine update_winds
+    
+    subroutine calc_alpha(alpha, froude, ims, ime, kms, kme, jms, jme, its, ite, jts, jte, ids, ide, jds, jde)
+        implicit none
+        integer, intent(in)    :: ims, ime, kms, kme, jms, jme, its, ite, jts, jte, ids, ide, jds, jde
+        real,    intent(in)    :: froude(ims:ime,kms:kme,jms:jme)
+        real,    intent(inout) :: alpha(ims:ime,kms:kme,jms:jme)
+        
+        alpha = 1.0
+        !Following Moussiopoulos, et al. (1988). Bounding low Fr to avoid /0 error and negative Fr
+        alpha = 1.0 - 0.5*(1./max(froude**4,0.00001))*(sqrt(1.0+4.0*max(froude**4,0.00001)) - 1.0) 
+        alpha = sqrt(max(alpha,0.0))
+        alpha = min(max(alpha,0.1),1.0)
+
+        ! Ensure that there are no sharp transitions in alpha at boundary, 
+        ! which can leak boundary effects into model (very high w_grid values result)s
+        if (jts==(jds+1)) alpha(:,:,jms) = alpha(:,:,jms+1)
+        if (its==(ids+1)) alpha(ims,:,:) = alpha(ims+1,:,:)
+        if (jte==(jde-1)) alpha(:,:,jme) = alpha(:,:,jme-1)
+        if (ite==(ide-1)) alpha(ime,:,:) = alpha(ime-1,:,:)
+        
+    end subroutine calc_alpha
     
     subroutine calc_w_real(u,v,w_grid,w_real,dzdx,dzdy,jacobian)
 
@@ -578,6 +599,10 @@ contains
         real :: z_top, z_bot, th_top, th_bot, obstacle_height
         integer :: ymin, ymax, xmin, xmax, n_smoothing_passes, nsmooth_gridcells
         
+        character(len=10) :: file_id
+
+        write(file_id, '(i0)') this_image()
+
         n_smoothing_passes = 5
         nsmooth_gridcells = 20 !int(500 / domain%dx)
         
@@ -630,7 +655,7 @@ contains
                 enddo
             end do
         end do
-        call io_write("temp_terrain_blocking.nc","data",temp_froude)
+        
         wind_speed = sqrt( (u_m)**2 + (v_m)**2 )
         
         !Since we will loop up to nz-1, we set all Fr to 0.1, which will leave the upper layer as very stable
@@ -666,7 +691,7 @@ contains
                         do ob_k = k+1,kme
                             if (domain%z%data_3d(i,ob_k,j) > obstacle_height) exit
                         enddo
-                        
+                        ob_k = min(ob_k,kme)
                         th_top = domain%potential_temperature%data_3d(i,ob_k,j)
                         z_top  = domain%z%data_3d(i,ob_k,j)
 
@@ -675,14 +700,14 @@ contains
                     endif
 
                     !Above function calculates N^2, but froude number wants just N
-                    stability(i,k,j) = sqrt(max(stability(i,k,j), 0.))
+                    stability(i,k,j) = sqrt(max(stability(i,k,j), 0.0))
                     domain%froude(i,k,j) = calc_froude(stability(i,k,j), temp_froude(i,k,j), wind_speed(i,k,j))
                 enddo
             enddo
         enddo
-        temp_froude = domain%froude
-        call io_write("froude.nc","data",domain%froude)
-        call io_write("richardson.nc","richardson",domain%Ri)
+        call io_write("froude"//file_id//".nc", "Froude", domain%froude) 
+        call io_write("temp_froude"//file_id//".nc", "temp_froude", temp_froude) 
+        call io_write("stability"//file_id//".nc", "stability", stability) 
         !do n = 1,n_smoothing_passes
         !    do j=jms,jme
         !        ymin = max(j-nsmooth_gridcells, jms)
@@ -888,9 +913,6 @@ contains
         if (domain%ite==(domain%ide-1)) domain%froude_terrain(:,domain%grid2d%ime,:,:) = &
                                         domain%froude_terrain(:,domain%grid2d%ime-1,:,:)
                                  
-
-
-        call io_write("terrain_blocking.nc","data",domain%froude_terrain)
 
     end subroutine compute_terrain_blocking_heights
 
