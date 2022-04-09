@@ -17,7 +17,7 @@ module time_step
     use land_surface,               only : lsm
     use planetary_boundary_layer,   only : pbl
     use radiation,                  only : rad
-
+    use wind,                       only : balance_uvw
     use domain_interface,           only : domain_t
     use options_interface,          only : options_t
     use debug_module,               only : domain_check
@@ -304,6 +304,16 @@ contains
                 dt = end_time - domain%model_time
             endif
 
+            ! if using advect_density then density needs to be updated, and thus also winds need to be balanced at each update
+            if (options%parameters%advect_density) then
+                call domain%diagnostic_update(options)
+                call balance_uvw(domain% u %meta_data%dqdt_3d,      &
+                             domain% v %meta_data%dqdt_3d,      &
+                             domain% w %meta_data%dqdt_3d,      &
+                             domain%jacobian_u, domain%jacobian_v, domain%jacobian_w,         &
+                             domain%advection_dz, domain%dx,    &
+                             domain%density%data_3d,domain%jacobian,options) 
+            endif
 
             ! if an interactive run was requested than print status updates everytime at least 5% of the progress has been made
             if (options%parameters%interactive .and. (this_image()==1)) then
