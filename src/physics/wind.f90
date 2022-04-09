@@ -36,10 +36,10 @@ contains
     !!
     !!------------------------------------------------------------
 
-    subroutine balance_uvw(u,v,w, jaco_u,jaco_v,jaco_w,dz,dx,rho,jaco,options)
+    subroutine balance_uvw(u,v,w, jaco_u,jaco_v,jaco_w,dz,dx,rho,options)
         implicit none
         real,           intent(inout) :: u(:,:,:), v(:,:,:), w(:,:,:)
-        real,           intent(in)    :: jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), dz(:,:,:), jaco(:,:,:), rho(:,:,:)
+        real,           intent(in)    :: jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), dz(:,:,:), rho(:,:,:)
         real,           intent(in)    :: dx
         type(options_t),intent(in)    :: options
 
@@ -68,7 +68,7 @@ contains
 
         allocate(divergence(ims:ime,kms:kme,jms:jme))
 
-        call calc_divergence(divergence,u,v,w,jaco_u,jaco_v,jaco_w,dz,dx,rho,jaco,options,horz_only=.True.)
+        call calc_divergence(divergence,u,v,w,jaco_u,jaco_v,jaco_w,dz,dx,rho,options,horz_only=.True.)
 
 
         !write(*,*) "maxval of div, in bal: ",maxval(abs(divergence(:,kme,:)))
@@ -135,10 +135,10 @@ contains
     end subroutine balance_uvw
 
 
-    subroutine calc_divergence(div, u, v, w, jaco_u, jaco_v, jaco_w, dz, dx, rho,jaco,options,horz_only)
+    subroutine calc_divergence(div, u, v, w, jaco_u, jaco_v, jaco_w, dz, dx, rho, options, horz_only)
         implicit none
         real,           intent(inout) :: div(:,:,:)
-        real,           intent(in)    :: u(:,:,:), v(:,:,:), w(:,:,:), dz(:,:,:), jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:),rho(:,:,:), jaco(:,:,:)
+        real,           intent(in)    :: u(:,:,:), v(:,:,:), w(:,:,:), dz(:,:,:), jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), rho(:,:,:)
         real,           intent(in)    :: dx
         logical, optional, intent(in)  :: horz_only
         type(options_t),intent(in)    :: options
@@ -202,9 +202,10 @@ contains
                                    (w_met(ims:ime,k,jms:jme)-w_met(ims:ime,k-1,jms:jme))/(dz(ims:ime,k,jms:jme))
                 endif
             enddo
-            ! If we are doing a full calculation of divergence, and not just U+V differencing for balance_uvw, then divide by
-            ! jacobian at the end
-            div = div/jaco
+        ! technically, div should now be divided by the jacobian, however, no application of the full divergence in the code
+        ! requires this. The only time that the full divergence is calculated is for use in the variational-calc solver, and the
+        ! formulation of these equations has the constraint of 0-divergence. This leads to pure component-wise summation of
+        ! divergence, and never dividing by the jacobian. <-- a technical note, in case I ever come back here and am confused.
         endif
 
     end subroutine calc_divergence
@@ -351,7 +352,7 @@ contains
                 
                 call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
-                                domain%density%data_3d,domain%jacobian,options,horz_only=.False.)
+                                domain%density%data_3d,options,horz_only=.False.)
                 call calc_iter_winds(domain,alpha,div)
 
             endif
@@ -359,7 +360,7 @@ contains
 
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
 
-            call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%density%data_3d, domain%jacobian, options)
+            call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%density%data_3d, options)
             
             call calc_w_real(domain% u %data_3d,      &
                              domain% v %data_3d,      &
@@ -413,7 +414,7 @@ contains
                 
                 call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
-                                domain%density%data_3d,domain%jacobian,options,horz_only=.False.)
+                                domain%density%data_3d,options,horz_only=.False.)
                 call calc_iter_winds(domain,alpha,div,update_in=.True.)
 
             endif
@@ -424,7 +425,7 @@ contains
                              domain% w %meta_data%dqdt_3d,      &
                              domain%jacobian_u, domain%jacobian_v, domain%jacobian_w,         &
                              domain%advection_dz, domain%dx,    &
-                             domain%density%data_3d,domain%jacobian,options)
+                             domain%density%data_3d,options)
                              
             call calc_w_real(domain% u %meta_data%dqdt_3d,      &
                              domain% v %meta_data%dqdt_3d,      &
