@@ -640,7 +640,7 @@ contains
         double precision :: slope, x_line
         real :: err, err_temp, line_err_temp
 
-        internal_precision = 1e-4
+        internal_precision = 1e-5
         if (present(precision)) internal_precision = precision
         n = size(poly,2)
         err = 9999
