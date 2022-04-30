@@ -494,7 +494,7 @@ contains
                              PII = domain%exner%data_3d,                  &
                              P = domain%pressure%data_3d,                 &
                              DT_IN = dt, DZ = domain%dz_interface%data_3d,     &
-                             W = domain%w%data_3d,                        &
+                             W = domain%w_real%data_3d,                        &
                              RAINNC = domain%accumulated_precipitation%data_2d, &
                              RAINNCV = last_rain, SR=SR,                  &
                              SNOWNC = domain%accumulated_snowfall%data_2d,&

@@ -38,12 +38,13 @@ contains
         
         !Use 2km per Winstral et al. 2017 paper
         d_max = 1000
-        search_max = floor(d_max/domain%dx)
-        
+        search_max = floor(max(1.0,d_max/domain%dx))
+
         allocate(domain%global_TPI(domain%ids : domain%ide, domain%jds : domain%jde))
         allocate(domain%TPI(domain%grid2d% ims : domain%grid2d% ime, domain%grid2d% jms : domain%grid2d% jme))
         allocate(dist( 2*search_max+1, 2*search_max+1 ))
-        
+       
+        domain%global_TPI = 0
         do i = 1, 2*search_max+1
             do j = 1, 2*search_max+1
                 dist(i,j) = sqrt(abs(i-(search_max+1.0))**2 + abs(j-(search_max+1.0))**2)
@@ -52,7 +53,6 @@ contains
         
         !Convert distances to meters
         dist = dist*domain%dx
-        
         !Now calc TPI
         do i=domain%ids, domain%ide
             do j=domain%jds, domain%jde
@@ -77,7 +77,7 @@ contains
                         end if                               
                     end do
                 end do
-                domain%global_TPI(i,j) = domain%global_terrain(i,j) - TPI_sum/TPI_num
+                if (TPI_num > 0) domain%global_TPI(i,j) = domain%global_terrain(i,j) - TPI_sum/TPI_num
             end do
         end do
         
@@ -106,7 +106,7 @@ contains
 
         d_max = options%wind%Sx_dmax
         k_max = 30 !Max number of layers to compute Sx for
-        search_max = floor(d_max/domain%dx)
+        search_max = floor(max(1.0,d_max/domain%dx))
         
         exposed_TPI = 10.0
         
