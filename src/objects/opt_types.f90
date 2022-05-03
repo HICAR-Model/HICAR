@@ -33,6 +33,7 @@ module options_types
         logical :: Sx
         real    :: Sx_dmax
         integer :: roughness
+        logical :: wind_only
     end type wind_type
     
     ! ------------------------------------------------

@@ -149,10 +149,13 @@ program icar
         if (this_image()==1) write(*,*) "  Next Output= ", trim(next_output%as_string())
 
         ! this is the meat of the model physics, run all the physics for the current time step looping over internal timesteps
-        call physics_timer%start()
-        call step(domain, step_end(boundary%current_time, next_output), options)
-        call physics_timer%stop()
-
+        if (.not.(options%wind%wind_only)) then
+            call physics_timer%start()
+            call step(domain, step_end(boundary%current_time, next_output), options)
+            call physics_timer%stop()
+        else
+            domain%model_time = next_output
+        endif
 
         ! -----------------------------------------------------
         !
