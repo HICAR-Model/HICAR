@@ -8,11 +8,13 @@
 !!
 !!------------------------------------------------------------
 module wind    
+
     use linear_theory_winds, only : linear_perturb
     use wind_iterative,      only : calc_iter_winds
     !use mod_blocking,        only : update_froude_number, initialize_blocking
     use data_structures
     use exchangeable_interface,   only : exchangeable_t
+
     use domain_interface,  only : domain_t
     use options_interface, only : options_t
     use grid_interface,    only : grid_t
@@ -22,11 +24,53 @@ module wind
     
     implicit none
     private
-    public:: balance_uvw, update_winds, init_winds
+    public:: balance_uvw, update_winds, init_winds, wind_var_request
+
     real, parameter::deg2rad=0.017453293 !2*pi/360
     real, parameter :: rad2deg=57.2957779371
     real, parameter :: DEFAULT_FR_L = 1000.0
 contains
+
+
+
+        subroutine wind_linear_var_request(options)
+            implicit none
+            type(options_t), intent(inout) :: options
+
+            ! List the variables that are required to be allocated for the linear wind solution
+            call options%alloc_vars( &
+                            [kVARS%nsquared,    kVARS%potential_temperature,   kVARS%exner,            &
+                             kVARS%water_vapor, kVARS%cloud_water,             kVARS%rain_in_air,      &
+                             kVARS%u,           kVARS%v,                       kVARS%w,                &
+                             kVARS%dz ])
+
+            ! List the variables that are required to be advected
+            ! call options%advect_vars( &
+            !               [, &
+            !                , &
+            !                ] )
+
+            ! List the variables that are required for restarts with the linear wind solution
+            call options%restart_vars( &
+                            [kVARS%nsquared,    kVARS%potential_temperature,                           &
+                             kVARS%water_vapor, kVARS%cloud_water,             kVARS%rain_in_air,      &
+                             kVARS%u,           kVARS%v,                       kVARS%w,                &
+                             kVARS%dz ])
+
+        end subroutine
+
+        subroutine wind_var_request(options)
+            implicit none
+            type(options_t), intent(inout) :: options
+
+            if (options%physics%windtype == kWIND_LINEAR) then
+                call wind_linear_var_request(options)
+            endif
+
+        end subroutine wind_var_request
+
+
+
 
     !>------------------------------------------------------------
     !! Forces u,v, and w fields to balance
@@ -40,6 +84,7 @@ contains
         implicit none
         real,           intent(inout) :: u(:,:,:), v(:,:,:), w(:,:,:)
         real,           intent(in)    :: jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), dz(:,:,:), rho(:,:,:)
+
         real,           intent(in)    :: dx
         type(options_t),intent(in)    :: options
 
@@ -69,7 +114,6 @@ contains
         allocate(divergence(ims:ime,kms:kme,jms:jme))
 
         call calc_divergence(divergence,u,v,w,jaco_u,jaco_v,jaco_w,dz,dx,rho,options,horz_only=.True.)
-
 
         !write(*,*) "maxval of div, in bal: ",maxval(abs(divergence(:,kme,:)))
         do k = kms,kme
@@ -139,6 +183,7 @@ contains
         implicit none
         real,           intent(inout) :: div(:,:,:)
         real,           intent(in)    :: u(:,:,:), v(:,:,:), w(:,:,:), dz(:,:,:), jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), rho(:,:,:)
+
         real,           intent(in)    :: dx
         logical, optional, intent(in)  :: horz_only
         type(options_t),intent(in)    :: options
@@ -163,7 +208,7 @@ contains
         allocate(v_met(ims:ime,kms:kme,jms:jme+1))
         allocate(w_met(ims:ime,kms:kme,jms:jme))
 
-        !Multiplication of U/V by metric terms, converting jacobian to staggered-grid where possible, otherwise making assumption of 
+        !Multiplication of U/V by metric terms, converting jacobian to staggered-grid where possible, otherwise making assumption of
         !Constant jacobian at edges
         
         if (options%parameters%advect_density) then
@@ -193,7 +238,6 @@ contains
                 w_met = w*jaco_w
             end if
 
-
             do k = kms,kme
                 if (k == kms) then
                     div(ims:ime, k, jms:jme) = div(ims:ime, k, jms:jme) + w_met(ims:ime, k, jms:jme)/(dz(ims:ime, k, jms:jme))
@@ -206,6 +250,7 @@ contains
         ! requires this. The only time that the full divergence is calculated is for use in the variational-calc solver, and the
         ! formulation of these equations has the constraint of 0-divergence. This leads to pure component-wise summation of
         ! divergence, and never dividing by the jacobian. <-- a technical note, in case I ever come back here and am confused.
+
         endif
 
     end subroutine calc_divergence
@@ -254,6 +299,7 @@ contains
                         + v(ims:ime,k,j) * sintheta(grid%its-1:grid%ite+1,j+grid%jts-2)
                 v_local = v(ims:ime,k,j) * costheta(grid%its-1:grid%ite+1,j+grid%jts-2) &
                         + u(ims:ime,k,j) * sintheta(grid%its-1:grid%ite+1,j+grid%jts-2)
+
                 u(:ime,k,j) = u_local
                 v(:ime,k,j) = v_local
            enddo
@@ -317,15 +363,17 @@ contains
 
             ! linear winds
             if (options%physics%windtype==kWIND_LINEAR) then
-                call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density)
+                call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.False.)
             ! simple acceleration over topography
             elseif (options%physics%windtype==kCONSERVE_MASS) then
-                if (options%parameters%use_terrain_difference) then  ! 
+                if (options%parameters%use_terrain_difference) then  !
                 !! use the ratio between hi-res and lo-res grid deformation (i.e. due to 'additional' terrain) for speedup
                     call mass_conservative_acceleration(domain%u%data_3d, domain%v%data_3d, domain%zfr_u, domain%zfr_v)
-                else    
+                else
                     call mass_conservative_acceleration(domain%u%data_3d, domain%v%data_3d, domain%zr_u, domain%zr_v)
-                endif    
+                endif
+            elseif (options%physics%windtype==kOBRIEN_WINDS) then
+                call Obrien_winds(domain, options, update_in=.True.)
             elseif (options%physics%windtype==kITERATIVE_WINDS) then
             
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
@@ -382,12 +430,14 @@ contains
                 call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.True.)
             ! simple acceleration over topography
             elseif (options%physics%windtype==kCONSERVE_MASS) then
-                if (options%parameters%use_terrain_difference) then  ! 
+                if (options%parameters%use_terrain_difference) then  !
                 !! use the ratio between hi-res and lo-res grid deformation (i.e. due to 'addtional' terrain) for speedup
                     call mass_conservative_acceleration(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%zfr_u, domain%zfr_v)
-                else    
+                else
                     call mass_conservative_acceleration(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%zr_u, domain%zr_v)
-                endif   
+                endif
+            elseif (options%physics%windtype==kOBRIEN_WINDS) then
+                call Obrien_winds(domain, options, update_in=.True.)
             elseif (options%physics%windtype==kITERATIVE_WINDS) then
             
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
@@ -431,6 +481,7 @@ contains
                              domain% w_real %dqdt_3d,           &
                              domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian)
+
 
         endif
 
@@ -507,7 +558,7 @@ contains
             ! if (options%physics%convection>0) then
             !     currw = currw + domain%w_cu(2:nx-1,z,2:ny-1) * domain%dz_inter(2:nx-1,z,2:ny-1) / domain%dx
             ! endif
-
+            
             ! compute the real vertical velocity of air by combining the different components onto the mass grid
             ! includes vertical interpolation between w_z-1/2 and w_z+1/2
             w_real(ims+1:ime-1, z, jms+1:jme-1) = (uw(ims+1:ime-1,:) + uw(ims+2:ime,:))*0.5 &
@@ -516,6 +567,131 @@ contains
             lastw = currw ! could avoid this memcopy cost using pointers or a single manual loop unroll
         end do
     end subroutine calc_w_real
+    
+    subroutine Obrien_winds(domain, options, update_in)
+        implicit none
+        type(domain_t), intent(inout) :: domain
+        type(options_t),intent(in)    :: options
+        logical, optional, intent(in) :: update_in
+
+        ! interal parameters
+        real, allocatable, dimension(:,:,:) :: div, ADJ,ADJ_coef, U_cor, V_cor, current_u, current_v, current_w
+        real    :: corr_factor
+        integer :: it, k, j, i, ims, ime, jms, jme, kms, kme, wind_k
+        logical :: update
+
+        update=.False.
+        if (present(update_in)) update=update_in
+
+        ims = lbound(domain%w%data_3d,1)
+        ime = ubound(domain%w%data_3d,1)
+        kms = lbound(domain%w%data_3d,2)
+        kme = ubound(domain%w%data_3d,2)
+        jms = lbound(domain%w%data_3d,3)
+        jme = ubound(domain%w%data_3d,3)
+
+        !If we are doing an update, we need to swap meta data into data_3d fields so it can be exchanged while balancing
+        !First, we save a copy of the current data_3d so that we can substitute it back in later
+        if (update) then
+             current_u = domain%u%data_3d
+             current_v = domain%v%data_3d
+             current_w = domain%w%data_3d
+
+             domain%u%data_3d = domain%u%meta_data%dqdt_3d
+             domain%v%data_3d = domain%v%meta_data%dqdt_3d
+             domain%w%data_3d = domain%w%meta_data%dqdt_3d
+        endif
+
+        !Do an initial exchange to make sure the U and V grids are similar for calculating w
+        call domain%u%exchange_u()
+        call domain%v%exchange_v()
+
+        !First call bal_uvw to generate an initial-guess for vertical winds
+        call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%density%data_3d, options)
+
+        allocate(div(ims:ime,kms:kme,jms:jme))
+        allocate(ADJ_coef(ims:ime,kms:kme,jms:jme))
+        allocate(ADJ(ims:ime,kms:kme,jms:jme))
+        allocate(U_cor(ims:ime,kms:kme,jms:jme))
+        allocate(V_cor(ims:ime,kms:kme,jms:jme))
+
+        ! Calculate and apply correction to w-winds
+        wind_k = kme
+        do k = kms,kme
+            if (sum(domain%advection_dz(ims,1:k,jms)) > domain%smooth_height) then
+                wind_k = k
+                exit
+            endif
+        enddo
+
+        !Compute relative correction factors for U and V based on input speeds
+        U_cor = ABS(domain%u%data_3d(ims:ime,:,jms:jme))/ &
+                (ABS(domain%u%data_3d(ims:ime,:,jms:jme))+ABS(domain%v%data_3d(ims:ime,:,jms:jme)))
+
+        do k = kms,kme
+            corr_factor = ((sum(domain%advection_dz(ims,1:k,jms)))/domain%smooth_height)
+            !corr_factor = (k*1.0)/wind_k
+            corr_factor = min(corr_factor,1.0)
+            do i = ims,ime
+                do j = jms,jme
+                    domain%w%data_3d(i,k,j) = domain%w%data_3d(i,k,j) - corr_factor * (domain%w%data_3d(i,wind_k,j))
+
+                    !if ( (domain%u%data_3d(i,k,j)+domain%v%data_3d(i,k,j)) == 0) U_cor(i,k,j) = 0.5
+                enddo
+            enddo
+            ! Compute this now, since it wont change in the loop
+            ADJ_coef(:,k,:) = -2/domain%dx
+        enddo
+
+        !V_cor = 1 - U_cor
+
+
+        U_cor = 0.5
+        V_cor = 0.5
+
+        ! Now, fixing w-winds, iterate over U/V to reduce divergence with new w-winds
+        do it = 0,options%parameters%wind_iterations
+            !Compute divergence in new wind field
+            call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
+                                domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
+                                domain%density%data_3d,options)
+                                
+            !Because we want the true divergence, and the above function does not divide by the jacobian in the end, divide here
+            div = div/domain%jacobian
+
+            !Compute adjustment based on divergence
+            ADJ = div/ADJ_coef
+
+            !Distribute divergence among the U and V fields
+            domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) = domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) + &
+                                                        (ADJ(ims+1:ime-1,:,jms+1:jme-1) * U_cor(ims+2:ime,:,jms+1:jme-1))
+
+            domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) = domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) - &
+                                                        (ADJ(ims+2:ime,:,jms+1:jme-1) * U_cor(ims+2:ime,:,jms+1:jme-1))
+
+            domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) = domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) + &
+                                                        (ADJ(ims+1:ime-1,:,jms+1:jme-1) * V_cor(ims+1:ime-1,:,jms+2:jme))
+
+            domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) = domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) - &
+                                                        (ADJ(ims+1:ime-1,:,jms+2:jme) * V_cor(ims+1:ime-1,:,jms+2:jme))
+            call domain%u%exchange_u()
+            call domain%v%exchange_v()
+
+        enddo
+
+        !If an update loop, swap meta_data and data_3d fields back
+        if (update) then
+            domain%u%meta_data%dqdt_3d = domain%u%data_3d
+            domain%v%meta_data%dqdt_3d = domain%v%data_3d
+            domain%w%meta_data%dqdt_3d = domain%w%data_3d
+
+            domain%u%data_3d = current_u
+            domain%v%data_3d = current_v
+            domain%w%data_3d = current_w
+        endif
+
+    end subroutine Obrien_winds
+
     
     subroutine mass_conservative_acceleration(u, v, u_accel, v_accel)
         implicit none

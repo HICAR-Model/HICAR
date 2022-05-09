@@ -4,11 +4,6 @@ submodule (restart_interface) restart_implementation
     use icar_constants, only : kMAX_FILE_LENGTH
     use time_object,    only : Time_type
 
-! options%restart_step_in_file = restart_step
-! options%restart_file         = restart_file
-! options%restart_date         = restart_date
-! options%restart_time         = restart_time
-
     implicit none
 
 
@@ -22,9 +17,7 @@ module subroutine restart_model(domain, dataset, options)
 
     character(len=kMAX_FILE_LENGTH) :: restart_file
 
-    ! options%parameters%restart_file,
-    restart_file = get_image_filename(this_image(), options%parameters%output_file, options%parameters%restart_file ) !options%parameters%restart_time)
-
+    restart_file = options%parameters%restart_file
     call read_restart_data(domain, dataset, restart_file, options%parameters%restart_step_in_file)
 
 
@@ -92,19 +85,18 @@ function get_image_filename(image_number, initial_filename, restart_time) result
     implicit none
     integer,            intent(in) :: image_number
     character(len=*),   intent(in) :: initial_filename
-    character(len=*),   intent(in) :: restart_time
+    type(Time_type),    intent(in) :: restart_time  ! this is not the same as file name!
 
     character(len=kMAX_FILE_LENGTH) :: file_name
     integer :: n, i
 
     character(len=49)   :: file_date_format = '(I4,"-",I0.2,"-",I0.2,"_",I0.2,"-",I0.2,"-",I0.2)'
 
-    n = len(trim(restart_time))
+    write(file_name, '(A,I6.6,"_",A,".nc")') trim(initial_filename), image_number, trim(restart_time%as_string(file_date_format))
 
-    write(file_name, '(A,I6.6,"_",A)') trim(initial_filename), image_number, restart_time(n-21:n)
+    n = len(trim(file_name))
+    file_name(n-10:n-9) = "00"  ! BK: Commented out because restarting from a non-whole hour time should be possible - but weird behaviour when commented out???!
 
-    !n = len(trim(file_name))
-    !file_name(n-10:n-9) = "00"
 
 end function get_image_filename
 

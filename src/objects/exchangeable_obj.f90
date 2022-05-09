@@ -158,13 +158,13 @@ contains
     if (.not. this%east_boundary) call this%retrieve_east_halo
     if (.not. this%west_boundary) call this%retrieve_west_halo
   end subroutine
-  
+
   module subroutine exchange_v(this)
     class(exchangeable_t), intent(inout) :: this
     integer :: n, nx, start
     !When exchanging for the v-field, we want a full exchange in the y-direction,
     ! and an exchange in the x-direction of just the outer-most values
-    
+
     if (.not. this%north_boundary) then
         n = ubound(this%data_3d,3)
         nx = size(this%data_3d,1)
@@ -179,6 +179,7 @@ contains
 
     sync images( neighbors ) !all
     
+
     if (.not. this%north_boundary) call this%retrieve_north_halo
     if (.not. this%south_boundary) call this%retrieve_south_halo
 
@@ -202,33 +203,36 @@ contains
         this%halo_north_in(1:nx,:,1:halo_size)[south_neighbor] = this%meta_data%dqdt_3d(:,:,start+halo_size+1:start+halo_size+1)
     endif
 
-    sync images( neighbors ) !all
+    sync images( neighbors )
     
     if (.not. this%north_boundary) call this%retrieve_north_halo_metadata
     if (.not. this%south_boundary) call this%retrieve_south_halo_metadata
 
+
   end subroutine
-  
+
   module subroutine exchange_u(this)
     class(exchangeable_t), intent(inout) :: this
     integer :: n, ny, start
     !When exchanging for the u-field, we want a full exchange in the x-direction,
     ! and an exchange in the y-direction of just the outer-most values
 
+
     if (.not. this%east_boundary) then
         n = ubound(this%data_3d,1)
         ny = size(this%data_3d,3)
         this%halo_west_in(1:halo_size,:,1:ny)[east_neighbor] = this%data_3d(n-(halo_size)-1:n-(halo_size)-1,:,:)
     endif
-    
+
     if (.not. this%west_boundary) then
         start = lbound(this%data_3d,1)
         ny = size(this%data_3d,3)
         this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%data_3d(start+halo_size+1:start+halo_size+1,:,:)
     endif  
 
-    sync images( neighbors ) !all
+    sync images( neighbors )
     
+
     if (.not. this%east_boundary) call this%retrieve_east_halo
     if (.not. this%west_boundary) call this%retrieve_west_halo
 
@@ -253,14 +257,14 @@ contains
         this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%meta_data%dqdt_3d(start+halo_size+1:start+halo_size+1,:,:)
     endif  
 
-    sync images( neighbors ) !all
+    sync images( neighbors )
     
     if (.not. this%east_boundary) call this%retrieve_east_halo_metadata
     if (.not. this%west_boundary) call this%retrieve_west_halo_metadata
 
  
   end subroutine
-  
+
   module subroutine exchange(this)
     class(exchangeable_t), intent(inout) :: this
     if (.not. this%north_boundary) call this%put_north

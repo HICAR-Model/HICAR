@@ -61,8 +61,8 @@ contains
         if (this_image()==1) call welcome_message()
 
         if (this_image()==1) then
-            print*, "  Number of coarray image:",num_images()
-            print*, "  Max number of OpenMP Threads:",num_threads
+            write(*,*) "  Number of coarray image:",num_images()
+            write(*,*) "  Max number of OpenMP Threads:",num_threads
         endif
 
         ! read in options file
@@ -75,12 +75,24 @@ contains
         if (this_image()==1) write(*,*) "Initializing boundary condition data structure"
         call boundary%init(options)
 
-        if(options%parameters%external_files/="MISSING") then
-            if (this_image()==1) write(*,*) "Initializing data structure for external starting conditions from file: ", trim(options%parameters%external_files)
-            call add_cond%init_external(options)
+        ! if (this_image()==1) then
+        !     write(*,*) "options%parameters%external_files: ", trim(options%parameters%external_files)
+        !     write(*,*) "options%parameters%restart: ", options%parameters%restart
+        ! endif
 
-            if (this_image()==1) write(*,*) "Reading Initial conditions from boundary dataset(s)"
-            call domain%get_initial_conditions(boundary, options, add_cond)
+        if(options%parameters%external_files/="MISSING") then
+            if (options%parameters%restart) then  ! Do not overwrite restart if this is specified!
+                if (this_image()==1) write(*,*) "Restart requested, therefore ignoring external starting conditions! "
+                if (this_image()==1) write(*,*) "Reading Initial conditions from boundary dataset"
+                call domain%get_initial_conditions(boundary, options)  ! same call as above, but without the (optional) add_cond
+
+            else ! If not restarting, and external conditions are specified, init & read in the latter.
+                if (this_image()==1) write(*,*) "Initializing data structure for external starting conditions from file: ", trim(options%parameters%external_files)
+                call add_cond%init_external(options)
+
+                if (this_image()==1) write(*,*) "Reading Initial conditions from boundary dataset(s)"
+                call domain%get_initial_conditions(boundary, options, add_cond)
+            endif
 
         else ! In the (standard) case that there are no additional conditions files for the initialization
             if (this_image()==1) write(*,*) "Reading Initial conditions from boundary dataset"
@@ -95,11 +107,11 @@ contains
             ! elseif (this_image()==1) then
             !     write(*,*) "using the difference between hi- and lo-res terrain for u/v components of w_real "
             endif
-                        
+
             call domain%calculate_delta_terrain(boundary, options)
 
         endif
-        
+
 
         if (this_image()==1) write(*,*) "Updating initial winds"
         call update_winds(domain, options)
@@ -107,7 +119,7 @@ contains
         ! initialize the atmospheric helper utilities
         call init_atm_utilities(options)
 
-        call init_physics(options, domain)
+        ! call init_physics(options, domain)
 
         ! call setup_bias_correction(options,domain)
         if (this_image()==1) write(*,'(/ A)') "Finished basic initialization"

@@ -59,7 +59,7 @@ contains
         ! endif
         ! call this%distribute_initial_conditions()
 
-        
+
         call setup_boundary_geo(this, options%parameters%longitude_system)
 
     end subroutine
@@ -69,7 +69,7 @@ contains
     !!
     !>-----------------------------------------------------------
     module subroutine init_external(this, options)
-        class(boundary_t), intent(inout) :: this  ! the additional starting conditions 
+        class(boundary_t), intent(inout) :: this  ! the additional starting conditions
         type(options_t),   intent(inout) :: options
 
         character(len=kMAX_NAME_LENGTH), allocatable :: vars_to_read(:)
@@ -85,9 +85,9 @@ contains
         ! allocate(dim_list(1))
 
         this%file_list(1) = options%parameters%external_files
-        
+
         call setup_variable_lists(options%parameters%ext_var_list, options%parameters%ext_dim_list, vars_to_read, var_dimensions)  ! this simply copies o%p%ext_vars to vars_to_read and same for dims (+some checks)
-        
+
 
         if ( trim(options%parameters%z_ext) /= "") zvar_ext = options%parameters%z_ext
 
@@ -97,7 +97,7 @@ contains
                              start_time = options%parameters%start_time,     &
                              lat_ext = options%parameters%lat_ext,        &  !lat_ext,
                              lon_ext = options%parameters%lon_ext,        &  !lon_ext      &
-                             ! zvar_ext      &  !,- include if statement for this??
+                             !zvar_ext = options%parameters%zvar_ext,      &  !,- include if statement for this??
                              time_ext = options%parameters%time_ext &
                              )
 
@@ -111,7 +111,7 @@ contains
     !! Set default component values
     !! Reads initial conditions from the external file
     !!
-    !!   For now this is only available for static data (no time component) 
+    !!   For now this is only available for static data (no time component)
     !!
     !!------------------------------------------------------------
     module subroutine init_local2(this, options, file_list, var_list, dim_list, start_time, &
@@ -141,7 +141,7 @@ contains
             this%curfile=1 !?
         endif
 
-        
+
         !  read in latitude and longitude coordinate data
         call io_read(file_list(this%curfile), lat_ext, this%lat, this%curstep)
         call io_read(file_list(this%curfile), lon_ext, this%lon, this%curstep)
@@ -150,42 +150,42 @@ contains
         ! if ( (size(this%lat,2)==1) .and. (size(this%lon,2)==1) ) then  !(size(this%lat,1)/=size(this%lon,1)) (shape(this%lat) /= shape(this%lon)) .and.
         !     this%lat = reshape(this%lat, (/size(this%lat,1), size(this%lon,1)/), pad=this%lat)
         !     this%lon = reshape(this%lon, (/size(this%lat,1), size(this%lon,1)/), pad=this%lon)
-        ! endif    
-       
+        ! endif
+
         ! read in the height coordinate of the input data
-        if (present(zvar_ext) .and. (trim(zvar_ext)/="") ) then
-            if (this_image()==1)  print *, " zvar_ext ", trim(zvar_ext)
-            if (.not. options%parameters%compute_z ) then ! .and. present(zvar_ext)
-                ! call io_read(file_list(this%curfile), z_var,   temp_z,   this%curstep)    
-                call io_read(file_list(1), zvar_ext,   temp_z,   1)
-                nx = size(temp_z,1)
-                ny = size(temp_z,2)
-                nz = size(temp_z,3)
-                if (allocated(this%z)) deallocate(this%z)
-                allocate(this%z(nx,nz,ny))
-                this%z = reshape(temp_z, shape=[nx,nz,ny], order=[1,3,2])
-            else
-                call io_read(file_list(this%curfile), file_list(1),   temp_z,   this%curstep)
-                nx = size(temp_z,1)
-                ny = size(temp_z,2)
-                ! nz = size(temp_z,3)
-                if (allocated(this%z)) deallocate(this%z)
-                allocate(this%z(nx,nz,ny))
-            endif
-        else    
+        ! if (present(zvar_ext) .and. (trim(zvar_ext)/="") ) then
+        !     if (this_image()==1)  print *, " zvar_ext ", trim(zvar_ext)
+        !     if (.not. options%parameters%compute_z ) then ! .and. present(zvar_ext)
+        !         ! call io_read(file_list(this%curfile), z_var,   temp_z,   this%curstep)
+        !         call io_read(file_list(1), zvar_ext,   temp_z,   1)
+        !         nx = size(temp_z,1)
+        !         ny = size(temp_z,2)
+        !         nz = size(temp_z,3)
+        !         if (allocated(this%z)) deallocate(this%z)
+        !         allocate(this%z(nx,nz,ny))
+        !         this%z = reshape(temp_z, shape=[nx,nz,ny], order=[1,3,2])
+        !     else
+        !         call io_read(file_list(this%curfile), file_list(1),   temp_z,   this%curstep)
+        !         nx = size(temp_z,1)
+        !         ny = size(temp_z,2)
+        !         ! nz = size(temp_z,3)
+        !         if (allocated(this%z)) deallocate(this%z)
+        !         allocate(this%z(nx,nz,ny))
+        !     endif
+        ! else
             ! print *, "  ext var = 2D"
-            if ( (size(this%lat,2)==1) .and. (size(this%lon,2)==1) ) then 
+            if ( (size(this%lat,2)==1) .and. (size(this%lon,2)==1) ) then
                 if (this_image()==1) print*, "  external conditions provided on regular 1D grid"
                 nx = size(this%lon,1)
                 ny = size(this%lat,1)
                 nz = 0
-            else    
+            else
                 nx = size(this%lat,1)
                 ny = size(this%lat,2)
                 nz = 0
             endif
-            
-        endif
+
+        ! endif
 
         ! ! call assert(size(var_list) == size(dim_list), "list of variable dimensions must match list of variables")
 
@@ -193,7 +193,7 @@ contains
 
             call add_var_to_dict(this%variables, file_list(this%curfile), var_list(i), dim_list(i), this%curstep, [nx, nz, ny])
             ! if (this_image()==1)  print*, i," var_list(i): ",trim(var_list(i)), " dim_list(i): ", dim_list(i), " this%curstep ", this%curstep
-            
+
         end do
 
     end subroutine
@@ -265,7 +265,7 @@ contains
 
         end do
 
-        call update_computed_vars(this, options)
+        call update_computed_vars(this, options, update=options%parameters%time_varying_z)
 
     end subroutine
 
@@ -290,13 +290,6 @@ contains
         this%geo_u = this%geo
         this%geo_v = this%geo
 
-        ! ! print*, "lon shape", shape(this%lon)
-        ! ! ! print*, "lat shape", shape(this%lat)
-        ! print*, "    z shape", shape(this%z)
-        ! print*, "    size z shape", size(shape(this%z))
-        ! ! print*, "size z, 2", size(this%z,2)
-        ! print*, "    this z allocated? :", allocated(this%z)
-        ! ! print *, " z dim", dimensions(this%z)
 
         if ( allocated(this%z) )  then
             ! geo%z will be interpolated from this%z to the high-res grids for vinterp in domain... not a great separation
@@ -336,7 +329,7 @@ contains
         if (ndims==2) then
             call io_read(file_name, var_name, temp_2d_data, timestep)
             ! print*, "    file_name, var_name ", file_name, trim(var_name)
-            
+
             call new_variable%initialize( shape( temp_2d_data ) )
             new_variable%data_2d = temp_2d_data
 
@@ -605,8 +598,9 @@ contains
 
         integer           :: err
         type(variable_t)  :: var, pvar, zvar, tvar, qvar
+        real, allocatable, target :: real_t(:,:,:)
 
-        if (options%parameters%t_is_potential) stop "Need real air temperature to compute height"
+        real, pointer :: t(:,:,:)
 
         qvar = list%get_var(options%parameters%qvvar)
         tvar = list%get_var(options%parameters%tvar)
@@ -615,18 +609,29 @@ contains
 
         pvar = list%get_var(options%parameters%pslvar, err)
 
+        if (options%parameters%t_is_potential) then
+            ! stop "Need real air temperature to compute height"
+            allocate(real_t, mold=tvar%data_3d)
+            real_t = exner_function(var%data_3d) * tvar%data_3d
+            t => real_t
+        else
+            t => tvar%data_3d
+        endif
+
         if (err == 0) then
-            call compute_3d_z(var%data_3d, pvar%data_2d, this%z, tvar%data_3d, qvar%data_3d)
+            call compute_3d_z(var%data_3d, pvar%data_2d, this%z, t, qvar%data_3d)
 
         else
             pvar = list%get_var(options%parameters%psvar, err)
             if (err == 0) then
-                call compute_3d_z(var%data_3d, pvar%data_2d, this%z, tvar%data_3d, qvar%data_3d, zvar%data_2d)
+                call compute_3d_z(var%data_3d, pvar%data_2d, this%z, t, qvar%data_3d, zvar%data_2d)
             else
                 write(*,*) "ERROR reading surface pressure or sea level pressure, variables not found"
                 error stop
             endif
         endif
+        zvar = list%get_var(options%parameters%zvar)
+        zvar%data_3d = this%z
 
     end subroutine compute_z_update
 

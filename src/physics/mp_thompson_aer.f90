@@ -1091,6 +1091,7 @@
      !$omp shared(tcg_racg,tmr_racg,tcr_gacr,tmg_gacr,tnr_racg,tnr_gacr)            &
      !$OMP SHARED(RAINNC,SNOWNC,RAINNCV,SNOWNCV,GRAUPELNCV,GRAUPELNC,SR)                            &
      !$OMP SHARED(w,th,pii,p,dz,qv,qc)                                                              &
+     !$OMP SHARED(has_reqi,has_reqs,has_reqc)                                                       &
      !$OMP SHARED(qi,qr,qs,qg,ni,nr,nc,nwfa,nifa,nwfa2d,refl_10cm,re_cloud,re_ice,re_snow, is_aerosol_aware)
 
      ! parameter list : Nt_c,TNO,rho_g,av_s,bv_s,fv_s,av_g,bv_g,EF_si,Ef_ri
@@ -1899,8 +1900,16 @@
          if (temp(k).ge.270.65) k_0 = MAX(k_0, k)
       enddo
       do k = kte, kts, -1
-         if (k.gt.k_0 .and. L_qr(k) .and. mvd_r(k).gt.100.E-6) then
-            xslw1 = 4.01 + alog10(mvd_r(k))
+         if (k.gt.k_0) then
+             if (L_qr(k)) then
+                 if (mvd_r(k).gt.100.E-6) then
+                    xslw1 = 4.01 + alog10(mvd_r(k))
+                else
+                   xslw1 = 0.01
+                endif
+            else
+               xslw1 = 0.01
+            endif
          else
             xslw1 = 0.01
          endif

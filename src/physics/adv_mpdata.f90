@@ -54,9 +54,9 @@ contains
         
         ! interal parameters
         integer :: i
-        real, dimension(ims:ime-1,kms:kme)    :: f1
-        real, dimension(ims:ime-2,kms:kme)    :: f3,f4
-        real, dimension(ims:ime-2,kms:kme-1)  :: f5
+        real, dimension(ims+1:ime,kms:kme,jms+1:jme-1)    :: f1
+        real, dimension(ims+1:ime-1,kms:kme,jms+1:jme)    :: f4
+        real, dimension(ims+1:ime-1,kms:kme-1,jms+1:jme-1)  :: f5
         
         ! !$omp parallel shared(qin,q,u,v,w) firstprivate(nx,ny,nz) private(i,f1,f3,f4,f5)
         ! !$omp do schedule(static)
@@ -67,36 +67,42 @@ contains
         ! !$omp end do
         ! !$omp barrier
         ! !$omp do schedule(static)
-        do i=jms+1,jme-1
             ! by manually inlining the flux2 call we should remove extra array copies that the compiler doesn't remove.
             ! equivalent flux2 calls are left in for reference (commented) to restore recall that f1,f3,f4... arrays should be 3D : n x m x 1
 
-            f1= ((u(ims+1:ime,:,i)      + ABS(u(ims+1:ime,:,i)))      * qin(ims:ime-1,:,i)    + &
-                 (u(ims+1:ime,:,i)      - ABS(u(ims+1:ime,:,i)))      * qin(ims+1:ime,:,i))     / 2
+        f1= ((u(ims+1:ime,:,:) + ABS(u(ims+1:ime,:,:))) * qin(ims:ime-1,:,:)    + &
+            (u(ims+1:ime,:,:) - ABS(u(ims+1:ime,:,:))) * qin(ims+1:ime,:,:))   / 2
 
-            f3= ((v(ims+1:ime-1,:,i+1)      + ABS(v(ims+1:ime-1,:,i+1)))      * qin(ims+1:ime-1,:,i)  + &
-                 (v(ims+1:ime-1,:,i+1)      - ABS(v(ims+1:ime-1,:,i+1)))      * qin(ims+1:ime-1,:,i+1)) / 2
+        f4= ((v(:,:,jms+1:jme)    + ABS(v(:,:,jms+1:jme)))    * qin(:,:,jms:jme-1) + &
+            (v(:,:,jms+1:jme)    - ABS(v(:,:,jms+1:jme)))    * qin(:,:,jms+1:jme))  / 2
 
-            f4= ((v(ims+1:ime-1,:,i)    + ABS(v(ims+1:ime-1,:,i)))    * qin(ims+1:ime-1,:,i-1) + &
-                (v(ims+1:ime-1,:,i)    - ABS(v(ims+1:ime-1,:,i)))    * qin(ims+1:ime-1,:,i))  / 2
+        f5= ((w(:,kms:kme-1,:) + ABS(w(:,kms:kme-1,:))) &
+                                        * qin(:,kms:kme-1,:) + &
+            (w(:,kms:kme-1,:) - ABS(w(:,kms:kme-1,:))) &
+                                         * qin(:,kms+1:kme,:))  / 2
 
-            f5= ((w(ims+1:ime-1,kms:kme-1,i) + ABS(w(ims+1:ime-1,kms:kme-1,i))) * qin(ims+1:ime-1,kms:kme-1,i) + &
-                 (w(ims+1:ime-1,kms:kme-1,i) - ABS(w(ims+1:ime-1,kms:kme-1,i))) * qin(ims+1:ime-1,kms+1:kme,i))  / 2
 
-
+        do i=jms+1,jme-1
                ! perform horizontal advection, from difference terms
-               q(ims+1:ime-1,:,i)      = q(ims+1:ime-1,:,i)       - ((f1(ims+1:ime-1,:) - f1(ims:ime-2,:)) + (f3 - f4)) &
-                                   / (jaco(ims+1:ime-1,:,i)*rho(ims+1:ime-1,:,i))                      
+               q(ims+1:ime-1,:,jms+1:jme-1)  = q(ims+1:ime-1,:,jms+1:jme-1)  - &
+                                   ((f1(ims+2:ime,:,jms+1:jme-1) - f1(ims+1:ime-1,:,jms+1:jme-1)) + &
+                                   (f4(ims+1:ime-1,:,jms+2:jme) - f4(ims+1:ime-1,:,jms+1:jme-1))) &
+                                   / (jaco(ims+1:ime-1,:,jms+1:jme-1)*rho(ims+1:ime-1,:,jms+1:jme-1))                      
                ! then vertical (order doesn't matter because fluxes f1-6 are calculated before applying them)
                ! add fluxes to middle layers
-               q(ims+1:ime-1,kms+1:kme-1,i) = q(ims+1:ime-1,kms+1:kme-1,i)  - (f5(:,kms+1:kme-1) - f5(:,kms:kme-2)) &
-                                   / (dz(ims+1:ime-1,kms+1:kme-1,i)*jaco(ims+1:ime-1,kms+1:kme-1,i)*rho(ims+1:ime-1,kms+1:kme-1,i))
+               q(ims+1:ime-1,kms+1:kme-1,jms+1:jme-1) = q(ims+1:ime-1,kms+1:kme-1,jms+1:jme-1)  &
+                                   - (f5(ims+1:ime-1,kms+1:kme-1,jms+1:jme-1) - f5(ims+1:ime-1,kms:kme-2,jms+1:jme-1)) &
+                                   / (dz(ims+1:ime-1,kms+1:kme-1,jms+1:jme-1)*&
+                                       jaco(ims+1:ime-1,kms+1:kme-1,jms+1:jme-1)*rho(ims+1:ime-1,kms+1:kme-1,jms+1:jme-1))
                ! add fluxes to bottom layer
-               q(ims+1:ime-1,kms,i)      = q(ims+1:ime-1,kms,i)       - f5(:,kms) &
-                                   / (dz(ims+1:ime-1,kms,i)*jaco(ims+1:ime-1,kms,i) * rho(ims+1:ime-1,kms,i) )
+               q(ims+1:ime-1,kms,jms+1:jme-1)  = q(ims+1:ime-1,kms,jms+1:jme-1)  - f5(ims+1:ime-1,kms,jms+1:jme-1) &
+                                   / (dz(ims+1:ime-1,kms,jms+1:jme-1)*&
+                                       jaco(ims+1:ime-1,kms,jms+1:jme-1) * rho(ims+1:ime-1,kms,jms+1:jme-1) )
                ! add fluxes to top layer
-               q(ims+1:ime-1,kme,i)     = q(ims+1:ime-1,kme,i)     - (qin(ims+1:ime-1,kme,i) * w(ims+1:ime-1,kme,i) - f5(:,kme-1)) &
-                                   / (dz(ims+1:ime-1,kme,i)*jaco(ims+1:ime-1,kme,i)*rho(ims+1:ime-1,kme,i))
+               q(ims+1:ime-1,kme,jms+1:jme-1) = q(ims+1:ime-1,kme,jms+1:jme-1)- (qin(ims+1:ime-1,kme,jms+1:jme-1) * &
+                                    w(ims+1:ime-1,kme,jms+1:jme-1) - f5(ims+1:ime-1,kme-1,jms+1:jme-1)) &
+                                   / (dz(ims+1:ime-1,kme,jms+1:jme-1)*&
+                                       jaco(ims+1:ime-1,kme,jms+1:jme-1)*rho(ims+1:ime-1,kme,jms+1:jme-1))
 
         enddo
         ! !$omp end do
@@ -254,71 +260,84 @@ contains
         
     end subroutine mpdata_fluxes
 
-    subroutine flux_limiter(q, q2, u,v,w, ims,ime,kms,kme,jms,jme)
+    subroutine flux_limiter(q, q2, u,v,w, dz,dx,dt,ims,ime,kms,kme,jms,jme,G_in)
         implicit none
-        real,dimension(ims:ime,kms:kme,jms:jme),  intent(in)    :: q, q2
-        real,dimension(ims:ime-1,kms:kme,jms:jme),intent(inout) :: u
-        real,dimension(ims:ime,kms:kme,jms:jme-1),intent(inout) :: v
+        real,dimension(ims:ime,kms:kme,jms:jme),  intent(in)    :: q, q2, dz, G_in
+        real,dimension(ims+1:ime,kms:kme,jms:jme),intent(inout) :: u
+        real,dimension(ims:ime,kms:kme,jms+1:jme),intent(inout) :: v
         real,dimension(ims:ime,kms:kme,jms:jme),  intent(inout) :: w
         integer, intent(in) :: ims, ime, kms, kme, jms, jme
+        real,    intent(in) :: dt, dx
         
         integer :: i,j,k,n,n_s
-        real, dimension(:), pointer :: q1, U2, l, f
+        real, dimension(:), pointer :: q1, U2, l, f, g
         ! q1 = q after applying previous iteration advection
         ! l  = q before applying previous iteration
         ! U2 is the anti-diffusion pseudo-velocity
         ! f is the first pass calculation of MPDATA fluxes
-        real, dimension(ims:ime),   target :: q1x,lx
-        real, dimension(ims:ime-1), target :: fx, U2x
-        real, dimension(jms:jme),   target :: q1y,ly
-        real, dimension(jms:jme-1), target :: fy, U2y
+        real, dimension(ims:ime),   target :: q1x,lx, gx
+        real, dimension(ims+1:ime), target :: fx, U2x
+        real, dimension(jms:jme),   target :: q1y,ly, gy
+        real, dimension(jms+1:jme), target :: fy, U2y
         real, dimension(kms:kme),   target :: q1z,lz
-        real, dimension(kms:kme-1), target :: fz, U2z
+        real, dimension(kms:kme), target :: fz, U2z, gz,dzk
         logical :: flux_is_w
         
         real :: qmax_i,qmin_i,qmax_i2,qmin_i2
         real :: beta_in_i, beta_out_i, beta_in_i2, beta_out_i2
         real :: fin_i, fout_i, fin_i2, fout_i2
         
+        !x_flux = 
+        !y_flux = 
+        !z_flux = 
+        
         ! NOTE: before inclusion of FCT_core the following variables must be setup: 
         ! q1 and l (l=q0)
-        !$omp parallel shared(q2,q,u,v,w) firstprivate(ims,ime,kms,kme,jms,jme) default(private)
+        !$omp parallel shared(q2,q,u,v,w,dz,G_in) firstprivate(ims,ime,kms,kme,jms,jme,dx,dt) default(private)
         !$omp do schedule(static)
-        do j=jms+1,jme-1
+        do j=jms,jme
             flux_is_w=.False.
             q1=>q1x
             l =>lx
             U2=>U2x
             f=>fx
-            n=ime
-            n_s=ims
+            g=>gx
+            n=ime-1
+            n_s=ims+2
             do k=kms,kme
                 ! setup u
                 q1=q2(:,k,j)
                 U2=u(:,k,j)
                 l =q(:,k,j)
+                g = G_in(:,k,j)
                 call flux1(q1(ims:ime-1),q1(ims+1:ime),U2,f)
-                
+
                 include "adv_mpdata_FCT_core.f90"
                 u(:,k,j)=U2
             end do
             
+            !K indices for z are a bit offset, such that the staggering notation
+            !used in FCT core still works for w
             q1=>q1z
             l =>lz
             U2=>U2z
             f=>fz
+            g=>gz
             n=kme
-            n_s=kms
+            n_s=kms+1
             flux_is_w=.True.
-            do k=ims+1,ime-1
+            do k=ims,ime
                 ! setup w
                 q1=q2(k,:,j)
-                U2=w(k,kms:kme-1,j)
+                U2(kms+1:kme)=w(k,kms:kme-1,j)
                 l =q(k,:,j)
-                call flux1(q1(kms:kme-1),q1(kms+1:kme),U2,f)
+                g = G_in(k,:,j)
+                dzk = dz(k,:,j)
+                call flux1(q1(kms:kme-1),q1(kms+1:kme),U2(kms+1:kme),f(kms+1:kme))
+
                 ! NOTE: need to check this a little more
                 include "adv_mpdata_FCT_core.f90"
-                w(k,kms:kme-1,j)=U2
+                w(k,kms:kme-1,j)=U2(kms+1:kme)
                 w(k,kme,j)=0
             end do
             
@@ -330,8 +349,9 @@ contains
         l =>ly
         U2=>U2y
         f=>fy
-        n=jme
-        n_s=jms
+        g=>gy
+        n=jme-1
+        n_s=jms+2
         ! NOTE: This it typically not the correct order for the loop variables
         ! but in this case it permits parallelization over a larger number (nx instead of nz)
         ! and because all data are copied from an oddly spaced grid regardless, it *probably* doesn't slow it down
@@ -342,8 +362,8 @@ contains
                 q1=q2(j,k,:)
                 U2=v(j,k,:)
                 l =q(j,k,:)
+                g = G_in(j,k,:)
                 call flux1(q1(jms:jme-1),q1(jms+1:jme),U2,f)
-                
                 include "adv_mpdata_FCT_core.f90"
                 v(j,k,:)=U2
             end do
@@ -353,12 +373,13 @@ contains
         
     end subroutine flux_limiter
 
-    subroutine advect3d(q,rho,ims,ime,kms,kme,jms,jme,jaco,dz,options)
+    subroutine advect3d(q,rho,ims,ime,kms,kme,jms,jme,jaco,dz,dx,dt,options)
         implicit none
         real,dimension(ims:ime,kms:kme,jms:jme), intent(inout) :: q
         real,dimension(ims:ime,kms:kme,jms:jme), intent(in) :: rho
         integer, intent(in) :: ims,ime,kms,kme,jms,jme
         real,dimension(ims:ime,kms:kme,jms:jme), intent(in) :: jaco,dz
+        real, intent(in)    :: dt, dx
         type(options_t), intent(in)::options
 
         ! used for intermediate values in the mpdata calculation
@@ -380,11 +401,18 @@ contains
                 ! and un-normalize, since upwind advection scheme includes dz
                 ! Since pseudo-velocities cannot be gaurenteed to be non-divergent, we assume worst-case and multiply by 0.5 to
                 ! ensure stability (from Smolarkiewicz 1984, after Eq. 24)
-                u2 = u2*0.5
-                v2 = v2*0.5
-                w2 = w2*0.5*dz
                 if (options%adv_options%flux_corrected_transport) then
-                    call flux_limiter(q, q2, u2,v2,w2, ims,ime,kms,kme,jms,jme)
+                    !These should be pure velocities, no dt/dx normalization
+                    u2 = u2*dx/dt
+                    v2 = v2*dx/dt
+                    w2 = w2*dz/dt
+                    call flux_limiter(q, q2, u2,v2,w2, dz,dx,dt,ims,ime,kms,kme,jms,jme,jaco)
+                    !Advection expects all normalized, but w not divided by dz
+                    u2 = u2*dt/dx
+                    v2 = v2*dt/dx
+                    w2 = w2*dt
+                else
+                    w2 = w2*dz
                 endif
                 call upwind_advection(q2, u2,v2,w2, rho, q,dz,ims,ime,kms,kme,jms,jme,jaco)
             endif
@@ -509,17 +537,17 @@ contains
             call test_divergence(domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme)
         endif
 
-        if (options%vars_to_advect(kVARS%water_vapor)>0)                  call advect3d(domain%water_vapor%data_3d,             rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
-        if (options%vars_to_advect(kVARS%cloud_water)>0)                  call advect3d(domain%cloud_water_mass%data_3d,        rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
-        if (options%vars_to_advect(kVARS%rain_in_air)>0)                  call advect3d(domain%rain_mass%data_3d,               rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
-        if (options%vars_to_advect(kVARS%snow_in_air)>0)                  call advect3d(domain%snow_mass%data_3d,               rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
-        if (options%vars_to_advect(kVARS%potential_temperature)>0)        call advect3d(domain%potential_temperature%data_3d,   rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
-        if (options%vars_to_advect(kVARS%cloud_ice)>0)                    call advect3d(domain%cloud_ice_mass%data_3d,          rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
-        if (options%vars_to_advect(kVARS%graupel_in_air)>0)               call advect3d(domain%graupel_mass%data_3d,            rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
-        if (options%vars_to_advect(kVARS%ice_number_concentration)>0)     call advect3d(domain%cloud_ice_number%data_3d,        rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
-        if (options%vars_to_advect(kVARS%rain_number_concentration)>0)    call advect3d(domain%rain_number%data_3d,             rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
-        if (options%vars_to_advect(kVARS%snow_number_concentration)>0)    call advect3d(domain%snow_number%data_3d,             rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
-        if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call advect3d(domain%graupel_number%data_3d,          rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, options)
+        if (options%vars_to_advect(kVARS%water_vapor)>0)                  call advect3d(domain%water_vapor%data_3d,             rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, dx,dt,options)
+        if (options%vars_to_advect(kVARS%cloud_water)>0)                  call advect3d(domain%cloud_water_mass%data_3d,        rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, dx,dt,options)
+        if (options%vars_to_advect(kVARS%rain_in_air)>0)                  call advect3d(domain%rain_mass%data_3d,               rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, dx,dt,options)
+        if (options%vars_to_advect(kVARS%snow_in_air)>0)                  call advect3d(domain%snow_mass%data_3d,               rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, dx,dt,options)
+        if (options%vars_to_advect(kVARS%potential_temperature)>0)        call advect3d(domain%potential_temperature%data_3d,   rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, dx,dt,options)
+        if (options%vars_to_advect(kVARS%cloud_ice)>0)                    call advect3d(domain%cloud_ice_mass%data_3d,          rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, dx,dt,options)
+        if (options%vars_to_advect(kVARS%graupel_in_air)>0)               call advect3d(domain%graupel_mass%data_3d,            rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, dx,dt,options)
+        if (options%vars_to_advect(kVARS%ice_number_concentration)>0)     call advect3d(domain%cloud_ice_number%data_3d,        rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, dx,dt,options)
+        if (options%vars_to_advect(kVARS%rain_number_concentration)>0)    call advect3d(domain%rain_number%data_3d,             rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, dx,dt,options)
+        if (options%vars_to_advect(kVARS%snow_number_concentration)>0)    call advect3d(domain%snow_number%data_3d,             rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, dx,dt,options)
+        if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call advect3d(domain%graupel_number%data_3d,          rho, ims, ime, kms, kme, jms, jme, domain%jacobian, domain%advection_dz, dx,dt,options)
 
     end subroutine mpdata
 end module adv_mpdata
