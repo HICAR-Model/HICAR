@@ -1,4 +1,5 @@
 import datetime
+import sys
 
 import numpy as np
 
@@ -62,8 +63,17 @@ def write_file(date,info,erai):
     atts=Bunch(long_name="Planetary Boundary Layer Height",units="m")
     extra_vars.append(Bunch(name="PBL_height",data=erai["PBL_height"],dims=dims2dt,dtype="f",attributes=atts))
 
+    atts=Bunch(long_name="Land fraction",units="")
+    extra_vars.append(Bunch(name="landfraction",data=erai["landmask"],dims=dims2dt,dtype="f",attributes=atts))
+
     atts=Bunch(long_name="Skin Temperature",units="K")
     extra_vars.append(Bunch(name="tskin",data=erai["tskin"],dims=dims2dt,dtype="f",attributes=atts))
+
+    atts=Bunch(long_name="Sea Surface Temperature",units="K")
+    extra_vars.append(Bunch(name="sst",data=erai["sst"],dims=dims2dt,dtype="f",attributes=atts))
+
+    atts=Bunch(long_name="Convective precipitation",units="mm")
+    extra_vars.append(Bunch(name="cp",data=erai["cp"],dims=dims2dt,dtype="f",attributes=atts))
 
     atts=Bunch(long_name="latitude",units="degrees_north")
     extra_vars.append(Bunch(name="lat",data=info.lat_data[:,0],dims=("lat",),dtype="f",attributes=atts))
@@ -81,4 +91,4 @@ def write_file(date,info,erai):
 
     # write to output file
     mygis.write(filename=filename,varname="qv",data=erai.qv,attributes=qvatts,dtype="f",dims=dims,
-                  extravars=extra_vars,history=" Produced by erai2icar v."+info.version)
+                  extravars=extra_vars,history=" Produced by erai2icar v."+info.version+" "+" ".join(sys.argv))

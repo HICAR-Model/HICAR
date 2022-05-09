@@ -30,7 +30,6 @@ module time_step
 contains
 
 
-    !>------------------------------------------------------------
     !!  Calculate the maximum stable time step given some CFL criteria
     !!
     !!  For each grid cell, find the mean of the wind speeds from each
@@ -247,9 +246,7 @@ contains
 #ifdef __INTEL_COMPILER
         seconds = domain%dx / 100
 #endif
-        ! seconds = seconds/1.25
 
-        ! print*, seconds
         ! set an upper bound on dt to keep microphysics and convection stable (?)
         ! store this back in the dt time_delta data structure
         call dt%set(seconds=min(seconds,120.0D0))
@@ -293,7 +290,7 @@ contains
 
         last_print_time = 0.0
         time_step_size = end_time - domain%model_time
-        
+
         ! now just loop over internal timesteps computing all physics in order (operator splitting...)
         do while (domain%model_time < end_time)
 
@@ -322,12 +319,12 @@ contains
 
             ! this if is to avoid round off errors causing an additional physics call that won't really do anything
             if (dt%seconds() > 1e-3) then
-                
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" init")
- 
+
+                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" init", fix=.True.)
+
                 ! first process the halo section of the domain (currently hard coded at 1 should come from domain?)
                 call rad(domain, options, real(dt%seconds()))
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" rad(domain")
+                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" rad(domain", fix=.True.)
 
                 call lsm(domain, options, real(dt%seconds()))!, halo=1)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" lsm")
@@ -339,10 +336,10 @@ contains
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" convect")
 
                 call mp(domain, options, real(dt%seconds()), halo=1)
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp_halo")
+                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp_halo", fix=.True.)
 
                 call domain%halo_send()
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_send")
+                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_send", fix=.True.)
 
                 ! call rad(domain, options, real(dt%seconds()), subset=1)
                 ! call lsm(domain, options, real(dt%seconds()))!, subset=1)
@@ -350,13 +347,13 @@ contains
                 ! call convect(domain, options, real(dt%seconds()), subset=1)
 
                 call mp(domain, options, real(dt%seconds()), subset=1)
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp(domain")
-                
+                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp(domain", fix=.True.)
+
                 call domain%halo_retrieve()
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_retrieve")
+                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_retrieve", fix=.True.)
 
                 call advect(domain, options, real(dt%seconds()))
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain")
+                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain", fix=.True.)
 
 
                 ! ! apply/update boundary conditions including internal wind and pressure changes.
@@ -364,12 +361,12 @@ contains
  
                 !If we are in the last ~10 updates of a time step and a variable drops below 0, we have probably over-shot a value of 0. Force back to 0
                 if ((end_time%seconds() - domain%model_time%seconds()) < (dt%seconds()*10)) then
+
                     call domain%enforce_limits()
-                    !if (this_image()==1) write(*,*) 'Enforcing Limits'
                 endif
-                
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%apply_forcing")
-                
+
+
+                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%apply_forcing", fix=.True.)
 
             endif
 
