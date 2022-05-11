@@ -333,7 +333,7 @@ contains
 
         real, allocatable, dimension(:,:,:) :: temparray, alpha, div
         integer :: nx, ny, nz, i, j
-        integer :: ims, ime, jms, jme, kms, kme
+        integer :: ims, ime, jms, jme, kms, kme, its, ite, jts, jte
 
 
         ims = lbound(domain%w%data_3d,1)
@@ -342,7 +342,12 @@ contains
         kme = ubound(domain%w%data_3d,2)
         jms = lbound(domain%w%data_3d,3)
         jme = ubound(domain%w%data_3d,3)
-
+        
+        its = domain%grid%its
+        ite = domain%grid%ite
+        jts = domain%grid%jts
+        jte = domain%grid%jte
+        
         if (.not.allocated(domain%advection_dz)) then
 
             call init_winds(domain, options)
@@ -373,15 +378,13 @@ contains
                     call mass_conservative_acceleration(domain%u%data_3d, domain%v%data_3d, domain%zr_u, domain%zr_v)
                 endif
             elseif (options%physics%windtype==kOBRIEN_WINDS) then
-                call Obrien_winds(domain, options, update_in=.True.)
+                call Obrien_winds(domain, options, its, ite, jts, jte)
             elseif (options%physics%windtype==kITERATIVE_WINDS) then
             
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
                 allocate(div(ims:ime,kms:kme,jms:jme))
                 
-                call calc_alpha(alpha, domain%froude, &
-                            domain%ims, domain%ime,  domain%kms, domain%kme, domain%jms, domain%jme, &
-                            domain%its, domain%ite, domain%jts, domain%jte, &
+                call calc_alpha(alpha, domain%froude, ims, ime,  kms, kme, jms, jme, its, ite, jts, jte, &
                             domain%ids, domain%ide, domain%jds, domain%jde)
 
                 !Call this, passing 0 for w_grid, to get vertical components of vertical motion
@@ -390,7 +393,7 @@ contains
                              domain%w%data_3d*0.0,      &
                              domain%w%data_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian)
+                             domain%jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
                              
                 !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
                 if (options%parameters%wvar=="") domain%w_real%data_3d = 0.0  
@@ -413,7 +416,7 @@ contains
                              domain% w %data_3d,      &
                              domain% w_real %data_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian)
+                             domain%jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
         else
 
             call update_stability(domain)
@@ -437,15 +440,13 @@ contains
                     call mass_conservative_acceleration(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%zr_u, domain%zr_v)
                 endif
             elseif (options%physics%windtype==kOBRIEN_WINDS) then
-                call Obrien_winds(domain, options, update_in=.True.)
+                call Obrien_winds(domain, options, its, ite, jts, jte, update_in=.True.)
             elseif (options%physics%windtype==kITERATIVE_WINDS) then
             
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
                 allocate(div(ims:ime,kms:kme,jms:jme))
 
-                call calc_alpha(alpha, domain%froude, &
-                            domain%ims, domain%ime,  domain%kms, domain%kme, domain%jms, domain%jme, &
-                            domain%its, domain%ite, domain%jts, domain%jte, &
+                call calc_alpha(alpha, domain%froude, ims, ime,  kms, kme, jms, jme, its, ite, jts, jte, &
                             domain%ids, domain%ide, domain%jds, domain%jde)
 
                 !Call this, passing 0 for w_grid, to get vertical components of vertical motion
@@ -454,11 +455,14 @@ contains
                              domain%w%meta_data%dqdt_3d*0.0,      &
                              domain%w%meta_data%dqdt_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian)
+                             domain%jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
                              
                 !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
-                if (options%parameters%wvar=="") domain%w_real%dqdt_3d = 0.0  
-                domain%w%meta_data%dqdt_3d = (domain%w_real%dqdt_3d-domain%w%meta_data%dqdt_3d)/domain%jacobian
+                if (options%parameters%wvar=="") then
+                    domain%w%meta_data%dqdt_3d = (0.0-domain%w%meta_data%dqdt_3d)/domain%jacobian
+                else
+                    domain%w%meta_data%dqdt_3d = (domain%w_real%dqdt_3d-domain%w%meta_data%dqdt_3d)/domain%jacobian
+                endif
                 
                 call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
@@ -478,9 +482,9 @@ contains
             call calc_w_real(domain% u %meta_data%dqdt_3d,      &
                              domain% v %meta_data%dqdt_3d,      &
                              domain% w %meta_data%dqdt_3d,      &
-                             domain% w_real %dqdt_3d,           &
+                             domain% w_real %data_3d,           &
                              domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian)
+                             domain%jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
 
 
         endif
@@ -508,30 +512,25 @@ contains
         
     end subroutine calc_alpha
     
-    subroutine calc_w_real(u,v,w_grid,w_real,dzdx,dzdy,jacobian)
+    subroutine calc_w_real(u,v,w_grid,w_real,dzdx,dzdy,jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
 
         implicit none
-        real, intent(in), dimension(:,:,:) :: u,v,w_grid,dzdx,dzdy,jacobian
-        real, intent(inout)                :: w_real(:,:,:)
+        real, intent(in), dimension(ims:ime,kms:kme,jms:jme)   :: w_grid,jacobian
+        real, intent(in), dimension(ims:ime+1,kms:kme,jms:jme) :: u,dzdx
+        real, intent(in), dimension(ims:ime,kms:kme,jms:jme+1) :: v,dzdy
+        real, intent(inout)                                    :: w_real(ims:ime,kms:kme,jms:jme)
         
         real, allocatable :: lastw(:,:)
         real, allocatable :: currw(:,:)
         real, allocatable :: uw(:,:)
         real, allocatable :: vw(:,:)
-        integer :: z, ims, ime, jms, jme, kms, kme
-        
-        ims = lbound(w_grid,1)
-        ime = ubound(w_grid,1)
-        kms = lbound(w_grid,2)
-        kme = ubound(w_grid,2)
-        jms = lbound(w_grid,3)
-        jme = ubound(w_grid,3)
-        
+        integer :: z, ims, ime, kms, kme, jms, jme, its, ite, jts, jte
+
         if (.not.allocated(lastw)) then
-            allocate( lastw( ims+1:ime-1, jms+1:jme-1))
-            allocate( currw( ims+1:ime-1, jms+1:jme-1))
-            allocate(    uw( ims+1:ime,   jms+1:jme-1))
-            allocate(    vw( ims+1:ime-1, jms+1:jme  ))
+            allocate( lastw( its:ite  , jts:jte  ))
+            allocate( currw( its:ite  , jts:jte  ))
+            allocate(    uw( its:ite+1, jts:jte  ))
+            allocate(    vw( its:ite  , jts:jte+1))
         endif
         
         !calculate the real vertical motions (including U*dzdx + V*dzdy)
@@ -540,20 +539,20 @@ contains
             
             ! ! if(options%parameters%use_terrain_difference) then
             !                 ! compute the U * dz/dx component of vertical motion
-            !     uw    = u(ims+1:ime,   z, jms+1:jme-1) * domain%delta_dzdx(:,z,jms+1:jme-1)
+            !     uw    = u(its:ime,   z, jts:jts) * domain%delta_dzdx(:,z,jts:jts)
             !     ! compute the V * dz/dy component of vertical motion
-            !     vw    = v(ims+1:ime-1, z, jms+1:jme  ) * domain%delta_dzdy(ims+1:ime-1,z,:)
+            !     vw    = v(its:its, z, jts:jme  ) * domain%delta_dzdy(its:its,z,:)
             ! else    
                 ! compute the U * dz/dx component of vertical motion
-                uw    = u(ims+1:ime,   z, jms+1:jme-1) * dzdx(ims+1:ime,z,jms+1:jme-1)
+                uw    = u(its:ite+1,   z, jts:jte) * dzdx(its:ite+1,z,jts:jte)
                 ! compute the V * dz/dy component of vertical motion
-                vw    = v(ims+1:ime-1, z, jms+1:jme  ) * dzdy(ims+1:ime-1,z,jms+1:jme)
+                vw    = v(its:ite, z,   jts:jte+1) * dzdy(its:ite,z,jts:jte+1)
             ! endif    
             ! ! convert the W grid relative motion to m/s
-            ! currw = w(ims+1:ime-1, z, jms+1:jme-1) * dz_interface(ims+1:ime-1, z, jms+1:jme-1) / domain%dx
+            ! currw = w(its:its, z, jts:jts) * dz_interface(its:its, z, jts:jts) / domain%dx
 
             ! the W grid relative motion
-            currw = w_grid(ims+1:ime-1, z, jms+1:jme-1)
+            currw = w_grid(its:ite, z, jts:jte)
 
             ! if (options%physics%convection>0) then
             !     currw = currw + domain%w_cu(2:nx-1,z,2:ny-1) * domain%dz_inter(2:nx-1,z,2:ny-1) / domain%dx
@@ -561,23 +560,24 @@ contains
             
             ! compute the real vertical velocity of air by combining the different components onto the mass grid
             ! includes vertical interpolation between w_z-1/2 and w_z+1/2
-            w_real(ims+1:ime-1, z, jms+1:jme-1) = (uw(ims+1:ime-1,:) + uw(ims+2:ime,:))*0.5 &
-                                                 +(vw(:,jms+1:jme-1) + vw(:,jms+2:jme))*0.5 &
-                                                 +jacobian(ims+1:ime-1,z,jms+1:jme-1)*(lastw + currw) * 0.5
+            w_real(its:ite, z, jts:jte) = (uw(its:ite,:) + uw(its+1:ite+1,:))*0.5 &
+                                                 +(vw(:,jts:jte) + vw(:,jts+1:jte+1))*0.5 &
+                                                 +jacobian(its:ite,z,jts:jte)*(lastw + currw) * 0.5
             lastw = currw ! could avoid this memcopy cost using pointers or a single manual loop unroll
         end do
+                
     end subroutine calc_w_real
     
-    subroutine Obrien_winds(domain, options, update_in)
+    subroutine Obrien_winds(domain, options, its, ite, jts, jte, update_in)
         implicit none
         type(domain_t), intent(inout) :: domain
         type(options_t),intent(in)    :: options
         logical, optional, intent(in) :: update_in
 
         ! interal parameters
-        real, allocatable, dimension(:,:,:) :: div, ADJ,ADJ_coef, U_cor, V_cor, current_u, current_v, current_w
+        real, allocatable, dimension(:,:,:) :: div, ADJ,ADJ_coef, current_u, current_v, current_w
         real    :: corr_factor
-        integer :: it, k, j, i, ims, ime, jms, jme, kms, kme, wind_k
+        integer :: it, k, j, i, ims, ime, jms, jme, kms, kme, its, ite, jts, jte, wind_k
         logical :: update
 
         update=.False.
@@ -589,7 +589,12 @@ contains
         kme = ubound(domain%w%data_3d,2)
         jms = lbound(domain%w%data_3d,3)
         jme = ubound(domain%w%data_3d,3)
-
+        
+        its = domain%grid%its
+        ite = domain%grid%ite
+        jts = domain%grid%jts
+        jte = domain%grid%jte
+        
         !If we are doing an update, we need to swap meta data into data_3d fields so it can be exchanged while balancing
         !First, we save a copy of the current data_3d so that we can substitute it back in later
         if (update) then
@@ -612,9 +617,7 @@ contains
         allocate(div(ims:ime,kms:kme,jms:jme))
         allocate(ADJ_coef(ims:ime,kms:kme,jms:jme))
         allocate(ADJ(ims:ime,kms:kme,jms:jme))
-        allocate(U_cor(ims:ime,kms:kme,jms:jme))
-        allocate(V_cor(ims:ime,kms:kme,jms:jme))
-
+        
         ! Calculate and apply correction to w-winds
         wind_k = kme
         do k = kms,kme
@@ -623,10 +626,6 @@ contains
                 exit
             endif
         enddo
-
-        !Compute relative correction factors for U and V based on input speeds
-        U_cor = ABS(domain%u%data_3d(ims:ime,:,jms:jme))/ &
-                (ABS(domain%u%data_3d(ims:ime,:,jms:jme))+ABS(domain%v%data_3d(ims:ime,:,jms:jme)))
 
         do k = kms,kme
             corr_factor = ((sum(domain%advection_dz(ims,1:k,jms)))/domain%smooth_height)
@@ -643,12 +642,6 @@ contains
             ADJ_coef(:,k,:) = -2/domain%dx
         enddo
 
-        !V_cor = 1 - U_cor
-
-
-        U_cor = 0.5
-        V_cor = 0.5
-
         ! Now, fixing w-winds, iterate over U/V to reduce divergence with new w-winds
         do it = 0,options%parameters%wind_iterations
             !Compute divergence in new wind field
@@ -663,17 +656,17 @@ contains
             ADJ = div/ADJ_coef
 
             !Distribute divergence among the U and V fields
-            domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) = domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) + &
-                                                        (ADJ(ims+1:ime-1,:,jms+1:jme-1) * U_cor(ims+2:ime,:,jms+1:jme-1))
+            domain%u%data_3d(its+1:ite+1,:,jts:jte) = domain%u%data_3d(its+1:ite+1,:,jts:jte) + &
+                                                        (ADJ(its:ite,:,jts:jte) * 0.5)
 
-            domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) = domain%u%data_3d(ims+2:ime,:,jms+1:jme-1) - &
-                                                        (ADJ(ims+2:ime,:,jms+1:jme-1) * U_cor(ims+2:ime,:,jms+1:jme-1))
+            domain%u%data_3d(its+1:ite+1,:,jts:jte) = domain%u%data_3d(its+1:ite+1,:,jts:jte) - &
+                                                        (ADJ(its+1:ite+1,:,jts:jte) * 0.5)
 
-            domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) = domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) + &
-                                                        (ADJ(ims+1:ime-1,:,jms+1:jme-1) * V_cor(ims+1:ime-1,:,jms+2:jme))
+            domain%v%data_3d(its:ite,:,jts+1:jte+1) = domain%v%data_3d(its:ite,:,jts+1:jte+1) + &
+                                                        (ADJ(its:ite,:,jts:jte) * 0.5)
 
-            domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) = domain%v%data_3d(ims+1:ime-1,:,jms+2:jme) - &
-                                                        (ADJ(ims+1:ime-1,:,jms+2:jme) * V_cor(ims+1:ime-1,:,jms+2:jme))
+            domain%v%data_3d(its:ite,:,jts+1:jte+1) = domain%v%data_3d(its:ite,:,jts+1:jte+1) - &
+                                                        (ADJ(its:ite,:,jts+1:jte+1) * 0.5)
             call domain%u%exchange_u()
             call domain%v%exchange_v()
 

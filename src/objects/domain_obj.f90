@@ -121,6 +121,8 @@ contains
         associate(ims => this%ims, ime => this%ime,                             &
                   jms => this%jms, jme => this%jme,                             &
                   kms => this%kms, kme => this%kme,                             &
+                  its => this%its, ite => this%ite,                             &
+                  jts => this%jts, jte => this%jte,                             &
                   exner                 => this%exner%data_3d,                  &
                   pressure              => this%pressure%data_3d,               &
                   pressure_i            => this%pressure_interface%data_3d,     &
@@ -178,27 +180,27 @@ contains
     !     domain%mut(:,1:nz-1,:) = domain%p_inter(:,1:nz-1,:) - domain%p_inter(:,2:nz,:)
     !     domain%mut(:,nz,:) = domain%p_inter(:,nz,:) - domain%ptop
     !
-        allocate( temp_1( ims+1:ime-1, jms+1:jme-1))
-        allocate( temp_2( ims+1:ime-1, jms+1:jme-1))
+        allocate( temp_1( its:ite, jts:jte))
+        allocate( temp_2( its:ite, jts:jte))
 
         ! temporary constant
         if (associated(this%roughness_z0%data_2d)) then
             ! use log-law of the wall to convert from first model level to surface
-            temp_1 = karman / log((this%z%data_3d(ims+1:ime-1,kms,jms+1:jme-1) - this%terrain%data_2d(ims+1:ime-1,jms+1:jme-1)) / this%roughness_z0%data_2d(ims+1:ime-1,jms+1:jme-1))
+            temp_1 = karman / log((this%z%data_3d(its:ite,kms,jts:jte) - this%terrain%data_2d(its:ite,jts:jte)) / this%roughness_z0%data_2d(its:ite,jts:jte))
             ! use log-law of the wall to convert from surface to 10m height
-            temp_2 = log(10.0 / this%roughness_z0%data_2d(ims+1:ime-1,jms+1:jme-1)) / karman
+            temp_2 = log(10.0 / this%roughness_z0%data_2d(its:ite,jts:jte)) / karman
         endif
 
         if (associated(this%u_10m%data_2d)) then
-            this%ustar        (ims+1:ime-1,jms+1:jme-1) = u_mass      (ims+1:ime-1,kms,jms+1:jme-1) * temp_1
-            this%u_10m%data_2d(ims+1:ime-1,jms+1:jme-1) = this%ustar(ims+1:ime-1,jms+1:jme-1)     * temp_2
-            this%ustar        (ims+1:ime-1,jms+1:jme-1) = v_mass      (ims+1:ime-1,kms,jms+1:jme-1) * temp_1
-            this%v_10m%data_2d(ims+1:ime-1,jms+1:jme-1) = this%ustar(ims+1:ime-1,jms+1:jme-1)     * temp_2
+            this%ustar        (its:ite,jts:jte) = u_mass      (its:ite,kms,jts:jte) * temp_1
+            this%u_10m%data_2d(its:ite,jts:jte) = this%ustar(its:ite,jts:jte)     * temp_2
+            this%ustar        (its:ite,jts:jte) = v_mass      (its:ite,kms,jts:jte) * temp_1
+            this%v_10m%data_2d(its:ite,jts:jte) = this%ustar(its:ite,jts:jte)     * temp_2
         endif
 
         if (allocated(this%ustar)) then
             ! now calculate master ustar based on U and V combined in quadrature
-            this%ustar(ims+1:ime-1,jms+1:jme-1) = sqrt(u_mass(ims+1:ime-1,kms,jms+1:jme-1)**2 + v_mass(ims+1:ime-1,kms,jms+1:jme-1)**2) * temp_1
+            this%ustar(its:ite,jts:jte) = sqrt(u_mass(its:ite,kms,jts:jte)**2 + v_mass(its:ite,kms,jts:jte)**2) * temp_1
         endif
 
         end associate
@@ -1818,8 +1820,8 @@ contains
         kme = domain%kme
 
         ! one grid point into the domain gets a non-boundary point
-        xpt = domain%ims + 1
-        ypt = domain%jms + 1
+        xpt = domain%ims + domain%grid%halo_size
+        ypt = domain%jms + domain%grid%halo_size
 
         associate(p     => domain%pressure%data_3d,                         &
                   nz    => domain%nz,                                       &
@@ -2276,19 +2278,19 @@ contains
         ny_global = size(temporary_data,2)
         nz_global = options%parameters%nz
 
-        call this%grid%set_grid_dimensions(         nx_global, ny_global, nz_global)
+        call this%grid%set_grid_dimensions(   nx_global, ny_global, nz_global,adv=options%physics%advection)
 
-        call this%u_grid%set_grid_dimensions(       nx_global, ny_global, nz_global, nx_extra = 1)
-        call this%v_grid%set_grid_dimensions(       nx_global, ny_global, nz_global, ny_extra = 1)
+        call this%u_grid%set_grid_dimensions( nx_global, ny_global, nz_global,adv=options%physics%advection, nx_extra = 1)
+        call this%v_grid%set_grid_dimensions( nx_global, ny_global, nz_global,adv=options%physics%advection, ny_extra = 1)
 
         ! for 2D mass variables
-        call this%grid2d%set_grid_dimensions(       nx_global, ny_global, 0)
+        call this%grid2d%set_grid_dimensions( nx_global, ny_global, 0,adv=options%physics%advection)
 
         ! setup a 2D lat/lon grid extended by nsmooth grid cells so that smoothing can take place "across" images
         ! This just sets up the fields to interpolate u and v to so that the input data are handled on an extended
         ! grid.  They are then subset to the u_grid and v_grids above before actual use.
-        call this%u_grid2d%set_grid_dimensions(     nx_global, ny_global, 0, nx_extra = 1)
-        call this%u_grid2d_ext%set_grid_dimensions( nx_global, ny_global, 0, nx_extra = 1)
+        call this%u_grid2d%set_grid_dimensions(     nx_global, ny_global, 0,adv=options%physics%advection, nx_extra = 1)
+        call this%u_grid2d_ext%set_grid_dimensions( nx_global, ny_global, 0,adv=options%physics%advection, nx_extra = 1)
         ! extend by nsmooth, but bound to the domain grid
         this%u_grid2d_ext%ims = max(this%u_grid2d%ims - nsmooth, this%u_grid2d%ids)
         this%u_grid2d_ext%ime = min(this%u_grid2d%ime + nsmooth, this%u_grid2d%ide)
@@ -2296,8 +2298,8 @@ contains
         this%u_grid2d_ext%jme = min(this%u_grid2d%jme + nsmooth, this%u_grid2d%jde)
 
         ! handle the v-grid too
-        call this%v_grid2d%set_grid_dimensions(     nx_global, ny_global, 0, ny_extra = 1)
-        call this%v_grid2d_ext%set_grid_dimensions( nx_global, ny_global, 0, ny_extra = 1)
+        call this%v_grid2d%set_grid_dimensions(     nx_global, ny_global, 0,adv=options%physics%advection, ny_extra = 1)
+        call this%v_grid2d_ext%set_grid_dimensions( nx_global, ny_global, 0,adv=options%physics%advection, ny_extra = 1)
         ! extend by nsmooth, but bound to the domain grid
         this%v_grid2d_ext%ims = max(this%v_grid2d%ims - nsmooth, this%v_grid2d%ids)
         this%v_grid2d_ext%ime = min(this%v_grid2d%ime + nsmooth, this%v_grid2d%ide)
@@ -2305,13 +2307,13 @@ contains
         this%v_grid2d_ext%jme = min(this%v_grid2d%jme + nsmooth, this%v_grid2d%jde)
 
 
-        call this%grid_soil%set_grid_dimensions(     nx_global, ny_global, 4)
-        call this%grid_snow%set_grid_dimensions(     nx_global, ny_global, 3)
-        call this%grid_snowsoil%set_grid_dimensions( nx_global, ny_global, 7)
-        call this%grid_soilcomp%set_grid_dimensions( nx_global, ny_global, 8)
-        call this%grid_gecros%set_grid_dimensions(  nx_global, ny_global, 60)
-        call this%grid_croptype%set_grid_dimensions(  nx_global, ny_global, 5)
-        call this%grid_monthly%set_grid_dimensions( nx_global, ny_global, 12)
+        call this%grid_soil%set_grid_dimensions(     nx_global, ny_global, 4,adv=options%physics%advection)
+        call this%grid_snow%set_grid_dimensions(     nx_global, ny_global, 3,adv=options%physics%advection)
+        call this%grid_snowsoil%set_grid_dimensions( nx_global, ny_global, 7,adv=options%physics%advection)
+        call this%grid_soilcomp%set_grid_dimensions( nx_global, ny_global, 8,adv=options%physics%advection)
+        call this%grid_gecros%set_grid_dimensions(  nx_global, ny_global, 60,adv=options%physics%advection)
+        call this%grid_croptype%set_grid_dimensions(  nx_global, ny_global, 5,adv=options%physics%advection)
+        call this%grid_monthly%set_grid_dimensions( nx_global, ny_global, 12,adv=options%physics%advection)
 
 
         deallocate(temporary_data)
@@ -2523,10 +2525,12 @@ contains
         implicit none
         class(domain_t),    intent(inout) :: this
         type(time_delta_t), intent(in)    :: dt
-        integer :: ims, ime, jms, jme
-
+        integer :: ims, ime, jms, jme, hs
+        
         ! temporary to hold the variable to be interpolated to
         type(variable_t) :: var_to_update
+
+        hs = this%grid%halo_size
 
         ! make sure the dictionary is reset to point to the first variable
         call this%variables_to_force%reset_iterator()
@@ -2549,16 +2553,24 @@ contains
                     jme = ubound(var_to_update%data_3d, 3)
 
                     if (this%west_boundary) then
-                        var_to_update%data_3d(ims,:,jms+1:jme-1) = var_to_update%data_3d(ims,:,jms+1:jme-1) + (var_to_update%dqdt_3d(ims,:,jms+1:jme-1) * dt%seconds())
+                        var_to_update%data_3d(ims:(ims+hs-1),:,jms+hs:jme-hs) = &
+                        var_to_update%data_3d(ims:(ims+hs-1),:,jms+hs:jme-hs) + &
+                        (var_to_update%dqdt_3d(ims:(ims+hs-1),:,jms+hs:jme-hs) * dt%seconds())
                     endif
                     if (this%east_boundary) then
-                        var_to_update%data_3d(ime,:,jms+1:jme-1) = var_to_update%data_3d(ime,:,jms+1:jme-1) + (var_to_update%dqdt_3d(ime,:,jms+1:jme-1) * dt%seconds())
+                        var_to_update%data_3d((ime-hs+1):ime,:,jms+hs:jme-hs) = &
+                        var_to_update%data_3d((ime-hs+1):ime,:,jms+hs:jme-hs) + &
+                        (var_to_update%dqdt_3d((ime-hs+1):ime,:,jms+hs:jme-hs) * dt%seconds())
                     endif
                     if (this%south_boundary) then
-                        var_to_update%data_3d(:,:,jms) = var_to_update%data_3d(:,:,jms) + (var_to_update%dqdt_3d(:,:,jms) * dt%seconds())
+                        var_to_update%data_3d(:,:,jms:(jms+hs-1)) = &
+                        var_to_update%data_3d(:,:,jms:(jms+hs-1)) + &
+                        (var_to_update%dqdt_3d(:,:,jms:(jms+hs-1)) * dt%seconds())
                     endif
                     if (this%north_boundary) then
-                        var_to_update%data_3d(:,:,jme) = var_to_update%data_3d(:,:,jme) + (var_to_update%dqdt_3d(:,:,jme) * dt%seconds())
+                        var_to_update%data_3d(:,:,(jme-hs+1):jme) = &
+                        var_to_update%data_3d(:,:,(jme-hs+1):jme) + &
+                        (var_to_update%dqdt_3d(:,:,(jme-hs+1):jme) * dt%seconds())
                     endif
 
                 ! apply forcing throughout the domain for diagnosed variables (e.g. pressure, wind)
