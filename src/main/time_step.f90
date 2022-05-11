@@ -276,17 +276,6 @@ contains
 
         real :: last_print_time
         type(time_delta_t) :: dt, time_step_size
-        integer :: ims, jms, kms
-        integer :: test_x, test_y, test_z, test_image
-
-        test_x = 87
-        test_z = 3
-        test_y = 198
-        test_image = 33
-
-        ims = domain%grid%ims
-        jms = domain%grid%jms
-        kms = domain%grid%kms
 
         last_print_time = 0.0
         time_step_size = end_time - domain%model_time
@@ -301,9 +290,10 @@ contains
                 dt = end_time - domain%model_time
             endif
 
-            ! if using advect_density then density needs to be updated, and thus also winds need to be balanced at each update
+            call domain%diagnostic_update(options)
+
+            ! if using advect_density winds need to be balanced at each update
             if (options%parameters%advect_density) then
-                call domain%diagnostic_update(options)
                 call balance_uvw(domain% u %meta_data%dqdt_3d,      &
                              domain% v %meta_data%dqdt_3d,      &
                              domain% w %meta_data%dqdt_3d,      &
@@ -334,8 +324,8 @@ contains
 
                 call convect(domain, options, real(dt%seconds()))!, halo=1)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" convect")
-
-                call mp(domain, options, real(dt%seconds()), halo=1)
+                
+                call mp(domain, options, real(dt%seconds()), halo=domain%grid%halo_size)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp_halo", fix=.True.)
 
                 call domain%halo_send()
@@ -346,7 +336,7 @@ contains
                 ! call pbl(domain, options, real(dt%seconds()))!, subset=1)
                 ! call convect(domain, options, real(dt%seconds()), subset=1)
 
-                call mp(domain, options, real(dt%seconds()), subset=1)
+                call mp(domain, options, real(dt%seconds()), subset=domain%grid%halo_size)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp(domain", fix=.True.)
 
                 call domain%halo_retrieve()

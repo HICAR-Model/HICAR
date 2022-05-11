@@ -137,20 +137,38 @@ contains
 
     end function my_start
 
+  
+    !> -------------------------------
+    !! Determine the necesarry halo size based on the numerical accuracy of the advection scheme
+    !! -------------------------------
+    function determine_halo_size(adv) result(halo_size)
+        implicit none
+        integer, intent(in) :: adv
+        integer :: halo_size
+        
+        halo_size = 1
+       
+        if (adv == kADV_UPWIND) then
+           halo_size = 1
+        else if (adv == kADV_MPDATA) then
+            halo_size = 2
+        endif
+    end function
+    
     !> -------------------------------
     !! Generate the domain decomposition mapping and compute the indicies for local memory
     !!
     !! -------------------------------
-    module subroutine set_grid_dimensions(this, nx, ny, nz, nx_extra, ny_extra, halo_width, for_image)
+    module subroutine set_grid_dimensions(this, nx, ny, nz, adv, nx_extra, ny_extra, for_image)
       class(grid_t),   intent(inout) :: this
       integer,         intent(in)    :: nx, ny, nz
-      integer,         intent(in), optional :: nx_extra, ny_extra, halo_width, for_image
+      integer,         intent(in), optional :: adv, nx_extra, ny_extra, for_image
 
       integer :: nx_e, ny_e, halo_size
       integer :: image
-
+      
       halo_size = kDEFAULT_HALO_SIZE
-      if (present(halo_width)) halo_size = halo_width
+      if (present(adv)) halo_size = determine_halo_size(adv)
 
       image = this_image()
       if (present(for_image)) image = for_image

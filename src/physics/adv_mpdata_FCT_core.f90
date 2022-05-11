@@ -49,60 +49,39 @@
         ! min and max are taken from the grid cells on either side of the flux cell wall to be corrected
         if (i==n_s) then
             ! l still equals q0
-            qmax_i=max(q1(i-1),q1(i),l(i-1),l(i))
-            qmin_i=min(q1(i-1),q1(i),l(i-1),l(i))
-            qmax_i2=max(q1(i-1),q1(i),q1(i+1),l(i-1),l(i),l(i+1))
-            qmin_i2=min(q1(i-1),q1(i),q1(i+1),l(i-1),l(i),l(i+1))
-        elseif (i/=(n)) then
+            if (flux_is_w) then
+                qmax_i=max(q1(i-1),q1(i),l(i-1),l(i))
+                qmin_i=min(q1(i-1),q1(i),l(i-1),l(i))            
+            else
+                qmax_i=max(q1(i-2),q1(i-1),q1(i),l(i-2),l(i-1),l(i))
+                qmin_i=min(q1(i-2),q1(i-1),q1(i),l(i-2),l(i-1),l(i))
+            endif
+
+        else
             ! l still equals q0
             qmax_i=qmax_i2
             qmin_i=qmin_i2
+        endif
+        if ( (flux_is_w) .and. (i==n) ) then
+            qmax_i2=max(q1(i-1),q1(i),l(i-1),l(i))
+            qmin_i2=min(q1(i-1),q1(i),l(i-1),l(i))
+        else
             qmax_i2=max(q1(i-1),q1(i),q1(i+1),l(i-1),l(i),l(i+1))
             qmin_i2=min(q1(i-1),q1(i),q1(i+1),l(i-1),l(i),l(i+1))
         endif
+        
             ! for the boundary, q1(i+1)==q0(i+1), l is only 1:n-1
         !    qmax_i=qmax_i2
         !    qmin_i=qmin_i2
         !    qmax_i2=max(q1(i-1),q1(i),l(i-1))
         !    qmin_i2=min(q1(i-1),q1(i),l(i-1))
         !endif
+
+        fin_i = f_p(i-1)
+        fout_i = f_n(i-1)
         
-        ! next compute the total fluxes into and out of the upwind and downwind cells
-        ! these are the fluxes into and out of the "left-hand" cell (which is just the previous "right-hand" cell)
-        if (i/=n_s) then
-            fin_i  = fin_i2
-            fout_i = fout_i2          
-        else
-            if (flux_is_w) then
-                fin_i = (0. - min(0.,f(i)))*dt/(g(i-1)*dzk(i-1))
-                fout_i = (max(0.,f(i)))*dt/(g(i-1)*dzk(i-1))
-            else
-                ! No flux limitations to the boundary cell
-                fin_i = (max(0.,f(i-1)) - min(0.,f(i)))*dt/(g(i-1)*dx)
-                fout_i = (max(0.,f(i)) - min(0.,f(i-1)))*dt/(g(i-1)*dx)
-            endif
-                
-        endif
-        
-        ! these are the fluxes into and out of the "right-hand" cell
-        !if (i/=(n)) then
-        if (flux_is_w) then
-            fin_i2 = (max(0.,f(i)) - min(0.,f(i+1)))*dt/(g(i)*dzk(i))
-            fout_i2 = (max(0.,f(i+1)) - min(0.,f(i)))*dt/(g(i)*dzk(i))
-        else
-            fin_i2 = (max(0.,f(i)) - min(0.,f(i+1)))*dt/(g(i)*dx)
-            fout_i2 = (max(0.,f(i+1)) - min(0.,f(i)))*dt/(g(i)*dx)
-        endif
-        !else
-        !    if (flux_is_w) then
-        !        fin_i2 = (max(0.,f(i)) - min(0.,f(i)))*dt/(g(i)*dzk(i))
-        !        fout_i2 = (max(0.,f(i)) - min(0.,f(i)))*dt/(g(i)*dzk(i))
-        !    else
-        !        ! No flux limitations to the boundary cell
-        !        fin_i2 = fin_i2!(max(0.,f(i)) - min(0.,f(i)))*dt/(g(i)*dx)
-        !        fout_i2 = fout_i2!(max(0.,f(i)) - min(0.,f(i)))*dt/(g(i)*dx)
-        !    endif
-        !endif
+        fin_i2 = f_p(i)
+        fout_i2 = f_n(i)
         
         ! if wind is left to right we limit based on flow out of the left cell and into the right cell
         if (U2(i)>0) then
