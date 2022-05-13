@@ -466,7 +466,7 @@ contains
                     u2 = u2*dx/dt
                     v2 = v2*dx/dt
                     w2 = w2*dz/dt
-                    call flux_limiter(q, q2, u2,v2,w2, dz,dx,dt,ims,ime,kms,kme,jms,jme,jaco)
+                    call flux_limiter(q, q2, u2,v2,w2, dz,dx,dt,ims,ime,kms,kme,jms,jme,(jaco*rho))
                     !Advection expects all normalized, but w not divided by dz
                     u2 = u2*dt/dx
                     v2 = v2*dt/dx

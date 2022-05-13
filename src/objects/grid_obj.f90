@@ -262,10 +262,10 @@ contains
       grid%jme = grid%jme + merge(0, halo_size, north_boundary)
 
       ! if this is on a boundary, we should skip 1 grid cell (the boundary conditions) else we should skip the halo
-      grid%its = grid%ims + merge(1, halo_size, west_boundary)
-      grid%ite = grid%ime - merge(1, halo_size, east_boundary)
-      grid%jts = grid%jms + merge(1, halo_size, south_boundary)
-      grid%jte = grid%jme - merge(1, halo_size, north_boundary)
+      grid%its = grid%ims + halo_size !merge(1, halo_size, west_boundary)
+      grid%ite = grid%ime - halo_size !merge(1, halo_size, east_boundary)
+      grid%jts = grid%jms + halo_size !merge(1, halo_size, south_boundary)
+      grid%jte = grid%jme - halo_size !merge(1, halo_size, north_boundary)
 
       grid%nx = grid%ime - grid%ims + 1
       grid%ny = grid%jme - grid%jms + 1

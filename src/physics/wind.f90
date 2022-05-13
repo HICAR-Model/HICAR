@@ -24,7 +24,7 @@ module wind
     
     implicit none
     private
-    public:: balance_uvw, update_winds, init_winds, wind_var_request
+    public:: balance_uvw, update_winds, init_winds, calc_w_real, wind_var_request
 
     real, parameter::deg2rad=0.017453293 !2*pi/360
     real, parameter :: rad2deg=57.2957779371
@@ -80,82 +80,73 @@ contains
     !!
     !!------------------------------------------------------------
 
-    subroutine balance_uvw(u,v,w, jaco_u,jaco_v,jaco_w,dz,dx,rho,options)
+    subroutine balance_uvw(domain,options,update_in)
         implicit none
-        real,           intent(inout) :: u(:,:,:), v(:,:,:), w(:,:,:)
-        real,           intent(in)    :: jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), dz(:,:,:), rho(:,:,:)
-
-        real,           intent(in)    :: dx
+        type(domain_t), intent(inout) :: domain
         type(options_t),intent(in)    :: options
-
+        logical, optional, intent(in) :: update_in
+        
         real, allocatable, dimension(:,:,:) :: divergence
-        integer :: ims, ime, jms, jme, kms, kme, k
+        integer :: ims, ime, jms, jme, kms, kme, its, ite, jts, jte, k
+        logical :: update
+        
+        
+        associate(dx         => domain%dx,                         &
+                  u          => domain%u%data_3d,                  &
+                  v          => domain%v%data_3d,                  &
+                  w          => domain%w%data_3d,                  &
+                  rho        => domain%density%data_3d,            &
+                  dz         => domain%advection_dz,               &
+                  jaco_u    => domain%jacobian_u,                  &
+                  jaco_v    => domain%jacobian_v,                  &
+                  jaco_w    => domain%jacobian_w)
 
+        ims = domain%ims
+        ime = domain%ime
+        kms = domain%kms
+        kme = domain%kme
+        jms = domain%jms
+        jme = domain%jme
+        
+        its = domain%its
+        ite = domain%ite
+        jts = domain%jts
+        jte = domain%jte
+        
+        !i_s+hs, unless we are on global boundary, then i_s
+        if (domain%ims==domain%ids) its = domain%ids
+        
+        !i_e, unless we are on global boundary, then i_e+1
+        if (domain%ime==domain%ide) ite = domain%ide
+        
+        !j_s+hs, unless we are on global boundary, then j_s
+        if (domain%jms==domain%jds) jts = domain%jds
+        
+        !j_e, unless we are on global boundary, then j_e+1
+        if (domain%jme==domain%jde) jte = domain%jde
 
-        ims = lbound(w,1)
-        ime = ubound(w,1)
-        kms = lbound(w,2)
-        kme = ubound(w,2)
-        jms = lbound(w,3)
-        jme = ubound(w,3)
+        
+        update = .False.
+        if(present(update_in)) update=update_in
         
         w = 0
 
-        !------------------------------------------------------------
-        ! These could be module level to prevent lots of allocation/deallocation/reallocations
-        ! but these are relatively small, and should be allocated efficiently on the stack
-        !------------------------------------------------------------
-        ! if (options%advect_density) then
-        !     allocate(rhou(nx-1,ny-2))
-        !     allocate(rhov(nx-2,ny-1))
-        !     allocate(rhow(nx-2,ny-2))
-        ! endif
-
         allocate(divergence(ims:ime,kms:kme,jms:jme))
 
-        call calc_divergence(divergence,u,v,w,jaco_u,jaco_v,jaco_w,dz,dx,rho,options,horz_only=.True.)
+        if (update) then
+            call calc_divergence(divergence,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
+                                 jaco_u,jaco_v,jaco_w,dz,dx,rho,options,horz_only=.True.)
+            call calc_w(domain%w%meta_data%dqdt_3d,divergence,dz,jaco_w,rho,options%parameters%advect_density)
+        else
+            call calc_divergence(divergence,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
+                                 jaco_u,jaco_v,jaco_w,dz,dx,rho,options,horz_only=.True.)
+            call calc_w(domain%w%data_3d,divergence,dz,jaco_w,rho,options%parameters%advect_density)
+        endif
+            
+        end associate
 
-        !write(*,*) "maxval of div, in bal: ",maxval(abs(divergence(:,kme,:)))
-        do k = kms,kme
-            !------------------------------------------------------------
-            ! If we are incorporating density into the advection equation
-            ! then it needs to be incorporated when balancing the wind field
-            !
-            ! Note that the "else" case below does the same thing without density
-            ! and is much easier to understand
-            !------------------------------------------------------------
-
-            ! this is the else, advect density is not supported at the moment
-            !------------------------------------------------------------
-            ! If we are not incorporating density this is simpler
-            !------------------------------------------------------------
-            ! calculate horizontal divergence
-            !   in the North-South direction
-            !   in the East-West direction
-            !   in net
-
-            ! Then calculate w to balance
-                ! if this is the first model level start from 0 at the ground
-                ! note the are out for w is dx^2, but there is a dx in the divergence term that is dropped to balance
-                if (options%parameters%advect_density) then
-                    if (k==kms) then
-                        w(:,k,:) = 0 - divergence(:,k,:) * dz(:,k,:) / (jaco_w(:,k,:) * (rho(:,k,:)+rho(:,k+1,:))/2 )
-                    elseif (k==kme) then
-                        w(:,k,:) = (w(:,k-1,:) * ((rho(:,k,:)+rho(:,k-1,:))/2) * jaco_w(:,k-1,:) - divergence(:,k,:) * dz(:,k,:))/ (jaco_w(:,k,:) * rho(:,k,:))
-                    else
-                        w(:,k,:) = (w(:,k-1,:) * ((rho(:,k,:)+rho(:,k-1,:))/2) * jaco_w(:,k-1,:) - divergence(:,k,:) * dz(:,k,:))/ (jaco_w(:,k,:) *  (rho(:,k,:)+rho(:,k+1,:))/2 )
-                    endif
-                else
-                    if (k==kms) then
-                        w(:,k,:) = (0 - divergence(:,k,:) * dz(:,k,:)) / (jaco_w(:,k,:) )
-                    else 
-                        w(:,k,:) = (w(:,k-1,:) * jaco_w(:,k-1,:) - divergence(:,k,:) * dz(:,k,:))/ (jaco_w(:,k,:) )
-                    end if
-                
-                end if
-
-            end do
-
+        call domain%w%exchange(update)
+        
             !------------------------------------------------------------
             ! Now do the same for the convective wind field if needed
             !------------------------------------------------------------
@@ -174,10 +165,43 @@ contains
             !     endif
             ! endif
 
-        ! end associate
-
+        
     end subroutine balance_uvw
 
+    subroutine calc_w(w,div,dz,jaco_w,rho,adv_den)
+        real,    intent(inout) :: w(:,:,:)
+        real,    intent(in)    :: div(:,:,:), dz(:,:,:), jaco_w(:,:,:), rho(:,:,:)
+        logical, intent(in)    :: adv_den
+        integer kms, kme, k
+        
+        kms = lbound(div,2)
+        kme = ubound(div,2)
+        
+        do k = kms,kme
+            if (adv_den) then
+                if (k==kms) then
+                    w(:,k,:) = 0 - div(:,k,:) * dz(:,k,:) &
+                                                / (jaco_w(:,k,:) * (rho(:,k,:)+rho(:,k+1,:))/2 )
+                elseif (k==kme) then
+                    w(:,k,:) = (w(:,k-1,:) * ((rho(:,k,:)+rho(:,k-1,:))/2) &
+                                                * jaco_w(:,k-1,:) - div(:,k,:) * dz(:,k,:)) &
+                                                / (jaco_w(:,k,:) * rho(:,k,:))
+                else
+                    w(:,k,:) = (w(:,k-1,:) * ((rho(:,k,:)+rho(:,k-1,:))/2) * &
+                                jaco_w(:,k-1,:) - div(:,k,:) * dz(:,k,:)) / &
+                                (jaco_w(:,k,:) *  (rho(:,k,:)+rho(:,k+1,:))/2 )
+                endif
+            else
+                if (k==kms) then
+                    w(:,k,:) = (0 - div(:,k,:) * dz(:,k,:)) / (jaco_w(:,k,:) )
+                else 
+                    w(:,k,:) = (w(:,k-1,:) * jaco_w(:,k-1,:) - &
+                                                div(:,k,:) * dz(:,k,:))/ (jaco_w(:,k,:) )
+                end if
+            end if
+        end do
+
+    end subroutine
 
     subroutine calc_divergence(div, u, v, w, jaco_u, jaco_v, jaco_w, dz, dx, rho, options, horz_only)
         implicit none
@@ -212,13 +236,13 @@ contains
         !Constant jacobian at edges
         
         if (options%parameters%advect_density) then
-            u_met(ims+1:ime,:,:) = u(ims+1:ime,:,:) * jaco_u(ims+1:ime,:,:) * (rho(ims:ime-1,:,jms:jme) + rho(ims+1:ime,:,jms:jme))/2
-            u_met(ims,:,:) = u(ims,:,:) * jaco_u(ims,:,:) * rho(ims,:,jms:jme)
-            u_met(ime+1,:,:) = u(ime+1,:,:) * jaco_u(ime+1,:,:) * rho(ime,:,jms:jme)
+            u_met(ims+1:ime,:,:) = u(ims+1:ime,:,:) * jaco_u(ims+1:ime,:,:) * (rho(ims:ime-1,:,:) + rho(ims+1:ime,:,:))/2
+            u_met(ims,:,:) = u(ims,:,:) * jaco_u(ims,:,:) * (1.5*rho(ims,:,:) - 0.5*rho(ims+1,:,:))
+            u_met(ime+1,:,:) = u(ime+1,:,:) * jaco_u(ime+1,:,:) * (1.5*rho(ime,:,:) - 0.5*rho(ime-1,:,:))
 
-            v_met(:,:,jms+1:jme) = v(:,:,jms+1:jme) * jaco_v(:,:,jms+1:jme) * (rho(ims:ime,:,jms:jme-1) + rho(ims:ime,:,jms+1:jme))/2
-            v_met(:,:,jms) = v(:,:,jms) * jaco_v(:,:,jms) * rho(:,:,jms)
-            v_met(:,:,jme+1) = v(:,:,jme+1) * jaco_v(:,:,jme+1) * rho(:,:,jme)
+            v_met(:,:,jms+1:jme) = v(:,:,jms+1:jme) * jaco_v(:,:,jms+1:jme) * (rho(:,:,jms:jme-1) + rho(:,:,jms+1:jme))/2
+            v_met(:,:,jms) = v(:,:,jms) * jaco_v(:,:,jms) * (1.5*rho(:,:,jms) - 0.5*rho(:,:,jms+1))
+            v_met(:,:,jme+1) = v(:,:,jme+1) * jaco_v(:,:,jme+1) * (1.5*rho(:,:,jme) - 0.5*rho(:,:,jme-1))
 
         else
             u_met = u * jaco_u
@@ -263,58 +287,45 @@ contains
     !! Assumes forcing winds are EW, NS relative, not grid relative.
     !!
     !!------------------------------------------------------------
-    subroutine make_winds_grid_relative(u, v, w, grid, sintheta, costheta)
-        real, intent(inout) :: u(:,:,:), v(:,:,:), w(:,:,:)
-        type(grid_t),   intent(in)    :: grid
-        double precision, intent(in)    :: sintheta(:,:), costheta(:,:)
+    subroutine make_winds_grid_relative(u, v, sintheta, costheta, ims, ime, kms, kme, jms, jme)
+        real, intent(inout) :: u(ims:ime+1,kms:kme,jms:jme), v(ims:ime,kms:kme,jms:jme+1)
+        double precision, intent(in)    :: sintheta(ims:ime,jms:jme), costheta(ims:ime,jms:jme)
+        integer, intent(in)             :: ims, ime, kms, kme, jms, jme
+        real, dimension(:,:,:), allocatable :: u_vstag,v_ustag
+        real, dimension(:,:), allocatable :: costheta_ustag,sintheta_ustag,costheta_vstag,sintheta_vstag
 
-        real, dimension(:,:), allocatable :: cos_shifted_u,sin_shifted_u,cos_shifted_v,sin_shifted_v,u_shifted_v,v_shifted_u
-        real, dimension(:), allocatable :: u_local,v_local
-        integer :: k, j, ims, ime, jms, jme, kms, kme, ids, ide, jds, jde
+        integer :: k
+        
+        allocate(v_ustag(ims+1:ime,kms:kme,jms:jme))
+        allocate(u_vstag(ims:ime,kms:kme,jms+1:jme))
+        
+        allocate(costheta_ustag(ims+1:ime,jms:jme))
+        allocate(sintheta_ustag(ims+1:ime,jms:jme))
+        allocate(costheta_vstag(ims:ime,jms+1:jme))
+        allocate(sintheta_vstag(ims:ime,jms+1:jme))
+        
+        
+        v_ustag = (v(ims:ime-1,:,jms:jme)+v(ims+1:ime,:,jms:jme)+v(ims:ime-1,:,jms+1:jme+1)+v(ims+1:ime,:,jms+1:jme+1))/4
+        u_vstag = (u(ims:ime,:,jms:jme-1)+u(ims:ime,:,jms+1:jme)+u(ims+1:ime+1,:,jms:jme-1)+u(ims+1:ime+1,:,jms+1:jme))/4
+        
+        costheta_ustag = (costheta(ims+1:ime,:)+costheta(ims:ime-1,:))/2
+        sintheta_ustag = (sintheta(ims+1:ime,:)+sintheta(ims:ime-1,:))/2
+        
+        costheta_vstag = (costheta(:,jms+1:jme)+costheta(:,jms:jme-1))/2
+        sintheta_vstag = (sintheta(:,jms+1:jme)+sintheta(:,jms:jme-1))/2
 
-        ims = lbound(w,1)
-        ime = ubound(w,1)
-        kms = lbound(w,2)
-        kme = ubound(w,2)
-        jms = lbound(w,3)
-        jme = ubound(w,3)
+        do k = kms,kme
+            u(ims+1:ime,k,:) = u(ims+1:ime,k,:) * costheta_ustag + v_ustag(:,k,:) * sintheta_ustag
+            v(:,k,jms+1:jme) = v(:,k,jms+1:jme) * costheta_vstag + u_vstag(:,k,:) * sintheta_vstag
 
-        ids = lbound(costheta,1)
-        ide = ubound(costheta,1)
-        jds = lbound(costheta,2)
-        jde = ubound(costheta,2)
-
-        allocate(u_local(ims:ime))
-        allocate(v_local(ims:ime))
-
-        !assumes u and v come in on a staggered Arakawa C-grid with one additional grid point in x/y for u/v respectively
-        ! destagger to a centered grid (the mass grid)
-        u(:ime,:,:) = (u(:ime,:,:) + u(ims+1:,:,:))/2
-        v(:,:,:jme) = (v(:,:,:jme) + v(:,:,jms+1:))/2
-
-        do j = jms, jme
-            do k = kms, kme
-                ! rotate wind field to the real grid
-                u_local = u(ims:ime,k,j) * costheta(grid%its-1:grid%ite+1,j+grid%jts-2) &
-                        + v(ims:ime,k,j) * sintheta(grid%its-1:grid%ite+1,j+grid%jts-2)
-                v_local = v(ims:ime,k,j) * costheta(grid%its-1:grid%ite+1,j+grid%jts-2) &
-                        + u(ims:ime,k,j) * sintheta(grid%its-1:grid%ite+1,j+grid%jts-2)
-
-                u(:ime,k,j) = u_local
-                v(:ime,k,j) = v_local
-           enddo
+            !u(ims,k,:)       = u(ims,k,:) * costheta_ustag(ims+1,:) + v_ustag(ims+1,k,:) * sintheta_ustag(ims+1,:)
+            !u(ime+1,k,:)     = u(ime,k,:) * costheta_ustag(ime,:) + v_ustag(ime,k,:) * sintheta_ustag(ime,:)
+        
+            !v(:,k,jms)       = v(:,k,jms) * costheta_vstag(:,jms+1) + u_vstag(:,k,jms+1) * sintheta_vstag(:,jms+1)
+            !v(:,k,jme+1)     = v(:,k,jme) * costheta_vstag(:,jme) + u_vstag(:,k,jme) * sintheta_vstag(:,jme)
         enddo
-        deallocate(u_local,v_local)
-
-        ! put the fields back onto a staggered grid, having effectively lost two grid cells in the staggered directions
-        ! estimate the "lost" grid cells by extrapolating beyond the remaining
-        u(ims+1:ime,:,:) =  (u(ims:ime-1,:,:) + u(ims+1:ime,:,:))/2
-        u(ims,:,:)       = 2*u(ims,:,:)       - u(ims+1,:,:)
-        u(ime+1,:,:)     = 2*u(ime,:,:)       - u(ime-1,:,:)
-
-        v(:,:,jms+1:jme) =  (v(:,:,jms:jme-1) + v(:,:,jms+1:jme))/2
-        v(:,:,jms)       = 2*v(:,:,jms)       - v(:,:,jms+1)
-        v(:,:,jme+1)     = 2*v(:,:,jme)       - v(:,:,jme-1)
+        
+        deallocate(v_ustag,u_vstag,costheta_ustag,sintheta_ustag,costheta_vstag,sintheta_vstag)
 
     end subroutine
 
@@ -355,7 +366,9 @@ contains
             call update_stability(domain)
 
             ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
-            !call make_winds_grid_relative(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%grid, domain%sintheta, domain%costheta)
+            call make_winds_grid_relative(domain%u%data_3d, domain%v%data_3d, domain%sintheta, domain%costheta,ims, ime, kms, kme, jms, jme)
+            call domain%u%exchange_x()
+            call domain%v%exchange_y()
 
             ! flow blocking parameterization
             ! if (options%block_options%block_flow) then
@@ -384,7 +397,7 @@ contains
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
                 allocate(div(ims:ime,kms:kme,jms:jme))
                 
-                call calc_alpha(alpha, domain%froude, ims, ime,  kms, kme, jms, jme, its, ite, jts, jte, &
+                call calc_alpha(alpha, domain%froude, ims, ime,  kms, kme, jms, jme, &
                             domain%ids, domain%ide, domain%jds, domain%jde)
 
                 !Call this, passing 0 for w_grid, to get vertical components of vertical motion
@@ -409,7 +422,7 @@ contains
 
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
 
-            call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%density%data_3d, options)
+            call balance_uvw(domain,options)
             
             call calc_w_real(domain% u %data_3d,      &
                              domain% v %data_3d,      &
@@ -422,7 +435,10 @@ contains
             call update_stability(domain)
 
             ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
-            !call make_winds_grid_relative(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d, domain%grid, domain%sintheta, domain%costheta)
+            call make_winds_grid_relative(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%sintheta, domain%costheta,ims, ime, kms, kme, jms, jme)
+            
+            call domain%u%exchange_x(do_metadata=.True.)
+            call domain%v%exchange_y(do_metadata=.True.)
             
             if (options%wind%Sx) then
                 call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d,domain%Ri,domain%dzdx,domain%dzdy)
@@ -446,7 +462,7 @@ contains
                 allocate(alpha(ims:ime,kms:kme,jms:jme))
                 allocate(div(ims:ime,kms:kme,jms:jme))
 
-                call calc_alpha(alpha, domain%froude, ims, ime,  kms, kme, jms, jme, its, ite, jts, jte, &
+                call calc_alpha(alpha, domain%froude, ims, ime,  kms, kme, jms, jme, &
                             domain%ids, domain%ide, domain%jds, domain%jde)
 
                 !Call this, passing 0 for w_grid, to get vertical components of vertical motion
@@ -472,12 +488,7 @@ contains
             endif
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
 
-            call balance_uvw(domain% u %meta_data%dqdt_3d,      &
-                             domain% v %meta_data%dqdt_3d,      &
-                             domain% w %meta_data%dqdt_3d,      &
-                             domain%jacobian_u, domain%jacobian_v, domain%jacobian_w,         &
-                             domain%advection_dz, domain%dx,    &
-                             domain%density%data_3d,options)
+            call balance_uvw(domain,options,update_in=.True.)
                              
             call calc_w_real(domain% u %meta_data%dqdt_3d,      &
                              domain% v %meta_data%dqdt_3d,      &
@@ -491,9 +502,9 @@ contains
 
     end subroutine update_winds
     
-    subroutine calc_alpha(alpha, froude, ims, ime, kms, kme, jms, jme, its, ite, jts, jte, ids, ide, jds, jde)
+    subroutine calc_alpha(alpha, froude, ims, ime, kms, kme, jms, jme, ids, ide, jds, jde)
         implicit none
-        integer, intent(in)    :: ims, ime, kms, kme, jms, jme, its, ite, jts, jte, ids, ide, jds, jde
+        integer, intent(in)    :: ims, ime, kms, kme, jms, jme, ids, ide, jds, jde
         real,    intent(in)    :: froude(ims:ime,kms:kme,jms:jme)
         real,    intent(inout) :: alpha(ims:ime,kms:kme,jms:jme)
         
@@ -504,11 +515,11 @@ contains
         alpha = min(max(alpha,0.1),1.0)
 
         ! Ensure that there are no sharp transitions in alpha at boundary, 
-        ! which can leak boundary effects into model (very high w_grid values result)s
-        if (jts==(jds+1)) alpha(:,:,jms) = alpha(:,:,jms+1)
-        if (its==(ids+1)) alpha(ims,:,:) = alpha(ims+1,:,:)
-        if (jte==(jde-1)) alpha(:,:,jme) = alpha(:,:,jme-1)
-        if (ite==(ide-1)) alpha(ime,:,:) = alpha(ime-1,:,:)
+        ! which can leak boundary effects into model (very high w_grid values result)
+        if (jms==jds) alpha(:,:,jms) = alpha(:,:,jms+1)
+        if (ims==ids) alpha(ims,:,:) = alpha(ims+1,:,:)
+        if (jme==jde) alpha(:,:,jme) = alpha(:,:,jme-1)
+        if (ime==ide) alpha(ime,:,:) = alpha(ime-1,:,:)
         
     end subroutine calc_alpha
     
@@ -608,11 +619,11 @@ contains
         endif
 
         !Do an initial exchange to make sure the U and V grids are similar for calculating w
-        call domain%u%exchange_u()
-        call domain%v%exchange_v()
+        call domain%u%exchange_x()
+        call domain%v%exchange_y()
 
         !First call bal_uvw to generate an initial-guess for vertical winds
-        call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%jacobian_u, domain%jacobian_v, domain%jacobian_w, domain%advection_dz, domain%dx, domain%density%data_3d, options)
+        call balance_uvw(domain,options)
 
         allocate(div(ims:ime,kms:kme,jms:jme))
         allocate(ADJ_coef(ims:ime,kms:kme,jms:jme))
@@ -667,8 +678,8 @@ contains
 
             domain%v%data_3d(its:ite,:,jts+1:jte+1) = domain%v%data_3d(its:ite,:,jts+1:jte+1) - &
                                                         (ADJ(its:ite,:,jts+1:jte+1) * 0.5)
-            call domain%u%exchange_u()
-            call domain%v%exchange_v()
+            call domain%u%exchange_x()
+            call domain%v%exchange_y()
 
         enddo
 

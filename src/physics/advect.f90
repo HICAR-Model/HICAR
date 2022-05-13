@@ -103,76 +103,74 @@ contains
 !
 !     end subroutine flux2
 
-    subroutine advect3d(q,rho_in,dz,ims,ime,kms,kme,jms,jme,jaco,options)
+    subroutine flux3(q,u,v,w,ims,ime,kms,kme,jms,jme,flux_x,flux_z,flux_y)
+        implicit none
+        real, dimension(ims:ime,  kms:kme,jms:jme),    intent(in) :: q, w
+        real, dimension(ims+1:ime,  kms:kme,jms:jme),  intent(in) :: u
+        real, dimension(ims:ime,  kms:kme,jms+1:jme),  intent(in) :: v
+        
+        real, dimension(ims+1:ime,kms:kme,jms:jme),intent(inout)          :: flux_x
+        real, dimension(ims:ime,kms:kme,jms+1:jme),intent(inout)          :: flux_y
+        real, dimension(ims+1:ime-1,kms:kme+1,jms+1:jme-1),intent(inout)  :: flux_z
+        integer, intent(in) :: ims, ime, kms, kme, jms, jme
+
+        flux_x= ((u(ims+1:ime,:,:) + ABS(u(ims+1:ime,:,:))) * q(ims:ime-1,:,:)    + &
+            (u(ims+1:ime,:,:) - ABS(u(ims+1:ime,:,:))) * q(ims+1:ime,:,:))   / 2
+
+        flux_y= ((v(:,:,jms+1:jme)    + ABS(v(:,:,jms+1:jme)))    * q(:,:,jms:jme-1) + &
+            (v(:,:,jms+1:jme)    - ABS(v(:,:,jms+1:jme)))    * q(:,:,jms+1:jme))  / 2
+
+        flux_z(:,kms+1:kme,:) = ((w(ims+1:ime-1,kms:kme-1,jms+1:jme-1) + ABS(w(ims+1:ime-1,kms:kme-1,jms+1:jme-1))) &
+                                        * q(ims+1:ime-1,kms:kme-1,jms+1:jme-1) + &
+            (w(ims+1:ime-1,kms:kme-1,jms+1:jme-1) - ABS(w(ims+1:ime-1,kms:kme-1,jms+1:jme-1))) &
+                                         * q(ims+1:ime-1,kms+1:kme,jms+1:jme-1))  / 2
+                                         
+        !Handle top and bottom boundaries for z here
+        flux_z(:,kms,:) = 0
+        flux_z(:,kme+1,:) = q(ims+1:ime-1,kme,jms+1:jme-1) * w(ims+1:ime-1,kme,jms+1:jme-1)
+
+                                         
+    end subroutine flux3
+
+    subroutine advect3d(q,rho,dz,ims,ime,kms,kme,jms,jme,its,ite,jts,jte,jaco)
 
         implicit none
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(inout)   :: q
-        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: rho_in
+        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: rho
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: dz
-        integer,                            intent(in)      :: ims, ime, kms, kme, jms, jme
+        integer,                            intent(in)      :: ims, ime, kms, kme, jms, jme,its,ite,jts,jte
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: jaco
-        type(options_t), intent(in)::options
 
         ! interal parameters
-        integer                         :: err, i, j, k
-        real, dimension(ims:ime-1,kms:kme)    :: f1   ! historical note, there used to be an f2 to store f[x+1]
-        real, dimension(ims:ime-2,kms:kme)    :: f3,f4
-        real, dimension(ims:ime-2,kms:kme-1)  :: f5
-        real, dimension(ims:ime,kms:kme,jms:jme) :: qin, rho
+        real, dimension(ims+1:ime,kms:kme,jms:jme)    :: flux_x
+        real, dimension(ims:ime,kms:kme,jms+1:jme)    :: flux_y
+        real, dimension(ims+1:ime-1,kms:kme+1,jms+1:jme-1)  :: flux_z
         
-        rho = 1
-        
-        do i=jms,jme
-            qin(:,:,i)=q(:,:,i)
-        enddo
-        
-        if (options%parameters%advect_density) rho = rho_in
-        
-        
-        ! !$omp parallel shared(qin,q,u,v,w,rho,dz,jaco) firstprivate(ims,ime,kms,kme,jms,jme) private(i,f1,f3,f4,f5)
+        ! !$omp parallel shared(qin,q,u,v,w) firstprivate(nx,ny,nz) private(i,f1,f3,f4,f5)
         ! !$omp do schedule(static)
-
-
+        !do i=jms,jme
+        !    q(:,:,i)=qin(:,:,i)
+        !enddo
+                
         ! !$omp end do
         ! !$omp barrier
         ! !$omp do schedule(static)
-        do i=jms+1,jme-1
             ! by manually inlining the flux2 call we should remove extra array copies that the compiler doesn't remove.
             ! equivalent flux2 calls are left in for reference (commented) to restore recall that f1,f3,f4... arrays should be 3D : n x m x 1
-            ! calculate fluxes between grid cells
-            ! call flux2(qin(1:nx-1,:,i),     qin(2:nx,:,i),     u(1:nx-1,:,i),     nx-1,nz,  1,f1)  ! f1 = Ux0 and Ux1
-            ! call flux2(qin(2:nx-1,:,i),     qin(2:nx-1,:,i+1), v(2:nx-1,:,i),     nx-2,nz,  1,f3)  ! f3 = Vy1
-            ! call flux2(qin(2:nx-1,:,i-1),   qin(2:nx-1,:,i),   v(2:nx-1,:,i-1),   nx-2,nz,  1,f4)  ! f4 = Vy0
-            ! call flux2(qin(2:nx-1,1:nz-1,i),qin(2:nx-1,2:nz,i),w(2:nx-1,1:nz-1,i),nx-2,nz-1,1,f5)  ! f5 = Wz0 and Wz1
-            f1= ((U_m(ims+1:ime,:,i)      + ABS(U_m(ims+1:ime,:,i)))      * qin(ims:ime-1,:,i)    + &
-                 (U_m(ims+1:ime,:,i)      - ABS(U_m(ims+1:ime,:,i)))      * qin(ims+1:ime,:,i))     / 2
 
-            f3= ((V_m(ims+1:ime-1,:,i+1)      + ABS(V_m(ims+1:ime-1,:,i+1)))      * qin(ims+1:ime-1,:,i)  + &
-                 (V_m(ims+1:ime-1,:,i+1)      - ABS(V_m(ims+1:ime-1,:,i+1)))      * qin(ims+1:ime-1,:,i+1)) / 2
+        call flux3(q,U_m,V_m,W_m,ims,ime,kms,kme,jms,jme,flux_x,flux_z,flux_y)
 
-            f4= ((V_m(ims+1:ime-1,:,i)    + ABS(V_m(ims+1:ime-1,:,i)))    * qin(ims+1:ime-1,:,i-1) + &
-                (V_m(ims+1:ime-1,:,i)    - ABS(V_m(ims+1:ime-1,:,i)))    * qin(ims+1:ime-1,:,i))  / 2
-
-            f5= ((W_m(ims+1:ime-1,kms:kme-1,i) + ABS(W_m(ims+1:ime-1,kms:kme-1,i))) * qin(ims+1:ime-1,kms:kme-1,i) + &
-                 (W_m(ims+1:ime-1,kms:kme-1,i) - ABS(W_m(ims+1:ime-1,kms:kme-1,i))) * qin(ims+1:ime-1,kms+1:kme,i))  / 2
-
-                
-               ! perform horizontal advection, from difference terms
-               q(ims+1:ime-1,:,i)      = q(ims+1:ime-1,:,i)       - ((f1(ims+1:ime-1,:) - f1(ims:ime-2,:)) + (f3 - f4)) &
-                                   / (jaco(ims+1:ime-1,:,i)*rho(ims+1:ime-1,:,i))                      
+        ! perform horizontal advection, from difference terms
+        q(its:ite,:,jts:jte)  = q(its:ite,:,jts:jte)  - &
+                                   ((flux_x(its+1:ite+1,:,jts:jte) - flux_x(its:ite,:,jts:jte)) + &
+                                   (flux_y(its:ite,:,jts+1:jte+1) - flux_y(its:ite,:,jts:jte))) &
+                                   / (jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))                      
                ! then vertical (order doesn't matter because fluxes f1-6 are calculated before applying them)
                ! add fluxes to middle layers
-               q(ims+1:ime-1,kms+1:kme-1,i) = q(ims+1:ime-1,kms+1:kme-1,i)  - (f5(:,kms+1:kme-1) - f5(:,kms:kme-2)) &
-                                   / (dz(ims+1:ime-1,kms+1:kme-1,i)*jaco(ims+1:ime-1,kms+1:kme-1,i)*rho(ims+1:ime-1,kms+1:kme-1,i))
-               ! add fluxes to bottom layer
-               q(ims+1:ime-1,kms,i)      = q(ims+1:ime-1,kms,i)       - f5(:,kms) &
-                                   / (dz(ims+1:ime-1,kms,i)*jaco(ims+1:ime-1,kms,i) * rho(ims+1:ime-1,kms,i) )
-               ! add fluxes to top layer
-               q(ims+1:ime-1,kme,i)     = q(ims+1:ime-1,kme,i)     - (qin(ims+1:ime-1,kme,i) * W_m(ims+1:ime-1,kme,i) - f5(:,kme-1)) &
-                                   / (dz(ims+1:ime-1,kme,i)*jaco(ims+1:ime-1,kme,i)*rho(ims+1:ime-1,kme,i))
+        q(its:ite,:,jts:jte) = q(its:ite,:,jts:jte)  &
+                                   - (flux_z(its:ite,kms+1:kme+1,jts:jte) - flux_z(its:ite,kms:kme,jts:jte)) &
+                                   / (dz(its:ite,:,jts:jte)*jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))
 
-
-        enddo
         ! !$omp end do
         ! !$omp end parallel
     end subroutine advect3d
@@ -382,12 +380,17 @@ contains
         type(domain_t),  intent(inout) :: domain
         type(options_t), intent(in)    :: options
         real,            intent(in)    :: dt
-
+        
+        real, allocatable, dimension(:,:,:)   :: rho
         real    :: dx
         integer :: i
 
         call setup_advection_dz(domain, options)
 
+        allocate(rho(domain%ims:domain%ime,domain%kms:domain%kme,domain%jms:domain%jme  ))
+        rho = 1
+        if (options%parameters%advect_density) rho = domain%density%data_3d
+        
         ! calculate U,V,W normalized for dt/dx (dx**2 for density advection so we can skip a /dx in the actual advection code)
         call setup_module_winds(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%dx, options, dt,domain%jacobian_u,domain%jacobian_v,domain%jacobian_w,domain%density%data_3d, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme)
 
@@ -397,17 +400,17 @@ contains
             call test_divergence(domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme)
         endif
 
-        if (options%vars_to_advect(kVARS%water_vapor)>0)                  call advect3d(domain%water_vapor%data_3d,             domain%density%data_3d, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, domain%jacobian, options)
-        if (options%vars_to_advect(kVARS%cloud_water)>0)                  call advect3d(domain%cloud_water_mass%data_3d,        domain%density%data_3d, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, domain%jacobian, options)
-        if (options%vars_to_advect(kVARS%rain_in_air)>0)                  call advect3d(domain%rain_mass%data_3d,               domain%density%data_3d, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, domain%jacobian, options)
-        if (options%vars_to_advect(kVARS%snow_in_air)>0)                  call advect3d(domain%snow_mass%data_3d,               domain%density%data_3d, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, domain%jacobian, options)
-        if (options%vars_to_advect(kVARS%potential_temperature)>0)        call advect3d(domain%potential_temperature%data_3d,   domain%density%data_3d, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, domain%jacobian, options)
-        if (options%vars_to_advect(kVARS%cloud_ice)>0)                    call advect3d(domain%cloud_ice_mass%data_3d,          domain%density%data_3d, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, domain%jacobian, options)
-        if (options%vars_to_advect(kVARS%graupel_in_air)>0)               call advect3d(domain%graupel_mass%data_3d,            domain%density%data_3d, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, domain%jacobian, options)
-        if (options%vars_to_advect(kVARS%ice_number_concentration)>0)     call advect3d(domain%cloud_ice_number%data_3d,        domain%density%data_3d, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, domain%jacobian, options)
-        if (options%vars_to_advect(kVARS%rain_number_concentration)>0)    call advect3d(domain%rain_number%data_3d,             domain%density%data_3d, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, domain%jacobian, options)
-        if (options%vars_to_advect(kVARS%snow_number_concentration)>0)    call advect3d(domain%snow_number%data_3d,             domain%density%data_3d, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, domain%jacobian, options)
-        if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call advect3d(domain%graupel_number%data_3d,          domain%density%data_3d, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, domain%jacobian, options)
+        if (options%vars_to_advect(kVARS%water_vapor)>0)                  call advect3d(domain%water_vapor%data_3d,    rho, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme,domain%its,domain%ite,domain%jts,domain%jte, domain%jacobian)
+        if (options%vars_to_advect(kVARS%cloud_water)>0)                  call advect3d(domain%cloud_water_mass%data_3d, rho, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme,domain%its,domain%ite,domain%jts,domain%jte, domain%jacobian)
+        if (options%vars_to_advect(kVARS%rain_in_air)>0)                  call advect3d(domain%rain_mass%data_3d,      rho, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme,domain%its,domain%ite,domain%jts,domain%jte, domain%jacobian)
+        if (options%vars_to_advect(kVARS%snow_in_air)>0)                  call advect3d(domain%snow_mass%data_3d,      rho, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme,domain%its,domain%ite,domain%jts,domain%jte, domain%jacobian)
+        if (options%vars_to_advect(kVARS%potential_temperature)>0)        call advect3d(domain%potential_temperature%data_3d, rho, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme,domain%its,domain%ite,domain%jts,domain%jte, domain%jacobian)
+        if (options%vars_to_advect(kVARS%cloud_ice)>0)                    call advect3d(domain%cloud_ice_mass%data_3d, rho, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme,domain%its,domain%ite,domain%jts,domain%jte, domain%jacobian)
+        if (options%vars_to_advect(kVARS%graupel_in_air)>0)               call advect3d(domain%graupel_mass%data_3d,   rho, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme,domain%its,domain%ite,domain%jts,domain%jte, domain%jacobian)
+        if (options%vars_to_advect(kVARS%ice_number_concentration)>0)     call advect3d(domain%cloud_ice_number%data_3d, rho, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme,domain%its,domain%ite,domain%jts,domain%jte, domain%jacobian)
+        if (options%vars_to_advect(kVARS%rain_number_concentration)>0)    call advect3d(domain%rain_number%data_3d,    rho, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme,domain%its,domain%ite,domain%jts,domain%jte, domain%jacobian)
+        if (options%vars_to_advect(kVARS%snow_number_concentration)>0)    call advect3d(domain%snow_number%data_3d,    rho, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme,domain%its,domain%ite,domain%jts,domain%jte, domain%jacobian)
+        if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call advect3d(domain%graupel_number%data_3d, rho, domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme,domain%its,domain%ite,domain%jts,domain%jte, domain%jacobian)
 
         ! if (options%physics%convection > 0) then
         !     call advect_cu_winds(domain, options, dt)
