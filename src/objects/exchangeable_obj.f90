@@ -37,10 +37,19 @@ contains
     if (err /= 0) stop "exchangeable:dqdt_3d: Allocation request failed"
     this%data_3d = 0
 
-    allocate( this%halo_south_in( grid%ns_halo_nx+halo_size*2, grid%halo_nz,   halo_size      )[*])
-    allocate( this%halo_north_in( grid%ns_halo_nx+halo_size*2, grid%halo_nz,   halo_size      )[*])
-    allocate( this%halo_east_in(    halo_size,     grid%halo_nz, grid%ew_halo_ny+halo_size*2  )[*])
-    allocate( this%halo_west_in(    halo_size,     grid%halo_nz, grid%ew_halo_ny+halo_size*2  )[*])
+    !Based on how grids are intialized, we can find out if this is a x/y staggered grid
+    this%xe = 0
+    this%ye = 0
+    if ((grid%ns_halo_nx - (grid%nx_global / grid%ximages + 1)) > 0) then
+        this%xe = 1
+    else if ((grid%ew_halo_ny - (grid%ny_global / grid%yimages + 1)) > 0) then
+        this%ye = 1
+    endif
+
+    allocate( this%halo_south_in( grid%ns_halo_nx+halo_size*2, grid%halo_nz, halo_size+this%ye   )[*])
+    allocate( this%halo_north_in( grid%ns_halo_nx+halo_size*2, grid%halo_nz, halo_size           )[*])
+    allocate( this%halo_east_in(  halo_size        ,  grid%halo_nz, grid%ew_halo_ny+halo_size*2  )[*])
+    allocate( this%halo_west_in(  halo_size+this%xe,  grid%halo_nz, grid%ew_halo_ny+halo_size*2  )[*])
 
 
     if (.not.allocated(neighbors)) call this%set_neighbors(grid)
@@ -158,276 +167,232 @@ contains
     if (.not. this%east_boundary) call this%retrieve_east_halo
     if (.not. this%west_boundary) call this%retrieve_west_halo
   end subroutine
-
-  module subroutine exchange_v(this)
+  
+  module subroutine exchange_y(this,do_metadata)
     class(exchangeable_t), intent(inout) :: this
-    integer :: n, nx, start
-    !When exchanging for the v-field, we want a full exchange in the y-direction,
-    ! and an exchange in the x-direction of just the outer-most values
+    logical, optional, intent(in) :: do_metadata
+    logical :: metadata
+      
+    metadata=.False.
+    if (present(do_metadata)) metadata=do_metadata
 
-    if (.not. this%north_boundary) then
-        n = ubound(this%data_3d,3)
-        nx = size(this%data_3d,1)
-        this%halo_south_in(1:nx,:,1:(halo_size))[north_neighbor] = this%data_3d(:,:,n-(halo_size)-1:n-(halo_size)-1)
-    endif
-    if (.not. this%south_boundary) then
-        start = lbound(this%data_3d,3)
-        nx = size(this%data_3d,1)
+    if (.not. this%north_boundary) call this%put_north(metadata)
+    if (.not. this%south_boundary) call this%put_south(metadata)
 
-        this%halo_north_in(1:nx,:,1:halo_size)[south_neighbor] = this%data_3d(:,:,start+halo_size+1:start+halo_size+1)
-    endif
-
-    sync images( neighbors ) !all
+    sync images( neighbors )
     
+    if (.not. this%north_boundary) call this%retrieve_north_halo(metadata)
+    if (.not. this%south_boundary) call this%retrieve_south_halo(metadata)
+    
+    if (.not. this%east_boundary)  call this%put_east(metadata)
+    if (.not. this%west_boundary)  call this%put_west(metadata)
 
-    if (.not. this%north_boundary) call this%retrieve_north_halo
-    if (.not. this%south_boundary) call this%retrieve_south_halo
+    sync images( neighbors )
 
+    if (.not. this%east_boundary)  call this%retrieve_east_halo(metadata)
+    if (.not. this%west_boundary)  call this%retrieve_west_halo(metadata)
+    
   end subroutine
   
-    module subroutine exchange_v_metadata(this)
+  module subroutine exchange_x(this,do_metadata)
     class(exchangeable_t), intent(inout) :: this
-    integer :: n, nx, start
-    !When exchanging for the v-field, we want a full exchange in the y-direction,
-    ! and an exchange in the x-direction of just the outer-most values
-    
-    if (.not. this%north_boundary) then
-        n = ubound(this%data_3d,3)
-        nx = size(this%data_3d,1)
-        this%halo_south_in(1:nx,:,1:(halo_size))[north_neighbor] = this%meta_data%dqdt_3d(:,:,n-(halo_size)-1:n-(halo_size)-1)
-    endif
-    if (.not. this%south_boundary) then
-        start = lbound(this%data_3d,3)
-        nx = size(this%data_3d,1)
+    logical, optional, intent(in) :: do_metadata
+    logical :: metadata
+      
+    metadata=.False.
+    if (present(do_metadata)) metadata=do_metadata
 
-        this%halo_north_in(1:nx,:,1:halo_size)[south_neighbor] = this%meta_data%dqdt_3d(:,:,start+halo_size+1:start+halo_size+1)
-    endif
-
-    sync images( neighbors )
-    
-    if (.not. this%north_boundary) call this%retrieve_north_halo_metadata
-    if (.not. this%south_boundary) call this%retrieve_south_halo_metadata
-
-
-  end subroutine
-
-  module subroutine exchange_u(this)
-    class(exchangeable_t), intent(inout) :: this
-    integer :: n, ny, start
-    !When exchanging for the u-field, we want a full exchange in the x-direction,
-    ! and an exchange in the y-direction of just the outer-most values
-
-
-    if (.not. this%east_boundary) then
-        n = ubound(this%data_3d,1)
-        ny = size(this%data_3d,3)
-        this%halo_west_in(1:halo_size,:,1:ny)[east_neighbor] = this%data_3d(n-(halo_size)-1:n-(halo_size)-1,:,:)
-    endif
-
-    if (.not. this%west_boundary) then
-        start = lbound(this%data_3d,1)
-        ny = size(this%data_3d,3)
-        this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%data_3d(start+halo_size+1:start+halo_size+1,:,:)
-    endif  
-
-    sync images( neighbors )
-    
-
-    if (.not. this%east_boundary) call this%retrieve_east_halo
-    if (.not. this%west_boundary) call this%retrieve_west_halo
-
- 
-  end subroutine
-  
-    module subroutine exchange_u_metadata(this)
-    class(exchangeable_t), intent(inout) :: this
-    integer :: n, ny, start
-    !When exchanging for the u-field, we want a full exchange in the x-direction,
-    ! and an exchange in the y-direction of just the outer-most values
-
-    if (.not. this%east_boundary) then
-        n = ubound(this%data_3d,1)
-        ny = size(this%data_3d,3)
-        this%halo_west_in(1:halo_size,:,1:ny)[east_neighbor] = this%meta_data%dqdt_3d(n-(halo_size)-1:n-(halo_size)-1,:,:)
-    endif
-    
-    if (.not. this%west_boundary) then
-        start = lbound(this%data_3d,1)
-        ny = size(this%data_3d,3)
-        this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%meta_data%dqdt_3d(start+halo_size+1:start+halo_size+1,:,:)
-    endif  
-
-    sync images( neighbors )
-    
-    if (.not. this%east_boundary) call this%retrieve_east_halo_metadata
-    if (.not. this%west_boundary) call this%retrieve_west_halo_metadata
-
- 
-  end subroutine
-
-  module subroutine exchange(this)
-    class(exchangeable_t), intent(inout) :: this
-    if (.not. this%north_boundary) call this%put_north
-    if (.not. this%south_boundary) call this%put_south
-    if (.not. this%east_boundary)  call this%put_east
-    if (.not. this%west_boundary)  call this%put_west
+    if (.not. this%east_boundary)  call this%put_east(metadata)
+    if (.not. this%west_boundary)  call this%put_west(metadata)
 
     sync images( neighbors )
 
-    if (.not. this%north_boundary) call this%retrieve_north_halo
-    if (.not. this%south_boundary) call this%retrieve_south_halo
-    if (.not. this%east_boundary)  call this%retrieve_east_halo
-    if (.not. this%west_boundary)  call this%retrieve_west_halo
+    if (.not. this%east_boundary)  call this%retrieve_east_halo(metadata)
+    if (.not. this%west_boundary)  call this%retrieve_west_halo(metadata)
+    
+    if (.not. this%north_boundary) call this%put_north(metadata)
+    if (.not. this%south_boundary) call this%put_south(metadata)
+
+    sync images( neighbors )
+    
+    if (.not. this%north_boundary) call this%retrieve_north_halo(metadata)
+    if (.not. this%south_boundary) call this%retrieve_south_halo(metadata)
+    
   end subroutine
 
-  module subroutine put_north(this)
+
+  module subroutine exchange(this,do_metadata)
+    class(exchangeable_t), intent(inout) :: this
+    logical, optional, intent(in) :: do_metadata
+    logical :: metadata
+      
+    metadata=.False.
+    if (present(do_metadata)) metadata=do_metadata
+    
+    if (.not. this%north_boundary) call this%put_north(metadata)
+    if (.not. this%south_boundary) call this%put_south(metadata)
+    if (.not. this%east_boundary)  call this%put_east(metadata)
+    if (.not. this%west_boundary)  call this%put_west(metadata)
+
+    sync images( neighbors )
+
+    if (.not. this%north_boundary) call this%retrieve_north_halo(metadata)
+    if (.not. this%south_boundary) call this%retrieve_south_halo(metadata)
+    if (.not. this%east_boundary)  call this%retrieve_east_halo(metadata)
+    if (.not. this%west_boundary)  call this%retrieve_west_halo(metadata)
+  end subroutine
+
+  module subroutine put_north(this,do_metadata)
       class(exchangeable_t), intent(inout) :: this
+      logical, optional, intent(in) :: do_metadata
       integer :: n, nx
+      logical :: metadata
+      
+      metadata=.False.
+      if (present(do_metadata)) metadata=do_metadata
+      
       n = ubound(this%data_3d,3)
       nx = size(this%data_3d,1)
-
-      ! if (assertions) then
-      !   !! gfortran 6.3.0 doesn't check coarray shape conformity with -fcheck=all so we verify with an assertion
-      !   call assert( shape(this%halo_south_in(:nx,:,1:halo_size)[north_neighbor]) &
-      !                == shape(this%data_3d(:,:,n-halo_size+1:n)),         &
-      !                "put_north: conformable halo_south_in and local " )
-      ! end if
-
-      !dir$ pgas defer_sync
-      this%halo_south_in(1:nx,:,1:halo_size)[north_neighbor] = this%data_3d(:,:,n-halo_size*2+1:n-halo_size)
+      
+      if (metadata) then
+          this%halo_south_in(1:nx,:,1:(halo_size+this%ye))[north_neighbor] = this%meta_data%dqdt_3d(:,:,(n-halo_size*2+1-this%ye):(n-halo_size))
+      else
+          this%halo_south_in(1:nx,:,1:(halo_size+this%ye))[north_neighbor] = this%data_3d(:,:,(n-halo_size*2+1-this%ye):(n-halo_size))
+      endif
   end subroutine
 
-  module subroutine put_south(this)
+  module subroutine put_south(this,do_metadata)
       class(exchangeable_t), intent(inout) :: this
-
+      logical, optional, intent(in) :: do_metadata
       integer :: start, nx
+      logical :: metadata
+      
+      metadata=.False.
+      if (present(do_metadata)) metadata=do_metadata
+      
       start = lbound(this%data_3d,3)
       nx = size(this%data_3d,1)
-
-      ! if (assertions) then
-      !   ! gfortran 6.3.0 doesn't check coarray shape conformity with -fcheck=all so we verify with an assertion
-      !   call assert( shape(this%halo_north_in(:nx,:,1:halo_size)[south_neighbor]) &
-      !                == shape(this%data_3d(:,:,start:start+halo_size-1)), &
-      !                "put_south: conformable halo_north_in and local " )
-      ! end if
-      !dir$ pgas defer_sync
-      this%halo_north_in(1:nx,:,1:halo_size)[south_neighbor] = this%data_3d(:,:,start+halo_size:start+halo_size*2-1)
+      
+      if (metadata) then
+          this%halo_north_in(1:nx,:,1:halo_size)[south_neighbor] = this%meta_data%dqdt_3d(:,:,(start+halo_size+this%ye):(start+halo_size*2-1+this%ye))
+      else
+          this%halo_north_in(1:nx,:,1:halo_size)[south_neighbor] = this%data_3d(:,:,(start+halo_size+this%ye):(start+halo_size*2-1+this%ye))
+      endif
   end subroutine
 
-  module subroutine retrieve_north_halo(this)
+  module subroutine retrieve_north_halo(this,do_metadata)
       class(exchangeable_t), intent(inout) :: this
-
+      logical, optional, intent(in) :: do_metadata
       integer :: n, nx
+      logical :: metadata
+      
+      metadata=.False.
+      if (present(do_metadata)) metadata=do_metadata
+      
       n = ubound(this%data_3d,3)
       nx = size(this%data_3d,1)
-
-      this%data_3d(:,:,n-halo_size+1:n) = this%halo_north_in(:nx,:,1:halo_size)
+      
+      if (metadata) then
+          this%meta_data%dqdt_3d(:,:,n-halo_size+1:n) = this%halo_north_in(:nx,:,1:halo_size)
+      else
+          this%data_3d(:,:,n-halo_size+1:n) = this%halo_north_in(:nx,:,1:halo_size)
+      endif
   end subroutine
 
-  module subroutine retrieve_south_halo(this)
+  module subroutine retrieve_south_halo(this,do_metadata)
       class(exchangeable_t), intent(inout) :: this
-
+      logical, optional, intent(in) :: do_metadata
       integer :: start, nx
+      logical :: metadata
+      
+      metadata=.False.
+      if (present(do_metadata)) metadata=do_metadata
+      
       start = lbound(this%data_3d,3)
       nx = size(this%data_3d,1)
-
-      this%data_3d(:,:,start:start+halo_size-1) = this%halo_south_in(:nx,:,1:halo_size)
+      
+      if (metadata) then
+          this%meta_data%dqdt_3d(:,:,start:start+halo_size-1+this%ye) = this%halo_south_in(:nx,:,1:(halo_size+this%ye))
+      else
+          this%data_3d(:,:,start:start+halo_size-1+this%ye) = this%halo_south_in(:nx,:,1:(halo_size+this%ye))
+      endif
   end subroutine
 
-  module subroutine put_east(this)
+
+
+  module subroutine put_east(this,do_metadata)
       class(exchangeable_t), intent(inout) :: this
+      logical, optional, intent(in) :: do_metadata
       integer :: n, ny
+      logical :: metadata
+      
+      metadata=.False.
+      if (present(do_metadata)) metadata=do_metadata
+      
       n = ubound(this%data_3d,1)
       ny = size(this%data_3d,3)
-
-      ! if (assertions) then
-      !   !! gfortran 6.3.0 doesn't check coarray shape conformity with -fcheck=all so we verify with an assertion
-      !   call assert( shape(this%halo_west_in(1:halo_size,:,:ny)[east_neighbor])       &
-      !                == shape(this%data_3d(n-halo_size*2+1:n-halo_size,:,:)), &
-      !                "put_east: conformable halo_west_in and local " )
-      ! end if
-
-      !dir$ pgas defer_sync
-      this%halo_west_in(1:halo_size,:,1:ny)[east_neighbor] = this%data_3d(n-halo_size*2+1:n-halo_size,:,:)
+      
+      if (metadata) then
+          this%halo_west_in(1:(halo_size+this%xe),:,1:ny)[east_neighbor] = this%meta_data%dqdt_3d((n-halo_size*2+1-this%xe):(n-halo_size),:,:)
+      else
+          this%halo_west_in(1:(halo_size+this%xe),:,1:ny)[east_neighbor] = this%data_3d((n-halo_size*2+1-this%xe):(n-halo_size),:,:)
+      endif
   end subroutine
 
-  module subroutine put_west(this)
+  module subroutine put_west(this,do_metadata)
       class(exchangeable_t), intent(inout) :: this
-
+      logical, optional, intent(in) :: do_metadata
       integer :: start, ny
+      logical :: metadata
+      
+      metadata=.False.
+      if (present(do_metadata)) metadata=do_metadata
+      
       start = lbound(this%data_3d,1)
       ny = size(this%data_3d,3)
-
-      ! if (assertions) then
-      !   !! gfortran 6.3.0 doesn't check coarray shape conformity with -fcheck=all so we verify with an assertion
-      !   call assert( shape(this%halo_east_in(1:halo_size,:,:ny)[west_neighbor])               &
-      !                == shape(this%data_3d(start+halo_size:start+halo_size*2-1,:,:)), &
-      !                "put_west: conformable halo_east_in and local " )
-      ! end if
-
-      !dir$ pgas defer_sync
-      this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%data_3d(start+halo_size:start+halo_size*2-1,:,:)
+      
+      if (metadata) then
+          this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%meta_data%dqdt_3d((start+halo_size+this%xe):(start+halo_size*2-1+this%xe),:,:)
+      else
+          this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%data_3d((start+halo_size+this%xe):(start+halo_size*2-1+this%xe),:,:)
+      endif
   end subroutine
 
-  module subroutine retrieve_east_halo(this)
+  module subroutine retrieve_east_halo(this,do_metadata)
       class(exchangeable_t), intent(inout) :: this
-
+      logical, optional, intent(in) :: do_metadata
       integer :: n, ny
+      logical :: metadata
+      
+      metadata=.False.
+      if (present(do_metadata)) metadata=do_metadata
+      
       n = ubound(this%data_3d,1)
       ny = size(this%data_3d,3)
-
-      this%data_3d(n-halo_size+1:n,:,:) = this%halo_east_in(1:halo_size,:,1:ny)
+      
+      if (metadata) then
+          this%meta_data%dqdt_3d(n-halo_size+1:n,:,:) = this%halo_east_in(1:halo_size,:,1:ny)
+      else
+          this%data_3d(n-halo_size+1:n,:,:) = this%halo_east_in(1:halo_size,:,1:ny)
+      endif
   end subroutine
 
-  module subroutine retrieve_west_halo(this)
+  module subroutine retrieve_west_halo(this,do_metadata)
       class(exchangeable_t), intent(inout) :: this
-
+      logical, optional, intent(in) :: do_metadata
       integer :: start, ny
+      logical :: metadata
+      
+      metadata=.False.
+      if (present(do_metadata)) metadata=do_metadata
+      
       start = lbound(this%data_3d,1)
       ny = size(this%data_3d,3)
-
-      this%data_3d(start:start+halo_size-1,:,:) = this%halo_west_in(1:halo_size,:,1:ny)
+      
+      if (metadata) then
+          this%meta_data%dqdt_3d(start:start+halo_size-1+this%xe,:,:) = this%halo_west_in(1:(halo_size+this%xe),:,1:ny)
+      else
+          this%data_3d(start:start+halo_size-1+this%xe,:,:) = this%halo_west_in(1:(halo_size+this%xe),:,1:ny)
+      endif
   end subroutine
-
-
-  module subroutine retrieve_north_halo_metadata(this)
-      class(exchangeable_t), intent(inout) :: this
-
-      integer :: n, nx
-      n = ubound(this%meta_data%dqdt_3d,3)
-      nx = size(this%meta_data%dqdt_3d,1)
-
-      this%meta_data%dqdt_3d(:,:,n-halo_size+1:n) = this%halo_north_in(:nx,:,1:halo_size)
-  end subroutine
-
-  module subroutine retrieve_south_halo_metadata(this)
-      class(exchangeable_t), intent(inout) :: this
-
-      integer :: start, nx
-      start = lbound(this%meta_data%dqdt_3d,3)
-      nx = size(this%meta_data%dqdt_3d,1)
-
-      this%meta_data%dqdt_3d(:,:,start:start+halo_size-1) = this%halo_south_in(:nx,:,1:halo_size)
-  end subroutine
-
-  module subroutine retrieve_east_halo_metadata(this)
-      class(exchangeable_t), intent(inout) :: this
-
-      integer :: n, ny
-      n = ubound(this%meta_data%dqdt_3d,1)
-      ny = size(this%meta_data%dqdt_3d,3)
-
-      this%meta_data%dqdt_3d(n-halo_size+1:n,:,:) = this%halo_east_in(1:halo_size,:,1:ny)
-  end subroutine
-
-  module subroutine retrieve_west_halo_metadata(this)
-      class(exchangeable_t), intent(inout) :: this
-
-      integer :: start, ny
-      start = lbound(this%meta_data%dqdt_3d,1)
-      ny = size(this%meta_data%dqdt_3d,3)
-
-      this%meta_data%dqdt_3d(start:start+halo_size-1,:,:) = this%halo_west_in(1:halo_size,:,1:ny)
-  end subroutine
-
 end submodule

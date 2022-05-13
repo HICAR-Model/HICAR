@@ -224,10 +224,10 @@ contains
         ! else
         ! compute the dt to meet the CFL criteria specified given dx, u, v, w, dz
         associate(dx         => domain%dx,                              &
-                  u          => domain%u%data_3d,                       &
-                  v          => domain%v%data_3d,                       &
-                  w          => domain%w%data_3d,                       &
-                  density    => domain%density%data_3d,                 &
+                  u          => domain%u%data_3d(domain%its:domain%ite+1,:,domain%jts:domain%jte),                     &
+                  v          => domain%v%data_3d(domain%its:domain%ite,:,domain%jts:domain%jte+1),                     &
+                  w          => domain%w%data_3d(domain%its:domain%ite,:,domain%jts:domain%jte),                       &
+                  density    => domain%density%data_3d(domain%its:domain%ite,:,domain%jts:domain%jte),                 &
                   dz         => options%parameters%dz_levels,           &
                   reduction  => options%parameters%cfl_reduction_factor,&
                   strictness => options%parameters%cfl_strictness       &
@@ -293,14 +293,7 @@ contains
             call domain%diagnostic_update(options)
 
             ! if using advect_density winds need to be balanced at each update
-            if (options%parameters%advect_density) then
-                call balance_uvw(domain% u %meta_data%dqdt_3d,      &
-                             domain% v %meta_data%dqdt_3d,      &
-                             domain% w %meta_data%dqdt_3d,      &
-                             domain%jacobian_u, domain%jacobian_v, domain%jacobian_w,         &
-                             domain%advection_dz, domain%dx,    &
-                             domain%density%data_3d,options) 
-            endif
+            if (options%parameters%advect_density) call balance_uvw(domain,options)
 
             ! if an interactive run was requested than print status updates everytime at least 5% of the progress has been made
             if (options%parameters%interactive .and. (this_image()==1)) then

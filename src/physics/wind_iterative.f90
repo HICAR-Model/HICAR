@@ -39,7 +39,7 @@ module wind_iterative
     real    :: dx
     real, allocatable, dimension(:,:,:)  :: div, dz_if, jaco, dzdx, dzdy, sigma, alpha
     integer, allocatable :: xl(:), yl(:)
-    integer              :: hs
+    integer              :: hs, i_s, i_e, k_s, k_e, j_s, j_e
 contains
 
 
@@ -61,7 +61,7 @@ contains
         
         PetscScalar,pointer :: lambda(:,:,:)
         logical             :: update
-        integer k, i_s, i_e, k_s, k_e, j_s, j_e
+        integer k !, i_s, i_e, k_s, k_e, j_s, j_e
         
         PetscErrorCode ierr
         KSP            ksp
@@ -80,6 +80,18 @@ contains
         j_s = domain%jts-1
         j_e = domain%jte+1
         
+        !i_s+hs, unless we are on global boundary, then i_s
+        if (domain%grid%ims==domain%grid%ids) i_s = domain%grid%ids
+        
+        !i_e, unless we are on global boundary, then i_e+1
+        if (domain%grid%ime==domain%grid%ide) i_e = domain%grid%ide
+        
+        !j_s+hs, unless we are on global boundary, then j_s
+        if (domain%grid%jms==domain%grid%jds) j_s = domain%grid%jds
+        
+        !j_e, unless we are on global boundary, then j_e+1
+        if (domain%grid%jme==domain%grid%jde) j_e = domain%grid%jde
+
         hs = domain%grid%halo_size
         if (.not.(allocated(dzdx))) then
             allocate(dzdx(i_s:i_e,k_s:k_e,j_s:j_e))
@@ -182,13 +194,8 @@ contains
         call calc_updated_winds(domain, lambda, update)
         
         !Exchange u and v, since the outer points are not updated in above function
-        if (update) then 
-            call domain%u%exchange_u_metadata()
-            call domain%v%exchange_v_metadata()
-        else
-            call domain%u%exchange_u()
-            call domain%v%exchange_v()
-        endif
+        call domain%u%exchange_x(update)
+        call domain%v%exchange_y(update)
         
         call DMDAVecRestoreArrayF90(da,x,lambda, ierr)
         call DMDestroy(da,ierr)
@@ -205,14 +212,14 @@ contains
         logical,     intent(in)                :: update
 
         real, allocatable, dimension(:,:,:)    :: u_dlambdz, v_dlambdz, u_temp, v_temp, lambda_too
-        integer k, i_start, i_end, j_start, j_end, i_s, i_e, k_s, k_e, j_s, j_e, ids, ide, jds, jde
+        integer k, i_start, i_end, j_start, j_end !i_s, i_e, k_s, k_e, j_s, j_e, ids, ide, jds, jde
                 
-        i_s = domain%its-1
-        i_e = domain%ite+1
-        k_s = domain%kts  
-        k_e = domain%kte  
-        j_s = domain%jts-1
-        j_e = domain%jte+1
+        !i_s = domain%its-1
+        !i_e = domain%ite+1
+        !k_s = domain%kts  
+        !k_e = domain%kte  
+        !j_s = domain%jts-1
+        !j_e = domain%jte+1
 
         !i_s+hs, unless we are on global boundary, then i_s
         i_start = i_s+1
@@ -545,14 +552,14 @@ contains
         type(domain_t), intent(in) :: domain
         
         real, allocatable, dimension(:,:,:) :: mixed_denom
-        integer i_s, i_e, k_s, k_e, j_s, j_e
+        !integer i_s, i_e, k_s, k_e, j_s, j_e
         
-        i_s = domain%its-1
-        i_e = domain%ite+1
-        k_s = domain%kts  
-        k_e = domain%kte  
-        j_s = domain%jts-1
-        j_e = domain%jte+1
+        !i_s = domain%its-1
+        !i_e = domain%ite+1
+        !k_s = domain%kts  
+        !k_e = domain%kte  
+        !j_s = domain%jts-1
+        !j_e = domain%jte+1
         
         allocate(A_coef(i_s:i_e,k_s:k_e,j_s:j_e))
         allocate(B_coef(i_s:i_e,k_s:k_e,j_s:j_e))
@@ -669,14 +676,14 @@ contains
         implicit none
         type(domain_t), intent(in) :: domain        
         real, allocatable, dimension(:,:,:) :: mixed_denom
-        integer i_s, i_e, k_s, k_e, j_s, j_e
+        !integer i_s, i_e, k_s, k_e, j_s, j_e
         
-        i_s = domain%its-1
-        i_e = domain%ite+1
-        k_s = domain%kts  
-        k_e = domain%kte  
-        j_s = domain%jts-1
-        j_e = domain%jte+1
+        !i_s = domain%its-1
+        !i_e = domain%ite+1
+        !k_s = domain%kts  
+        !k_e = domain%kte  
+        !j_s = domain%jts-1
+        !j_e = domain%jte+1
         
         allocate(mixed_denom(i_s:i_e,k_s:k_e,j_s:j_e))
         mixed_denom = 2*domain%dx*dz_if(:,k_s+1:k_e+1,:)*(sigma+sigma**2)

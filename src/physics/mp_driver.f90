@@ -37,6 +37,7 @@ module microphysics
     use time_object,                only: Time_type
     use options_interface,          only: options_t
     use domain_interface,           only: domain_t
+    use wind,                       only: calc_w_real
 
     implicit none
 
@@ -667,12 +668,6 @@ contains
             ! calculate the actual time step for the microphysics
             mp_dt = domain%model_time%seconds()-last_model_time
 
-            ! reset the counter so we know that *this* is the last time we've run the microphysics
-            ! NOTE, ONLY reset this when running the inner subset... ideally probably need a separate counter for the halo and subset
-            !last_model_time = domain%model_time%seconds()
-            if (.not.present(halo)) then
-                last_model_time = domain%model_time%seconds()
-            endif
             
             ! If we are going to distribute the current precip over a few grid cells, we need to keep track of
             ! the last_precip so we know how much fell
@@ -686,8 +681,11 @@ contains
                 kte = min(kte, options%mp_options%top_mp_level)
             endif
 
-
+            ! reset the counter so we know that *this* is the last time we've run the microphysics
+            ! NOTE, ONLY reset this when running the inner subset... ideally probably need a separate counter for the halo and subset
+            !last_model_time = domain%model_time%seconds()
             if (present(subset)) then
+                last_model_time = domain%model_time%seconds()
                 call process_subdomain(domain, options, mp_dt,                 &
                                        its = its + subset, ite = ite - subset, &
                                        jts = jts + subset, jte = jte - subset, &
@@ -701,6 +699,14 @@ contains
             endif
 
             if (present(halo)) then
+                call calc_w_real(domain% u %data_3d,      &
+                             domain% v %data_3d,      &
+                             domain% w %data_3d,      &
+                             domain% w_real %data_3d,      &
+                             domain%dzdx_u, domain%dzdy_v,    &
+                             domain%jacobian,domain%ims,domain%ime,domain%kms,domain%kme,\
+                             domain%jms,domain%jme,domain%its,domain%ite,domain%jts,domain%jte)
+                             
                 call process_halo(domain, options, mp_dt, halo, &
                                        its = its, ite = ite,    &
                                        jts = jts, jte = jte,    &
@@ -715,7 +721,15 @@ contains
             endif
 
             if ((.not.present(halo)).and.(.not.present(subset))) then
-
+                last_model_time = domain%model_time%seconds()
+                call calc_w_real(domain% u %data_3d,      &
+                             domain% v %data_3d,      &
+                             domain% w %data_3d,      &
+                             domain% w_real %data_3d,      &
+                             domain%dzdx_u, domain%dzdy_v,    &
+                             domain%jacobian,domain%ims,domain%ime,domain%kms,domain%kme,\
+                             domain%jms,domain%jme,domain%its,domain%ite,domain%jts,domain%jte)
+                             
                 call process_subdomain(domain, options, mp_dt,  &
                                         its = its, ite = ite,    &
                                         jts = jts, jte = jte,    &

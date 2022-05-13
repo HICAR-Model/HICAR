@@ -23,6 +23,10 @@ module exchangeable_interface
     logical :: south_boundary=.false.
     logical :: east_boundary=.false.
     logical :: west_boundary=.false.
+    
+    !x-extra and y-extra to support exchanges on staggered grids
+    integer :: xe
+    integer :: ye
 
   contains
     private
@@ -31,10 +35,8 @@ module exchangeable_interface
     procedure, public :: send
     procedure, public :: retrieve
     procedure, public :: exchange
-    procedure, public :: exchange_u
-    procedure, public :: exchange_u_metadata
-    procedure, public :: exchange_v
-    procedure, public :: exchange_v_metadata
+    procedure, public :: exchange_x
+    procedure, public :: exchange_y
     procedure, public :: set_outputdata
     generic,   public :: initialize=>const
 
@@ -47,10 +49,6 @@ module exchangeable_interface
     procedure :: retrieve_west_halo
     procedure :: retrieve_east_halo
 
-    procedure :: retrieve_north_halo_metadata
-    procedure :: retrieve_south_halo_metadata
-    procedure :: retrieve_west_halo_metadata
-    procedure :: retrieve_east_halo_metadata
   end type
 
   integer, parameter :: space_dim=3
@@ -89,96 +87,73 @@ module exchangeable_interface
       logical,               intent(in),   optional :: no_sync
     end subroutine
 
-    module subroutine exchange(this)
+    module subroutine exchange_x(this,do_metadata)
       implicit none
       class(exchangeable_t), intent(inout) :: this
+        logical, optional, intent(in)        :: do_metadata
     end subroutine
-
-
-    module subroutine exchange_u(this)
+    
+    module subroutine exchange_y(this,do_metadata)
       implicit none
       class(exchangeable_t), intent(inout) :: this
+        logical, optional, intent(in)        :: do_metadata
     end subroutine
-    
-    module subroutine exchange_u_metadata(this)
+
+    module subroutine exchange(this,do_metadata)
       implicit none
       class(exchangeable_t), intent(inout) :: this
+        logical, optional, intent(in)        :: do_metadata
     end subroutine
-    
-    module subroutine exchange_v(this)
-      implicit none
-      class(exchangeable_t), intent(inout) :: this
-    end subroutine
-    
-    module subroutine exchange_v_metadata(this)
-      implicit none
-      class(exchangeable_t), intent(inout) :: this
-    end subroutine
-    
-    
-    module subroutine put_north(this)
+
+    module subroutine put_north(this,do_metadata)
         implicit none
         class(exchangeable_t), intent(inout) :: this
+        logical, optional, intent(in)        :: do_metadata
     end subroutine
 
-    module subroutine put_south(this)
+    module subroutine put_south(this,do_metadata)
         implicit none
         class(exchangeable_t), intent(inout) :: this
+        logical, optional, intent(in)        :: do_metadata
     end subroutine
 
-    module subroutine retrieve_north_halo(this)
+    module subroutine retrieve_north_halo(this,do_metadata)
         implicit none
         class(exchangeable_t), intent(inout) :: this
+        logical, optional, intent(in)        :: do_metadata
     end subroutine
 
-    module subroutine retrieve_south_halo(this)
+    module subroutine retrieve_south_halo(this,do_metadata)
         implicit none
         class(exchangeable_t), intent(inout) :: this
+        logical, optional, intent(in)        :: do_metadata
     end subroutine
 
 
-    module subroutine put_east(this)
+    module subroutine put_east(this,do_metadata)
         implicit none
         class(exchangeable_t), intent(inout) :: this
+        logical, optional, intent(in)        :: do_metadata
     end subroutine
 
-    module subroutine put_west(this)
+    module subroutine put_west(this,do_metadata)
         implicit none
         class(exchangeable_t), intent(inout) :: this
+        logical, optional, intent(in)        :: do_metadata
     end subroutine
 
-    module subroutine retrieve_east_halo(this)
+    module subroutine retrieve_east_halo(this,do_metadata)
         implicit none
         class(exchangeable_t), intent(inout) :: this
+        logical, optional, intent(in)        :: do_metadata
     end subroutine
 
-    module subroutine retrieve_west_halo(this)
+    module subroutine retrieve_west_halo(this,do_metadata)
         implicit none
         class(exchangeable_t), intent(inout) :: this
+        logical, optional, intent(in)        :: do_metadata
     end subroutine
 
-
-
-    module subroutine retrieve_north_halo_metadata(this)
-        implicit none
-        class(exchangeable_t), intent(inout) :: this
-    end subroutine
-
-    module subroutine retrieve_south_halo_metadata(this)
-        implicit none
-        class(exchangeable_t), intent(inout) :: this
-    end subroutine
-
-
-    module subroutine retrieve_east_halo_metadata(this)
-        implicit none
-        class(exchangeable_t), intent(inout) :: this
-    end subroutine
-
-    module subroutine retrieve_west_halo_metadata(this)
-        implicit none
-        class(exchangeable_t), intent(inout) :: this
-    end subroutine
 
   end interface
 
