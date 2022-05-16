@@ -92,9 +92,6 @@ contains
         
         
         associate(dx         => domain%dx,                         &
-                  u          => domain%u%data_3d,                  &
-                  v          => domain%v%data_3d,                  &
-                  w          => domain%w%data_3d,                  &
                   rho        => domain%density%data_3d,            &
                   dz         => domain%advection_dz,               &
                   jaco_u    => domain%jacobian_u,                  &
@@ -129,8 +126,6 @@ contains
         update = .False.
         if(present(update_in)) update=update_in
         
-        w = 0
-
         allocate(divergence(ims:ime,kms:kme,jms:jme))
 
         if (update) then
@@ -288,7 +283,7 @@ contains
     !!
     !!------------------------------------------------------------
     subroutine make_winds_grid_relative(u, v, sintheta, costheta, ims, ime, kms, kme, jms, jme)
-        real, intent(inout) :: u(ims:ime+1,kms:kme,jms:jme), v(ims:ime,kms:kme,jms:jme+1)
+        real, intent(inout)             :: u(ims:ime+1,kms:kme,jms:jme), v(ims:ime,kms:kme,jms:jme+1)
         double precision, intent(in)    :: sintheta(ims:ime,jms:jme), costheta(ims:ime,jms:jme)
         integer, intent(in)             :: ims, ime, kms, kme, jms, jme
         real, dimension(:,:,:), allocatable :: u_vstag,v_ustag
@@ -303,19 +298,19 @@ contains
         allocate(sintheta_ustag(ims+1:ime,jms:jme))
         allocate(costheta_vstag(ims:ime,jms+1:jme))
         allocate(sintheta_vstag(ims:ime,jms+1:jme))
-        
+
         
         v_ustag = (v(ims:ime-1,:,jms:jme)+v(ims+1:ime,:,jms:jme)+v(ims:ime-1,:,jms+1:jme+1)+v(ims+1:ime,:,jms+1:jme+1))/4
         u_vstag = (u(ims:ime,:,jms:jme-1)+u(ims:ime,:,jms+1:jme)+u(ims+1:ime+1,:,jms:jme-1)+u(ims+1:ime+1,:,jms+1:jme))/4
         
-        costheta_ustag = (costheta(ims+1:ime,:)+costheta(ims:ime-1,:))/2
-        sintheta_ustag = (sintheta(ims+1:ime,:)+sintheta(ims:ime-1,:))/2
+        costheta_ustag = (costheta(ims+1:ime,jms:jme)+costheta(ims:ime-1,jms:jme))/2
+        sintheta_ustag = (sintheta(ims+1:ime,jms:jme)+sintheta(ims:ime-1,jms:jme))/2
         
-        costheta_vstag = (costheta(:,jms+1:jme)+costheta(:,jms:jme-1))/2
-        sintheta_vstag = (sintheta(:,jms+1:jme)+sintheta(:,jms:jme-1))/2
+        costheta_vstag = (costheta(ims:ime,jms+1:jme)+costheta(ims:ime,jms:jme-1))/2
+        sintheta_vstag = (sintheta(ims:ime,jms+1:jme)+sintheta(ims:ime,jms:jme-1))/2
 
         do k = kms,kme
-            u(ims+1:ime,k,:) = u(ims+1:ime,k,:) * costheta_ustag + v_ustag(:,k,:) * sintheta_ustag
+            u(ims+1:ime,k,:) = u(ims+1:ime,k,:) * costheta_ustag - v_ustag(:,k,:) * sintheta_ustag
             v(:,k,jms+1:jme) = v(:,k,jms+1:jme) * costheta_vstag + u_vstag(:,k,:) * sintheta_vstag
 
             !u(ims,k,:)       = u(ims,k,:) * costheta_ustag(ims+1,:) + v_ustag(ims+1,k,:) * sintheta_ustag(ims+1,:)
