@@ -994,11 +994,11 @@ contains
         allocate(this%terrain_v( this%v_grid2d_ext% ims : this%v_grid2d_ext% ime,   &
                                  this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
 
-        allocate(this%sintheta( this% ids : this% ide, &
-                                this% jds : this% jde) )
+        allocate(this%sintheta( this% ims : this% ime, &
+                                this% jms : this% jme) )
 
-        allocate(this%costheta( this% ids : this% ide, &
-                                this% jds : this% jde) )
+        allocate(this%costheta( this% ims : this% ime, &
+                                this% jms : this% jme) )
 
 
     end subroutine allocate_z_arrays
@@ -1446,10 +1446,10 @@ contains
         real, allocatable :: lat(:,:), lon(:,:), costheta(:,:), sintheta(:,:)
 
         if (options%parameters%sinalpha_var /= "") then
-            ims = lbound(this%latitude%data_2d, 1)
-            ime = ubound(this%latitude%data_2d, 1)
-            jms = lbound(this%latitude%data_2d, 2)
-            jme = ubound(this%latitude%data_2d, 2)
+            ims = this%ims
+            ime = this%ime
+            jms = this%jms
+            jme = this%jme
 
             if (this_image()==1) print*, "Reading Sinalpha/cosalpha"
 
@@ -1469,10 +1469,10 @@ contains
                            options%parameters%lon_hi,                 &
                            lon, this%grid)
 
-            ims = lbound(lat,1)
-            ime = ubound(lat,1)
-            jms = lbound(lat,2)
-            jme = ubound(lat,2)
+            ims = this%ims
+            ime = this%ime
+            jms = this%jms
+            jme = this%jme
 
             allocate(sintheta(ims:ime,jms:jme))
             allocate(costheta(ims:ime,jms:jme))
@@ -1480,8 +1480,8 @@ contains
             do j = jms, jme
                 do i = ims, ime
                     ! in case we are in the first or last grid, reset boundaries
-                    starti = max(ims, i-2)
-                    endi   = min(ime, i+2)
+                    starti = max(this%ids, i-2)
+                    endi   = min(this%ide, i+2)
 
                     ! change in latitude
                     dlat = DBLE(lat(endi,j) - lat(starti,j))
@@ -1504,11 +1504,11 @@ contains
             smooth_loops = int(1000/this%dx)
             
             do i=1,smooth_loops
-             call smooth_array_2d( costheta , windowsize  =  20)
-             call smooth_array_2d( sintheta , windowsize  =  20)
+             call smooth_array_2d( costheta , windowsize  =  int((ime-ims)/5))
+             call smooth_array_2d( sintheta , windowsize  =  int((ime-ims)/5))
             enddo
-            this%costheta = costheta
-            this%sintheta = sintheta
+            this%costheta(ims:ime,jms:jme) = costheta(ims:ime,jms:jme)
+            this%sintheta(ims:ime,jms:jme) = sintheta(ims:ime,jms:jme)
             
             deallocate(costheta)
             deallocate(sintheta)
