@@ -2389,7 +2389,8 @@ contains
 
         type(interpolable_type) :: forc_u_from_mass, forc_v_from_mass
 
-        integer :: nx, ny, nz, i, ims, ime, jms, jme, AGL_top, AGL_nz
+        integer :: nx, ny, nz, i, ims, ime, jms, jme, kms,kme, AGL_top, AGL_nz, AGL_nz_forcing
+        real, allocatable, dimension(:,:) :: geo_u_base, geo_v_base, geo_base, forcing_base
 
         ! this%geo and forcing%geo have to be of class interpolable
         ! which means they must contain lat, lon, z, geolut, and vLUT components
@@ -2409,7 +2410,30 @@ contains
             call geo_LUT(this%geo_u, forc_u_from_mass)
             call geo_LUT(this%geo_v, forc_v_from_mass)
 
+        
+            nz = size(forcing%z,  2)
+            nx = size(this%geo%z, 1)
+            ny = size(this%geo%z, 3)
+            allocate(forcing%geo%z(nx, nz, ny))
+            !allocate(forcing_base(nx,ny))
+            
+
+            nx = size(this%geo_u%z, 1)
+            ny = size(this%geo_u%z, 3)
+            allocate(forcing%geo_u%z(nx,nz,ny))
+            !allocate(geo_u_base(nx,ny))
+            
+            
+            nx = size(this%geo_v%z, 1)
+            ny = size(this%geo_v%z, 3)
+            allocate(forcing%geo_v%z(nx,nz,ny))
+            !allocate(geo_v_base(nx,ny))
+            
+            
             if (options%parameters%use_agl_height) then
+
+                allocate(geo_base(nx,ny))
+                geo_base = this%geo%z(:,1,:)
 
                 !! Subtract off terrain from geo_u and geo_v
                 ! Find height of level closest to user-specified AGL_cap height
@@ -2419,50 +2443,84 @@ contains
                     AGL_top = AGL_top + options%parameters%dz_levels(AGL_nz)
                     AGL_nz = AGL_nz + 1
                 end do
-
+                
+                AGL_nz = 1
+                do while ((this%geo%z(1,AGL_nz,1)-this%geo%z(1,1,1)) < options%parameters%agl_cap)
+                    AGL_nz = AGL_nz + 1
+                end do
+                !AGL_nz = min(AGL_nz,min(10,this%kme))
+                
+                AGL_nz_forcing = 1
+                do while ((forcing%z(1,AGL_nz_forcing,1)-forcing%z(1,1,1)) < options%parameters%agl_cap)
+                    AGL_nz_forcing = AGL_nz_forcing + 1
+                end do
+                AGL_nz_forcing = AGL_nz
                 ! Step in reverse so that the bottom level is preserved until it is no longer needed
                 do i=AGL_nz,1,-1
                     ! Multiply subtraction of base-topography by a factor that scales from 1 at surface to 0 at AGL_cap height
                     this%geo_u%z(:,i,:) = this%geo_u%z(:,i,:)-(this%geo_u%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))
                     this%geo_v%z(:,i,:) = this%geo_v%z(:,i,:)-(this%geo_v%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))
-                    forcing%z(:,i,:) = forcing%z(:,i,:)-(forcing%original_geo%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))   
-
+                    this%geo%z(:,i,:) = this%geo%z(:,i,:)-(geo_base*((AGL_nz-i)/(AGL_nz*1.0)))
+                enddo
+                do i=AGL_nz_forcing,1,-1
+                    forcing%z(:,i,:) = forcing%z(:,i,:)-(forcing%original_geo%z(:,1,:)*((AGL_nz_forcing-i)/(AGL_nz_forcing*1.0)))   
                 enddo
 
             endif
-
-            nz = size(forcing%z,  2)
-            nx = size(this%geo_u%z, 1)
-            ny = size(this%geo_u%z, 3)
-            allocate(forcing%geo_u%z(nx,nz,ny))
+            
+            ! geo_u_base = this%geo_u%z(:,1,:)
+            ! geo_v_base = this%geo_v%z(:,1,:)
+            ! geo_base = this%geo%z(:,1,:)
+            !forcing_base = forcing%original_geo%z(:,1,:)
+            
+            !kms = this%kms
+            !kme = this%kme
+            !do i=kms,kme
+            !    this%geo_u%z(:,i,:) = this%geo_u%z(:,i,:)-geo_u_base
+            !    this%geo_v%z(:,i,:) = this%geo_v%z(:,i,:)-geo_v_base
+            !    this%geo%z(:,i,:) = this%geo%z(:,i,:)-geo_base
+            !enddo
+            !do i=1,nz
+            !    forcing%z(:,i,:) = forcing%z(:,i,:)-forcing_base 
+            !enddo
+            
+            call geo_interp(forcing%geo%z, forcing%z, forcing%geo%geolut)
+            call vLUT(this%geo,   forcing%geo)
+            call io_write("eo_vLUT.nc","data",forcing%geo%vert_lut%w)
+            
             call geo_interp(forcing%geo_u%z, forcing%z, forc_u_from_mass%geolut)
             call vLUT(this%geo_u, forcing%geo_u)
 
             call io_write("eo_u_vLUT.nc","data",forcing%geo_u%vert_lut%w)
-            
-            nx = size(this%geo_v%z, 1)
-            ny = size(this%geo_v%z, 3)
-            allocate(forcing%geo_v%z(nx,nz,ny))
+                        
             call geo_interp(forcing%geo_v%z, forcing%z, forc_v_from_mass%geolut)
             call vLUT(this%geo_v, forcing%geo_v)
-
-
+            
+            
+            !do i=kms,kme
+            !    this%geo_u%z(:,i,:) = this%geo_u%z(:,i,:)+geo_u_base
+            !    this%geo_v%z(:,i,:) = this%geo_v%z(:,i,:)+geo_v_base
+            !    this%geo%z(:,i,:) = this%geo%z(:,i,:)+geo_base
+            !enddo
+            !do i=1,nz
+            !    forcing%z(:,i,:) = forcing%z(:,i,:)+forcing_base 
+            !enddo
             if (options%parameters%use_agl_height) then
 
                 !! Add back terrain-subtracted portions to forcing%z
-                do i=AGL_nz,1,-1
-                    forcing%z(:,i,:) = forcing%z(:,i,:)+(forcing%original_geo%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))
+                do i=AGL_nz_forcing,1,-1
+                    forcing%z(:,i,:) = forcing%z(:,i,:)+(forcing%original_geo%z(:,1,:)*((AGL_nz_forcing-i)/(AGL_nz_forcing*1.0)))
                 enddo
+                do i=AGL_nz,1,-1
+                    !this%geo%z(:,i,:) = this%geo%z(:,i,:)+(geo_base*((AGL_nz-i)/(AGL_nz*1.0)))
+                enddo
+
             endif
 
-            nx = size(this%geo%z, 1)
-            ny = size(this%geo%z, 3)
-            allocate(forcing%geo%z(nx, nz, ny))
-            call geo_interp(forcing%geo%z, forcing%z, forcing%geo%geolut)
-            call vLUT(this%geo,   forcing%geo)
-            call io_write("eo_vLUT.nc","data",forcing%geo%vert_lut%w)
-
         end if
+
+        !deallocate(geo_u_base,geo_v_base,geo_base,forcing_base)
+
 
     end subroutine
 
