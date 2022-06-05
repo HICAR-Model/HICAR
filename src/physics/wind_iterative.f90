@@ -65,11 +65,11 @@ contains
         
         PetscErrorCode ierr
         KSP            ksp
-        PetscReal      norm, conv_tol
         DM             da
         Vec            x, localX
         PetscInt       one, x_size
-        
+        PetscReal      norm, conv_tol
+
         update=.False.
         if (present(update_in)) update=update_in
                 
@@ -178,7 +178,6 @@ contains
         call KSPSetComputeOperators(ksp,ComputeMatrix,0,ierr)
 
         call KSPSetFromOptions(ksp,ierr)
-        call DMCreateGlobalVector(da,x,ierr)
         call DMCreateLocalVector(da,localX,ierr)
         call KSPSolve(ksp,PETSC_NULL_VEC,PETSC_NULL_VEC,ierr)
         
@@ -190,18 +189,19 @@ contains
         call DMGlobalToLocalEnd(da,x,INSERT_VALUES,localX,ierr)
 
         call DMDAVecGetArrayF90(da,localX,lambda, ierr)
-        
         call calc_updated_winds(domain, lambda, update)
-        
+        call DMDAVecRestoreArrayF90(da,localX,lambda, ierr)
+
         !Exchange u and v, since the outer points are not updated in above function
         call domain%u%exchange_x(update)
         call domain%v%exchange_y(update)
         
-        call DMDAVecRestoreArrayF90(da,x,lambda, ierr)
+        call VecDestroy(localX,ierr)
         call DMDestroy(da,ierr)
         call KSPDestroy(ksp,ierr)
+        
         call PetscFinalize(ierr)
-
+        
     end subroutine calc_iter_winds
     
     subroutine calc_updated_winds(domain,lambda,update) !u, v, w, jaco_u,jaco_v,jaco_w,u_dzdx,v_dzdy,lambda, ids, ide, jds, jde)
@@ -304,8 +304,7 @@ contains
 
         PetscInt       i,j,k,mx,my,mz,xm,ym,zm,xs,ys,zs
         DMDALocalInfo       :: info(DMDA_LOCAL_INFO_SIZE)
-        PetscScalar,pointer :: barray(:,:,:), lambda(:,:,:)
-        real                :: dlambdx, dlambdy
+        PetscScalar,pointer :: barray(:,:,:)
 
         call KSPGetDM(ksp,dm,ierr)
         
