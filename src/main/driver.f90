@@ -161,6 +161,7 @@ program icar
             call step(domain, step_end(boundary%current_time, next_output), options)
             call physics_timer%stop()
         else
+            call domain%apply_forcing(options%output_options%output_dt)
             domain%model_time = next_output
         endif
 

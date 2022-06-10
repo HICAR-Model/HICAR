@@ -10,7 +10,7 @@
 submodule(domain_interface) domain_implementation
     use assertions_mod,       only : assert, assertions
     use mod_atm_utilities,    only : exner_function, update_pressure
-    use icar_constants,       only : Rd, karman, kVARS, kLC_LAND
+    use icar_constants,       only : Rd, karman, kVARS, kLC_LAND, gravity
     use string,               only : str
     use co_util,              only : broadcast
     use io_routines,          only : io_write, io_read
@@ -1425,6 +1425,7 @@ contains
         deallocate(temp)
 
         call setup_geo(this%geo,   this%latitude%data_2d,   this%longitude%data_2d,   this%z%data_3d, options%parameters%longitude_system)
+        call setup_geo(this%geo_agl,   this%latitude%data_2d,   this%longitude%data_2d,   this%z%data_3d, options%parameters%longitude_system)
         
         call setup_grid_rotations(this, options)
         
@@ -2389,15 +2390,16 @@ contains
 
         type(interpolable_type) :: forc_u_from_mass, forc_v_from_mass
 
-        integer :: nx, ny, nz, i, ims, ime, jms, jme, kms,kme, AGL_top, AGL_nz, AGL_nz_forcing
-        real, allocatable, dimension(:,:) :: geo_u_base, geo_v_base, geo_base, forcing_base
+        integer :: nx, ny, nz, i, j, k
+        real, allocatable, dimension(:,:) :: AGL_cap, AGL_u_cap, AGL_v_cap, AGL_n, AGL_u_n, AGL_v_n
 
         ! this%geo and forcing%geo have to be of class interpolable
         ! which means they must contain lat, lon, z, geolut, and vLUT components
 
-        call geo_LUT(this%geo_u, forcing%geo_u)
-        call geo_LUT(this%geo_v, forcing%geo_v)
-        call geo_LUT(this%geo,   forcing%geo)
+        call geo_LUT(this%geo_u,  forcing%geo_u)
+        call geo_LUT(this%geo_v,  forcing%geo_v)
+        call geo_LUT(this%geo_agl,forcing%geo_agl)
+        call geo_LUT(this%geo,    forcing%geo)
 
 
         if (allocated(forcing%z)) then  ! In case of external 2D forcing data, skip the VLUTs.
@@ -2409,118 +2411,106 @@ contains
 
             call geo_LUT(this%geo_u, forc_u_from_mass)
             call geo_LUT(this%geo_v, forc_v_from_mass)
-
-        
-            nz = size(forcing%z,  2)
-            nx = size(this%geo%z, 1)
-            ny = size(this%geo%z, 3)
-            allocate(forcing%geo%z(nx, nz, ny))
-            !allocate(forcing_base(nx,ny))
             
-
+            nz = size(forcing%z,  2)
             nx = size(this%geo_u%z, 1)
             ny = size(this%geo_u%z, 3)
-            allocate(forcing%geo_u%z(nx,nz,ny))
-            !allocate(geo_u_base(nx,ny))
-            
+            allocate(forcing%geo_u%z(nx,nz,ny))            
             
             nx = size(this%geo_v%z, 1)
             ny = size(this%geo_v%z, 3)
             allocate(forcing%geo_v%z(nx,nz,ny))
-            !allocate(geo_v_base(nx,ny))
             
-            
-            if (options%parameters%use_agl_height) then
+            nx = size(this%geo%z, 1)
+            ny = size(this%geo%z, 3)
+            allocate(forcing%geo%z(nx, nz, ny))            
+            allocate(forcing%geo_agl%z(nx, nz, ny))            
 
-                allocate(geo_base(nx,ny))
-                geo_base = this%geo%z(:,1,:)
-
-                !! Subtract off terrain from geo_u and geo_v
-                ! Find height of level closest to user-specified AGL_cap height
-                AGL_top = 0
-                AGL_nz = 1
-                do while (AGL_top < options%parameters%agl_cap)
-                    AGL_top = AGL_top + options%parameters%dz_levels(AGL_nz)
-                    AGL_nz = AGL_nz + 1
-                end do
-                
-                AGL_nz = 1
-                do while ((this%geo%z(1,AGL_nz,1)-this%geo%z(1,1,1)) < options%parameters%agl_cap)
-                    AGL_nz = AGL_nz + 1
-                end do
-                !AGL_nz = min(AGL_nz,min(10,this%kme))
-                
-                AGL_nz_forcing = 1
-                do while ((forcing%z(1,AGL_nz_forcing,1)-forcing%z(1,1,1)) < options%parameters%agl_cap)
-                    AGL_nz_forcing = AGL_nz_forcing + 1
-                end do
-                AGL_nz_forcing = AGL_nz
-                ! Step in reverse so that the bottom level is preserved until it is no longer needed
-                do i=AGL_nz,1,-1
-                    ! Multiply subtraction of base-topography by a factor that scales from 1 at surface to 0 at AGL_cap height
-                    this%geo_u%z(:,i,:) = this%geo_u%z(:,i,:)-(this%geo_u%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))
-                    this%geo_v%z(:,i,:) = this%geo_v%z(:,i,:)-(this%geo_v%z(:,1,:)*((AGL_nz-i)/(AGL_nz*1.0)))
-                    this%geo%z(:,i,:) = this%geo%z(:,i,:)-(geo_base*((AGL_nz-i)/(AGL_nz*1.0)))
-                enddo
-                do i=AGL_nz_forcing,1,-1
-                    forcing%z(:,i,:) = forcing%z(:,i,:)-(forcing%original_geo%z(:,1,:)*((AGL_nz_forcing-i)/(AGL_nz_forcing*1.0)))   
-                enddo
-
-            endif
-            
-            ! geo_u_base = this%geo_u%z(:,1,:)
-            ! geo_v_base = this%geo_v%z(:,1,:)
-            ! geo_base = this%geo%z(:,1,:)
-            !forcing_base = forcing%original_geo%z(:,1,:)
-            
-            !kms = this%kms
-            !kme = this%kme
-            !do i=kms,kme
-            !    this%geo_u%z(:,i,:) = this%geo_u%z(:,i,:)-geo_u_base
-            !    this%geo_v%z(:,i,:) = this%geo_v%z(:,i,:)-geo_v_base
-            !    this%geo%z(:,i,:) = this%geo%z(:,i,:)-geo_base
-            !enddo
-            !do i=1,nz
-            !    forcing%z(:,i,:) = forcing%z(:,i,:)-forcing_base 
-            !enddo
-            
             call geo_interp(forcing%geo%z, forcing%z, forcing%geo%geolut)
             call vLUT(this%geo,   forcing%geo)
-            call io_write("eo_vLUT.nc","data",forcing%geo%vert_lut%w)
+
             
+            call geo_interp(forcing%geo_agl%z, forcing%z, forcing%geo%geolut)
             call geo_interp(forcing%geo_u%z, forcing%z, forc_u_from_mass%geolut)
-            call vLUT(this%geo_u, forcing%geo_u)
-
-            call io_write("eo_u_vLUT.nc","data",forcing%geo_u%vert_lut%w)
-                        
             call geo_interp(forcing%geo_v%z, forcing%z, forc_v_from_mass%geolut)
-            call vLUT(this%geo_v, forcing%geo_v)
             
-            
-            !do i=kms,kme
-            !    this%geo_u%z(:,i,:) = this%geo_u%z(:,i,:)+geo_u_base
-            !    this%geo_v%z(:,i,:) = this%geo_v%z(:,i,:)+geo_v_base
-            !    this%geo%z(:,i,:) = this%geo%z(:,i,:)+geo_base
-            !enddo
-            !do i=1,nz
-            !    forcing%z(:,i,:) = forcing%z(:,i,:)+forcing_base 
-            !enddo
+
             if (options%parameters%use_agl_height) then
+                
+                nx = size(this%geo_agl%z, 1)
+                ny = size(this%geo_agl%z, 3)
+                allocate(AGL_n(nx,ny))
+                allocate(AGL_cap(nx,ny))
 
-                !! Add back terrain-subtracted portions to forcing%z
-                do i=AGL_nz_forcing,1,-1
-                    forcing%z(:,i,:) = forcing%z(:,i,:)+(forcing%original_geo%z(:,1,:)*((AGL_nz_forcing-i)/(AGL_nz_forcing*1.0)))
-                enddo
-                do i=AGL_nz,1,-1
-                    !this%geo%z(:,i,:) = this%geo%z(:,i,:)+(geo_base*((AGL_nz-i)/(AGL_nz*1.0)))
-                enddo
+                nx = size(this%geo_u%z, 1)
+                ny = size(this%geo_u%z, 3)
+                allocate(AGL_u_n(nx,ny))
+                allocate(AGL_u_cap(nx,ny))
+                
+                nx = size(this%geo_v%z, 1)
+                ny = size(this%geo_v%z, 3)
+                allocate(AGL_v_n(nx,ny))
+                allocate(AGL_v_cap(nx,ny))
 
+
+                AGL_cap = forcing%geo_agl%z(:,1,:)+real(options%parameters%agl_cap)
+                where (AGL_cap <= (this%geo_agl%z(:,1,:)+200)) AGL_cap = this%geo_agl%z(:,1,:)+200
+                
+                AGL_u_cap = forcing%geo_u%z(:,1,:)+real(options%parameters%agl_cap)
+                where (AGL_u_cap <= (this%geo_u%z(:,1,:)+200)) AGL_u_cap = this%geo_u%z(:,1,:)+200
+                
+                AGL_v_cap = forcing%geo_v%z(:,1,:)+real(options%parameters%agl_cap)
+                where (AGL_v_cap <= (this%geo_v%z(:,1,:)+200)) AGL_v_cap = this%geo_v%z(:,1,:)+200
+
+                !Do AGL interpolation for forcing geo z's
+                do k=size(forcing%geo_agl%z, 2),1,-1
+                    AGL_u_n = (AGL_u_cap-forcing%geo_u%z(:,k,:))/max(abs(AGL_u_cap-forcing%geo_u%z(:,1,:)),0.00001)
+                    AGL_v_n = (AGL_v_cap-forcing%geo_v%z(:,k,:))/max(abs(AGL_v_cap-forcing%geo_v%z(:,1,:)),0.00001)
+                    AGL_n = (AGL_cap-forcing%geo_agl%z(:,k,:))/max(abs(AGL_cap-forcing%geo_agl%z(:,1,:)),0.00001)
+
+                    where (AGL_n < 0.0) AGL_n = 0.0
+                    where (AGL_u_n < 0.0) AGL_u_n = 0.0
+                    where (AGL_v_n < 0.0) AGL_v_n = 0.0
+                    
+                    forcing%geo_u%z(:,k,:) = forcing%geo_u%z(:,k,:)-forcing%geo_u%z(:,1,:)*AGL_u_n
+                    forcing%geo_v%z(:,k,:) = forcing%geo_v%z(:,k,:)-forcing%geo_v%z(:,1,:)*AGL_v_n
+                    forcing%geo_agl%z(:,k,:) = forcing%geo_agl%z(:,k,:)-forcing%geo_agl%z(:,1,:)*AGL_n
+                enddo
+                ! Step in reverse so that the bottom level is preserved until it is no longer needed
+                ! Do AGL interpolation for domain grid
+                
+                do k=size(this%geo_agl%z,   2),1,-1
+                    ! Multiply subtraction of base-topography by a factor that scales from 1 at surface to 0 at AGL_cap height
+                    AGL_u_n = (AGL_u_cap-this%geo_u%z(:,k,:))/max(abs(AGL_u_cap-this%geo_u%z(:,1,:)),0.00001)
+                    AGL_v_n = (AGL_v_cap-this%geo_v%z(:,k,:))/max(abs(AGL_v_cap-this%geo_v%z(:,1,:)),0.00001)
+                    AGL_n = (AGL_cap-this%geo_agl%z(:,k,:))/max(abs(AGL_cap-this%geo_agl%z(:,1,:)),0.00001)
+
+                    where (AGL_n < 0.0) AGL_n = 0.0
+                    where (AGL_u_n < 0.0) AGL_u_n = 0.0
+                    where (AGL_v_n < 0.0) AGL_v_n = 0.0
+                    
+                    this%geo_u%z(:,k,:) = this%geo_u%z(:,k,:)-this%geo_u%z(:,1,:)*AGL_u_n
+                    this%geo_v%z(:,k,:) = this%geo_v%z(:,k,:)-this%geo_v%z(:,1,:)*AGL_v_n
+                    this%geo_agl%z(:,k,:) = this%geo_agl%z(:,k,:)-this%geo_agl%z(:,1,:)*AGL_n
+                enddo
             endif
 
+            call vLUT(this%geo_agl,   forcing%geo_agl)
+            call vLUT(this%geo_u, forcing%geo_u)
+            call vLUT(this%geo_v, forcing%geo_v)
+            
+            call io_write("eo_vLUT.nc","data",forcing%geo%vert_lut%w)
+            call io_write("eo_u_vLUT.nc","data",forcing%geo_u%vert_lut%w)
+            
+            
+            !if (options%parameters%use_agl_height) then
+            !    do k=size(forcing%z,  2),1,-1
+            !         forcing%z(:,k,:) = forcing%z(:,k,:)+forcing%original_geo%z(:,1,:)*AGL_forcing_n(:,k,:)
+            !    enddo
+            !endif
+
         end if
-
-        !deallocate(geo_u_base,geo_v_base,geo_base,forcing_base)
-
+        
 
     end subroutine
 
@@ -2766,23 +2756,22 @@ contains
         class(domain_t),  intent(inout) :: this
         type(boundary_t), intent(in)    :: forcing
         logical,          intent(in),   optional :: update
-        
+
         ! internal field always present for value of optional "update"
         logical :: update_only
-        logical :: var_is_not_pressure
         ! temporary to hold the variable to be interpolated to
         type(variable_t) :: var_to_interpolate
+        ! temporary to hold pressure and temperature for later below-grid adjustments
+        type(variable_t) :: pressure, potential_temp
         ! temporary to hold the forcing variable to be interpolated from
-        type(variable_t) :: input_data, forcing_temperature
-        real, allocatable, dimension(:,:,:) :: potential_temperature
+        type(variable_t) :: input_data
+
         ! number of layers has to be used when subsetting for update_pressure (for now)
         integer :: nz
-        logical :: var_is_u, var_is_v
+        logical :: var_is_u, var_is_v, var_is_pressure, var_is_potential_temp, agl_interp
 
         update_only = .False.
         if (present(update)) update_only = update
-
-        forcing_temperature = forcing%variables%get_var(this%potential_temperature%meta_data%forcing_var)
 
         ! make sure the dictionary is reset to point to the first variable
         call this%variables_to_force%reset_iterator()
@@ -2795,7 +2784,6 @@ contains
             ! get the associated forcing data
             input_data = forcing%variables%get_var(var_to_interpolate%forcing_var)
 
-
             ! interpolate
             if (var_to_interpolate%two_d) then
                 if (update_only) then
@@ -2805,47 +2793,79 @@ contains
                 endif
 
             else
-                ! if this is the pressure variable, then don't perform vertical interpolation, adjust the pressure directly
-                var_is_not_pressure = (trim(var_to_interpolate%forcing_var) /= trim(this%pressure%forcing_var))
-
+                var_is_pressure = (trim(var_to_interpolate%forcing_var) == trim(this%pressure%forcing_var))
+                var_is_potential_temp = (trim(var_to_interpolate%forcing_var) == trim(this%potential_temperature%meta_data%forcing_var))
                 var_is_u = (trim(var_to_interpolate%forcing_var) == trim(this%u%meta_data%forcing_var))
                 var_is_v = (trim(var_to_interpolate%forcing_var) == trim(this%v%meta_data%forcing_var))
+                
+                !If we are dealing with anything but pressure and temperature (basically mass/number species), consider height above ground
+                !for interpolation. If the user has not selecte AGL interpolation in the namelist, this will result in standard z-interpolation
+                agl_interp = .not.(var_is_pressure .or. var_is_potential_temp)
 
                 ! if just updating, use the dqdt variable otherwise use the 3D variable
                 if (update_only) then
-
                     call interpolate_variable(var_to_interpolate%dqdt_3d, input_data, forcing, this, &
-                                    vert_interp=var_is_not_pressure, var_is_u=var_is_u, var_is_v=var_is_v, nsmooth=this%nsmooth)
-
-                    ! because pressure needs to be adjusted for grid points that fall below the forcing lowest level, we adjust it separately.
-                    if (.not.var_is_not_pressure) then
-                        allocate(potential_temperature, mold=var_to_interpolate%dqdt_3d)
-                        ! to improve the pressure adjustment, we need to get forcing potential temperature on the ICAR grid WITHOUT vertical interpolation
-                        call interpolate_variable(potential_temperature, forcing_temperature, forcing, this, &
-                                        vert_interp=.False., var_is_u=.False., var_is_v=.False., nsmooth=this%nsmooth)
-
-                        call adjust_pressure(var_to_interpolate%dqdt_3d, forcing%geo%z, this%geo%z, potential_temperature)
-                    endif
-
+                                    interpolate_agl_in=agl_interp, var_is_u=var_is_u, var_is_v=var_is_v, nsmooth=this%nsmooth)
+                                    
                 else
                     call interpolate_variable(var_to_interpolate%data_3d, input_data, forcing, this, &
-                                    vert_interp=var_is_not_pressure, var_is_u=var_is_u, var_is_v=var_is_v, nsmooth=this%nsmooth)
-
-                    ! because pressure needs to be adjusted for grid points that fall below the forcing lowest level, we adjust it separately.
-                    if (.not.var_is_not_pressure) then
-                        allocate(potential_temperature, mold=var_to_interpolate%dqdt_3d)
-                        ! to improve the pressure adjustment, we need to get forcing potential temperature on the ICAR grid WITHOUT vertical interpolation
-                        call interpolate_variable(potential_temperature, forcing_temperature, forcing, this, &
-                                        vert_interp=.False., var_is_u=.False., var_is_v=.False., nsmooth=this%nsmooth)
-
-                        call adjust_pressure(var_to_interpolate%data_3d, forcing%geo%z, this%geo%z, potential_temperature)
-                    endif
+                                    interpolate_agl_in=agl_interp, var_is_u=var_is_u, var_is_v=var_is_v, nsmooth=this%nsmooth)
                 endif
-
+                
+                if (var_is_pressure) pressure = var_to_interpolate
+                if (var_is_potential_temp) potential_temp = var_to_interpolate
             endif
         enddo
 
+        !Adjust potential temperature (first) and pressure (second) to account for points below forcing grid
+        
+        if (update_only) then
+            call adjust_pressure_temp(pressure%dqdt_3d,potential_temp%dqdt_3d, forcing%geo%z, this%geo%z)
+        else
+            call adjust_pressure_temp(pressure%data_3d,potential_temp%data_3d, forcing%geo%z, this%geo%z)
+        endif
+
     end subroutine
+
+    subroutine adjust_pressure_temp(pressure, potential_temp, input_z, output_z)
+        implicit none
+        real, intent(inout), dimension(:,:,:) :: pressure, potential_temp
+        real, intent(in), dimension(:,:,:) :: input_z, output_z !> z on the forcing and ICAR model levels [m]
+        integer :: i,j,k, nz, nx, ny
+        real    :: t, p_guess, dz
+        
+        !For all output_z less than input_z, extrapolate downwards based on lapse rate of -6.5C/km
+        
+        nx = size(potential_temp, 1)
+        nz = size(potential_temp, 2)
+        ny = size(potential_temp, 3)
+
+        do j = 1, ny
+            do i = 1, nx
+                do k = 1, nz
+                    if (input_z(i,1,j) > output_z(i,k,j)) then
+                        
+                        !From vertical interpolation, potential_temperature and pressure will be kept constant when below the grid
+                        !So the current values at these below-indices reflect the temp/pressure of the closest forcing grid cell
+                    
+                        dz = input_z(i,1,j)-output_z(i,k,j)
+                        
+                        !Assume lapse rate of -6.5ºC/1km
+                        potential_temp(i,k,j) = potential_temp(i,k,j) + 6.5*dz/1000.0
+                        
+                        !estimate pressure difference 1200 Pa for each 100m difference for exner function
+                        p_guess = pressure(i,k,j) + 1200*dz/100.0
+                        t = exner_function(p_guess) * potential_temp(i,k,j)
+                        pressure(i,k,j) = pressure(i,k,j) * exp( ((gravity/Rd) * dz) / t )
+                    else
+                        exit
+                    endif
+                end do
+            enddo
+        enddo
+
+
+    end subroutine adjust_pressure_temp
 
     !> -------------------------------
     !! Adjust a 3d pressure field from the forcing data to the ICAR model grid
@@ -2900,6 +2920,7 @@ contains
         ! put the updated pressure data into the pressure variable prior to adjustments
         pressure = temp_p
 
+
         ! update pressure for the change in height between the closest GCM model level and each ICAR level.
         call update_pressure(pressure, temp_z, output_z, temp_t)
 
@@ -2911,25 +2932,25 @@ contains
     !! calling the appropriate interpolation routine (2D vs 3D) with the appropriate grid (mass, u, v)
     !!
     !! -------------------------------
-    subroutine interpolate_variable(var_data, input_data, forcing, dom, vert_interp, var_is_u, var_is_v, nsmooth)
+    subroutine interpolate_variable(var_data, input_data, forcing, dom, interpolate_agl_in, var_is_u, var_is_v, nsmooth)
         implicit none
         real,               intent(inout) :: var_data(:,:,:)
         type(variable_t),   intent(in) :: input_data
         type(boundary_t),   intent(in)    :: forcing
         type(domain_t),     intent(in)    :: dom
-        logical,            intent(in),   optional :: vert_interp
+        logical,            intent(in),   optional :: interpolate_agl_in
         logical,            intent(in),   optional :: var_is_u, var_is_v
         integer,            intent(in),   optional :: nsmooth
 
         ! note that 3D variables have a different number of vertical levels, so they have to first be interpolated
         ! to the high res horizontal grid, then vertically interpolated to the actual icar domain
         real, allocatable :: temp_3d(:,:,:), pre_smooth(:,:,:)
-        logical :: interpolate_vertically, uvar, vvar
+        logical :: interpolate_agl, uvar, vvar
         integer :: nx, ny, nz
         integer :: windowsize, z
 
-        interpolate_vertically=.True.
-        if (present(vert_interp)) interpolate_vertically = vert_interp
+        interpolate_agl=.False.
+        if (present(interpolate_agl_in)) interpolate_agl = interpolate_agl_in
         uvar = .False.
         if (present(var_is_u)) uvar = var_is_u
         vvar = .False.
@@ -2948,21 +2969,11 @@ contains
 
             call geo_interp(temp_3d, input_data%data_3d, forcing%geo%geolut)
 
-            ! note that pressure (and possibly other variables?) should not be interpolated, it will be adjusted later
-            ! really, it should be interpolated, and the bottom layers (below the forcing model) should be adjusted separately...
-            if (interpolate_vertically) then
-                call vinterp(var_data, temp_3d, forcing%geo%vert_lut)
+            if (interpolate_agl) then
+                call vinterp(var_data, temp_3d, forcing%geo_agl%vert_lut)
             else
-                nz = size(var_data,2)
-                if (size(temp_3d,2) >=nz) then
-                    var_data = temp_3d(:,:nz,:)
-                else
+                call vinterp(var_data, temp_3d, forcing%geo%vert_lut)
 
-                    var_data(:,:size(temp_3d,2),:) = temp_3d
-                    do z=size(temp_3d,2), nz
-                        var_data(:,z,:) = temp_3d(:,size(temp_3d,2),:)
-                    enddo
-                endif
             endif
 
         ! Interpolate to the u staggered grid

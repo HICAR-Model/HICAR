@@ -287,8 +287,9 @@ contains
 
         call standardize_coordinates(this%geo, longitude_system)
 
-        this%geo_u = this%geo
-        this%geo_v = this%geo
+        this%geo_u   = this%geo
+        this%geo_v   = this%geo
+        this%geo_agl = this%geo
 
 
         if ( allocated(this%z) )  then
