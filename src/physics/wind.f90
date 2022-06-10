@@ -337,7 +337,7 @@ contains
         type(domain_t), intent(inout) :: domain
         type(options_t),intent(in)    :: options
 
-        real, allocatable, dimension(:,:,:) :: temparray, alpha, div
+        real, allocatable, dimension(:,:,:) :: alpha, div
         integer :: nx, ny, nz, i, j
         integer :: ims, ime, jms, jme, kms, kme, its, ite, jts, jte
 
@@ -488,7 +488,7 @@ contains
             call calc_w_real(domain% u %meta_data%dqdt_3d,      &
                              domain% v %meta_data%dqdt_3d,      &
                              domain% w %meta_data%dqdt_3d,      &
-                             domain% w_real %data_3d,           &
+                             domain% w_real %dqdt_3d,           &
                              domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
 
