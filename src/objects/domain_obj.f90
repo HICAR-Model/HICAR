@@ -2267,6 +2267,7 @@ contains
         integer :: nx_global, ny_global, nz_global, nsmooth
 
         nsmooth = max(1, int(options%parameters%smooth_wind_distance / options%parameters%dx))
+        if (options%parameters%smooth_wind_distance == 0.0) nsmooth = 0
         this%nsmooth = nsmooth
         if ((this_image()==1).and.(options%parameters%debug)) write(*,*) "number of gridcells to smooth = ",nsmooth
         ! This doesn't need to read in this variable, it could just request the dimensions
@@ -2988,13 +2989,13 @@ contains
             nz = size(var_data,2)
 
             ! One grid cell smoothing of original input data
-            call smooth_array(input_data%data_3d, windowsize=1, ydim=3)
+            if (windowsize > 0) call smooth_array(input_data%data_3d, windowsize=1, ydim=3)
             call geo_interp(pre_smooth, input_data%data_3d, forcing%geo_u%geolut)
 
             call vinterp(temp_3d, pre_smooth, forcing%geo_u%vert_lut)
             ! temp_3d = pre_smooth(:,:nz,:) ! no vertical interpolation option
 
-            call smooth_array(temp_3d, windowsize=windowsize, ydim=3)
+            if (windowsize > 0) call smooth_array(temp_3d, windowsize=windowsize, ydim=3)
                         
             var_data = temp_3d(dom%u_grid%ims-dom%u_grid2d_ext%ims+1 : dom%u_grid%ime-dom%u_grid2d_ext%ims+1,    &
                                :,   &
@@ -3011,11 +3012,11 @@ contains
             nz = size(var_data,2)
 
             ! One grid cell smoothing of original input data
-            call smooth_array(input_data%data_3d, windowsize=1, ydim=3)
+            if (windowsize > 0) call smooth_array(input_data%data_3d, windowsize=1, ydim=3)
             call geo_interp(pre_smooth, input_data%data_3d, forcing%geo_v%geolut)
             call vinterp(temp_3d, pre_smooth, forcing%geo_v%vert_lut)
             ! temp_3d = pre_smooth(:,:nz,:) ! no vertical interpolation option
-            call smooth_array(temp_3d, windowsize=windowsize, ydim=3)
+            if (windowsize > 0) call smooth_array(temp_3d, windowsize=windowsize, ydim=3)
 
             var_data = temp_3d(dom%v_grid%ims-dom%v_grid2d_ext%ims+1 : dom%v_grid%ime-dom%v_grid2d_ext%ims+1,    &
                                 :,   &
