@@ -218,7 +218,7 @@ contains
         ! Note this needs to be performed when advect_density is enabled
         ! if (options%parameters%advect_density) then
             ! call dt%set(seconds=compute_dt(domain%dx, domain%ur, domain%vr, domain%wr, domain%rho, domain%dz_inter,&
-            !                 options%parameters%cfl_reduction_factor, cfl_strictness=options%parameters%cfl_strictness,                   &
+            !                 options%time_options%cfl_reduction_factor, cfl_strictness=options%time_options%cfl_strictness,                   &
             !                 use_density=.True.))
 
         ! else
@@ -229,8 +229,8 @@ contains
                   w          => domain%w%data_3d(domain%its:domain%ite,:,domain%jts:domain%jte),                       &
                   density    => domain%density%data_3d(domain%its:domain%ite,:,domain%jts:domain%jte),                 &
                   dz         => options%parameters%dz_levels,           &
-                  reduction  => options%parameters%cfl_reduction_factor,&
-                  strictness => options%parameters%cfl_strictness       &
+                  reduction  => options%time_options%cfl_reduction_factor,&
+                  strictness => options%time_options%cfl_strictness       &
             )
 
             seconds = compute_dt(dx, u, v, w, density, dz, reduction, &
@@ -334,6 +334,7 @@ contains
 
                 call domain%halo_retrieve()
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_retrieve", fix=.True.)
+
 
                 call advect(domain, options, real(dt%seconds()))
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain", fix=.True.)

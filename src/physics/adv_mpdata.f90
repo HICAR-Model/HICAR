@@ -12,11 +12,10 @@ module adv_mpdata
 
     implicit none
     private
-    real,dimension(:,:,:),allocatable::U_m,V_m,W_m
-    integer :: order
-    
-    public:: mpdata, mpdata_init
-    public:: advect3d ! for test_mpdata testing only!
+    real,dimension(:,:,:),allocatable::U_m,V_m,W_m, rho
+    integer :: order, ims, ime, jms, jme, kms, kme, its,ite,jts,jte
+        
+    public:: mpdata, mpdata_init, mpdata_advect3d, mpdata_compute_wind
     
 
 contains
@@ -41,7 +40,7 @@ contains
 
     end subroutine flux1
     
-    subroutine flux3(q,u,v,w,ims,ime,kms,kme,jms,jme,flux_x,flux_z,flux_y)
+    subroutine flux3(q,u,v,w,flux_x,flux_z,flux_y)
         implicit none
         real, dimension(ims:ime,  kms:kme,jms:jme),    intent(in) :: q, w
         real, dimension(ims+1:ime,  kms:kme,jms:jme),  intent(in) :: u
@@ -50,7 +49,6 @@ contains
         real, dimension(ims+1:ime,kms:kme,jms:jme),intent(inout)          :: flux_x
         real, dimension(ims:ime,kms:kme,jms+1:jme),intent(inout)          :: flux_y
         real, dimension(ims+1:ime-1,kms:kme+1,jms+1:jme-1),intent(inout)  :: flux_z
-        integer, intent(in) :: ims, ime, kms, kme, jms, jme
 
         flux_x= ((u(ims+1:ime,:,:) + ABS(u(ims+1:ime,:,:))) * q(ims:ime-1,:,:)    + &
             (u(ims+1:ime,:,:) - ABS(u(ims+1:ime,:,:))) * q(ims+1:ime,:,:))   / 2
@@ -72,15 +70,13 @@ contains
     !-------------------------------------------------------------------------------------------------
     !Function expects u,v,w to all be multiplied by dt, and u and v to be divided by dx
     !-------------------------------------------------------------------------------------------------
-    subroutine upwind_advection(qin, u, v, w, rho, q, dz, ims,ime,kms,kme,jms,jme,its,ite,jts,jte,jaco)
+    subroutine upwind_advection(qfluxes, u, v, w, qold, dz,jaco)
         implicit none
-        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in) :: qin, w 
+        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(inout) :: qfluxes
+        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in) :: qold, w 
         real, dimension(ims+1:ime,  kms:kme,jms:jme),  intent(in) :: u
         real, dimension(ims:ime,  kms:kme,jms+1:jme),  intent(in) :: v
-        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in) :: rho
-        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(inout) :: q
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in) :: jaco, dz
-        integer, intent(in) :: ims,ime,kms,kme,jms,jme,its,ite,jts,jte
         
         ! interal parameters
         integer :: i
@@ -94,7 +90,7 @@ contains
         !    q(:,:,i)=qin(:,:,i)
         !enddo
         
-        q = qin
+        !q = qfluxes
         
         ! !$omp end do
         ! !$omp barrier
@@ -102,16 +98,18 @@ contains
             ! by manually inlining the flux2 call we should remove extra array copies that the compiler doesn't remove.
             ! equivalent flux2 calls are left in for reference (commented) to restore recall that f1,f3,f4... arrays should be 3D : n x m x 1
 
-        call flux3(qin,u,v,w,ims,ime,kms,kme,jms,jme,flux_x,flux_z,flux_y)
+        call flux3(qfluxes,u,v,w,flux_x,flux_z,flux_y)
+        
+        qfluxes = qold
 
         ! perform horizontal advection, from difference terms
-        q(its:ite,:,jts:jte)  = q(its:ite,:,jts:jte)  - &
+        qfluxes(its:ite,:,jts:jte)  = qfluxes(its:ite,:,jts:jte)  - &
                                    ((flux_x(its+1:ite+1,:,jts:jte) - flux_x(its:ite,:,jts:jte)) + &
                                    (flux_y(its:ite,:,jts+1:jte+1) - flux_y(its:ite,:,jts:jte))) &
                                    / (jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))                      
                ! then vertical (order doesn't matter because fluxes f1-6 are calculated before applying them)
                ! add fluxes to middle layers
-        q(its:ite,:,jts:jte) = q(its:ite,:,jts:jte)  &
+        qfluxes(its:ite,:,jts:jte) = qfluxes(its:ite,:,jts:jte)  &
                                    - (flux_z(its:ite,kms+1:kme+1,jts:jte) - flux_z(its:ite,kms:kme,jts:jte)) &
                                    / (dz(its:ite,:,jts:jte)*jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))
 
@@ -120,7 +118,7 @@ contains
         
     end subroutine upwind_advection
 
-    subroutine mpdata_fluxes(q,u,v,w,u2,v2,w2, ims,ime,kms,kme,jms,jme,G)
+    subroutine mpdata_fluxes(q,u,v,w,u2,v2,w2,G)
         implicit none
         real, dimension(ims:ime,kms:kme,jms:jme),   intent(in) :: q,w
         real, dimension(ims+1:ime,kms:kme,jms:jme), intent(in) :: u
@@ -129,7 +127,6 @@ contains
         real, dimension(ims:ime,kms:kme,jms+1:jme), intent(out) :: v2
         real, dimension(ims:ime,kms:kme,jms:jme),   intent(out) :: w2
         real, dimension(ims:ime,kms:kme,jms:jme),   intent(in) :: G  ! Notation kept from SMOLARKIEWICZ AND MARGOLIN 1998
-        integer, intent(in) :: ims, ime, kms, kme, jms, jme
         
         real, dimension(ims+1:ime) :: rx, lx, denomx
         real, dimension(ims:ime) :: r, l, denom, edge_v, edge_q
@@ -270,7 +267,7 @@ contains
         
     end subroutine mpdata_fluxes
     
-    subroutine netpos(f_pos,flux_x,flux_z,flux_y,ims,ime,kms,kme,jms,jme,dz,dx,dt,G_in)
+    subroutine netpos(f_pos,flux_x,flux_z,flux_y,dz,dx,dt,G_in)
         implicit none
         real, dimension(ims+1:ime-1,kms:kme,jms+1:jme-1), intent(inout) :: f_pos
         real, dimension(ims+1:ime,kms:kme,jms:jme),         intent(in)  :: flux_x
@@ -278,7 +275,6 @@ contains
         real, dimension(ims+1:ime-1,kms:kme+1,jms+1:jme-1), intent(in)  :: flux_z
         real,dimension(ims:ime,kms:kme,jms:jme),  intent(in)            :: dz, G_in
 
-        integer, intent(in) :: ims, ime, kms, kme, jms, jme
         real,    intent(in) :: dt, dx    
     
     
@@ -291,7 +287,7 @@ contains
     
     end subroutine netpos
     
-    subroutine netneg(f_neg,flux_x,flux_z,flux_y,ims,ime,kms,kme,jms,jme,dz,dx,dt,G_in)
+    subroutine netneg(f_neg,flux_x,flux_z,flux_y,dz,dx,dt,G_in)
         implicit none
         real, dimension(ims+1:ime-1,kms:kme,jms+1:jme-1), intent(inout) :: f_neg
         real, dimension(ims+1:ime,kms:kme,jms:jme),         intent(in)  :: flux_x
@@ -299,7 +295,6 @@ contains
         real, dimension(ims+1:ime-1,kms:kme+1,jms+1:jme-1), intent(in)  :: flux_z
         real,dimension(ims:ime,kms:kme,jms:jme),  intent(in)            :: dz, G_in
 
-        integer, intent(in) :: ims, ime, kms, kme, jms, jme
         real,    intent(in) :: dt, dx    
     
     
@@ -312,13 +307,12 @@ contains
     
     end subroutine netneg    
 
-    subroutine flux_limiter(q, q2, u,v,w, dz,dx,dt,ims,ime,kms,kme,jms,jme,G_in)
+    subroutine flux_limiter(q, q2, u,v,w, dz,dx,dt,G_in)
         implicit none
         real,dimension(ims:ime,kms:kme,jms:jme),  intent(in)    :: q, q2, dz, G_in
         real,dimension(ims+1:ime,kms:kme,jms:jme),intent(inout) :: u
         real,dimension(ims:ime,kms:kme,jms+1:jme),intent(inout) :: v
         real,dimension(ims:ime,kms:kme,jms:jme),  intent(inout) :: w
-        integer, intent(in) :: ims, ime, kms, kme, jms, jme
         real,    intent(in) :: dt, dx
         
         integer :: i,j,k,n,n_s
@@ -347,10 +341,10 @@ contains
         real :: fin_i, fout_i, fin_i2, fout_i2
         
         
-        call flux3(q,u,v,w,ims,ime,kms,kme,jms,jme,flux_x,flux_z,flux_y)
+        call flux3(q,u,v,w,flux_x,flux_z,flux_y)
         
-        call netpos(f_pos,flux_x,flux_z,flux_y,ims,ime,kms,kme,jms,jme,dz,dx,dt,G_in)
-        call netneg(f_neg,flux_x,flux_z,flux_y,ims,ime,kms,kme,jms,jme,dz,dx,dt,G_in)
+        call netpos(f_pos,flux_x,flux_z,flux_y,dz,dx,dt,G_in)
+        call netneg(f_neg,flux_x,flux_z,flux_y,dz,dx,dt,G_in)
 
         ! NOTE: before inclusion of FCT_core the following variables must be setup: 
         ! q1 and l (l=q0)
@@ -433,31 +427,30 @@ contains
         
     end subroutine flux_limiter
 
-    subroutine advect3d(q,rho,ims,ime,kms,kme,jms,jme,its,ite,jts,jte,jaco,dz,dx,dt,options)
+    subroutine mpdata_advect3d(q,qold,jaco,dz,dx,dt,options)
         implicit none
         real,dimension(ims:ime,kms:kme,jms:jme), intent(inout) :: q
-        real,dimension(ims:ime,kms:kme,jms:jme), intent(in) :: rho
-        integer, intent(in) :: ims,ime,kms,kme,jms,jme,its,ite,jts,jte
-        real,dimension(ims:ime,kms:kme,jms:jme), intent(in) :: jaco,dz
+        real,dimension(ims:ime,kms:kme,jms:jme), intent(in) :: jaco,dz,qold
         real, intent(in)    :: dt, dx
         type(options_t), intent(in)::options
 
         ! used for intermediate values in the mpdata calculation
-        real,dimension(ims:ime,kms:kme,jms:jme)   :: q2
         real,dimension(ims+1:ime,kms:kme,jms:jme) :: u2
         real,dimension(ims:ime,kms:kme,jms+1:jme) :: v2
         real,dimension(ims:ime,kms:kme,jms:jme)   :: w2
-        
+        real,dimension(ims:ime,kms:kme,jms:jme)   :: q2
+
         integer :: iord, i
-                
+        
+        q2 = qold
+        call upwind_advection(q, U_m, V_m, W_m, q2,dz,jaco)
+        
         do iord=1,options%adv_options%mpdata_order
-            if (iord==1) then
-                call upwind_advection(q, U_m, V_m, W_m, rho, q2,dz,ims,ime,kms,kme,jms,jme,its,ite,jts,jte,jaco)
-            else
+            if (iord>1) then
                 ! Due to an uneven vertical grid spacing, W_m is not normalized by dz, because this causes problems in
                 ! advection code. However, pseudo-velocity expects, all velocities normalized by time and dx/z
                 ! so do that here before passing to pseudo-velocity calculations
-                call mpdata_fluxes(q2, U_m, V_m, (W_m/dz), u2,v2,w2, ims,ime,kms,kme,jms,jme,(jaco*rho))
+                call mpdata_fluxes(q2, U_m, V_m, (W_m/dz), u2,v2,w2,(jaco*rho))
                 ! and un-normalize, since upwind advection scheme includes dz
                 ! Since pseudo-velocities cannot be gaurenteed to be non-divergent, we assume worst-case and multiply by 0.5 to
                 ! ensure stability (from Smolarkiewicz 1984, after Eq. 24)
@@ -466,7 +459,7 @@ contains
                     u2 = u2*dx/dt
                     v2 = v2*dx/dt
                     w2 = w2*dz/dt
-                    call flux_limiter(q, q2, u2,v2,w2, dz,dx,dt,ims,ime,kms,kme,jms,jme,(jaco*rho))
+                    call flux_limiter(q, q2, u2,v2,w2, dz,dx,dt,(jaco*rho))
                     !Advection expects all normalized, but w not divided by dz
                     u2 = u2*dt/dx
                     v2 = v2*dt/dx
@@ -474,7 +467,8 @@ contains
                 else
                     w2 = w2*dz
                 endif
-                call upwind_advection(q2, u2,v2,w2, rho, q,dz,ims,ime,kms,kme,jms,jme,its,ite,jts,jte,jaco)
+                q = q2
+                call upwind_advection(q2, u2,v2,w2, q,dz,jaco)
             endif
             
             !  
@@ -503,7 +497,7 @@ contains
         end do
         
 
-    end subroutine advect3d
+    end subroutine mpdata_advect3d
     
     subroutine mpdata_init(domain,options)
         type(domain_t), intent(in) :: domain
@@ -511,13 +505,33 @@ contains
         
         ! originally used to permit the order of dimensions in advection to be rotated
         order    = 0
+        
+        ims = domain%ims
+        ime = domain%ime
+        jms = domain%jms
+        jme = domain%jme
+        kms = domain%kms
+        kme = domain%kme
+        its = domain%its
+        ite = domain%ite
+        jts = domain%jts
+        jte = domain%jte
+        
+!       if this if the first time we are called, we need to allocate the module level arrays
+        if (.not.allocated(U_m)) then
+            allocate(U_m     (ims+1:ime,kms:kme,jms:jme  ))
+            allocate(V_m     (ims:ime,  kms:kme,jms+1:jme))
+            allocate(W_m     (ims:ime,  kms:kme,jms:jme  ))
+        endif
+        
+        allocate(rho(ims:ime,  kms:kme,jms:jme  ))
+        
     end subroutine mpdata_init
     
     
-    subroutine test_divergence(dz, ims, ime, kms, kme, jms, jme)
+    subroutine test_divergence(dz)
         implicit none
         real, intent(in) :: dz(ims:ime,kms:kme,jms:jme)
-        integer, intent(in) :: ims, ime, jms, jme, kms, kme
 
         real, allocatable :: du(:,:), dv(:,:), dw(:,:)
         integer :: i,j,k
@@ -547,6 +561,34 @@ contains
 
     end subroutine test_divergence
     
+    subroutine mpdata_compute_wind(domain,options,dt)
+        implicit none
+        type(domain_t),intent(inout)::domain
+        type(options_t), intent(in)::options
+        real,intent(in)::dt
+        
+        real::dx
+        integer :: i
+
+        dx=domain%dx
+
+
+        rho = 1
+        if (options%parameters%advect_density) rho = domain%density%data_3d
+        
+        U_m = domain%u%data_3d(ims+1:ime,:,:) * dt * (rho(ims+1:ime,:,:)+rho(ims:ime-1,:,:))*0.5 * &
+                    domain%jacobian_u(ims+1:ime,:,:) / dx
+        V_m = domain%v%data_3d(:,:,jms+1:jme) * dt * (rho(:,:,jms+1:jme)+rho(:,:,jms:jme-1))*0.5 * &
+                    domain%jacobian_v(:,:,jms+1:jme) / dx
+        W_m(:,kms:kme-1,:) = domain%w%data_3d(:,kms:kme-1,:) * dt * domain%jacobian_w(:,kms:kme-1,:) * &
+                    (rho(:,kms+1:kme,:)+rho(:,kms:kme-1,:)) * 0.5
+        W_m(:,kme,:) = domain%w%data_3d(:,kme,:) * dt * domain%jacobian_w(:,kme,:) * rho(:,kme,:)
+
+        if (options%parameters%debug) then
+            call test_divergence(domain%advection_dz)
+        endif
+    end subroutine mpdata_compute_wind
+        
 !   primary entry point, advect all scalars in domain
     subroutine mpdata(domain,options,dt)
         implicit none
@@ -554,20 +596,8 @@ contains
         type(options_t), intent(in)::options
         real,intent(in)::dt
         
-        real, allocatable, dimension(:,:,:)   :: rho
         real::dx
-        integer :: i, ims, ime, jms, jme, kms, kme, its,ite,jts,jte
-
-        ims = domain%ims
-        ime = domain%ime
-        jms = domain%jms
-        jme = domain%jme
-        kms = domain%kms
-        kme = domain%kme
-        its = domain%its
-        ite = domain%ite
-        jts = domain%jts
-        jte = domain%jte
+        integer :: i
         
         dx=domain%dx
 
@@ -598,20 +628,20 @@ contains
         W_m(:,kme,:) = domain%w%data_3d(:,kme,:) * dt * domain%jacobian_w(:,kme,:) * rho(:,kme,:)
 
         if (options%parameters%debug) then
-            call test_divergence(domain%advection_dz, domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme)
+            call test_divergence(domain%advection_dz)
         endif
 
-        if (options%vars_to_advect(kVARS%water_vapor)>0)                  call advect3d(domain%water_vapor%data_3d,             rho, ims, ime, kms, kme, jms, jme, its,ite,jts,jte,domain%jacobian, domain%advection_dz, dx,dt,options)
-        if (options%vars_to_advect(kVARS%cloud_water)>0)                  call advect3d(domain%cloud_water_mass%data_3d,        rho, ims, ime, kms, kme, jms, jme, its,ite,jts,jte,domain%jacobian, domain%advection_dz, dx,dt,options)
-        if (options%vars_to_advect(kVARS%rain_in_air)>0)                  call advect3d(domain%rain_mass%data_3d,               rho, ims, ime, kms, kme, jms, jme, its,ite,jts,jte,domain%jacobian, domain%advection_dz, dx,dt,options)
-        if (options%vars_to_advect(kVARS%snow_in_air)>0)                  call advect3d(domain%snow_mass%data_3d,               rho, ims, ime, kms, kme, jms, jme, its,ite,jts,jte,domain%jacobian, domain%advection_dz, dx,dt,options)
-        if (options%vars_to_advect(kVARS%potential_temperature)>0)        call advect3d(domain%potential_temperature%data_3d,   rho, ims, ime, kms, kme, jms, jme, its,ite,jts,jte,domain%jacobian, domain%advection_dz, dx,dt,options)
-        if (options%vars_to_advect(kVARS%cloud_ice)>0)                    call advect3d(domain%cloud_ice_mass%data_3d,          rho, ims, ime, kms, kme, jms, jme, its,ite,jts,jte,domain%jacobian, domain%advection_dz, dx,dt,options)
-        if (options%vars_to_advect(kVARS%graupel_in_air)>0)               call advect3d(domain%graupel_mass%data_3d,            rho, ims, ime, kms, kme, jms, jme, its,ite,jts,jte,domain%jacobian, domain%advection_dz, dx,dt,options)
-        if (options%vars_to_advect(kVARS%ice_number_concentration)>0)     call advect3d(domain%cloud_ice_number%data_3d,        rho, ims, ime, kms, kme, jms, jme, its,ite,jts,jte,domain%jacobian, domain%advection_dz, dx,dt,options)
-        if (options%vars_to_advect(kVARS%rain_number_concentration)>0)    call advect3d(domain%rain_number%data_3d,             rho, ims, ime, kms, kme, jms, jme, its,ite,jts,jte,domain%jacobian, domain%advection_dz, dx,dt,options)
-        if (options%vars_to_advect(kVARS%snow_number_concentration)>0)    call advect3d(domain%snow_number%data_3d,             rho, ims, ime, kms, kme, jms, jme, its,ite,jts,jte,domain%jacobian, domain%advection_dz, dx,dt,options)
-        if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call advect3d(domain%graupel_number%data_3d,          rho, ims, ime, kms, kme, jms, jme, its,ite,jts,jte,domain%jacobian, domain%advection_dz, dx,dt,options)
+        !if (options%vars_to_advect(kVARS%water_vapor)>0)                  call mpdata_advect3d(domain%water_vapor%data_3d,             domain%jacobian, domain%advection_dz, dx,dt,options)
+        !if (options%vars_to_advect(kVARS%cloud_water)>0)                  call mpdata_advect3d(domain%cloud_water_mass%data_3d,        domain%jacobian, domain%advection_dz, dx,dt,options)
+        !if (options%vars_to_advect(kVARS%rain_in_air)>0)                  call mpdata_advect3d(domain%rain_mass%data_3d,               domain%jacobian, domain%advection_dz, dx,dt,options)
+        !if (options%vars_to_advect(kVARS%snow_in_air)>0)                  call mpdata_advect3d(domain%snow_mass%data_3d,               domain%jacobian, domain%advection_dz, dx,dt,options)
+        !if (options%vars_to_advect(kVARS%potential_temperature)>0)        call mpdata_advect3d(domain%potential_temperature%data_3d, domain%jacobian, domain%advection_dz, dx,dt,options)
+        !if (options%vars_to_advect(kVARS%cloud_ice)>0)                    call mpdata_advect3d(domain%cloud_ice_mass%data_3d,          domain%jacobian, domain%advection_dz, dx,dt,options)
+        !if (options%vars_to_advect(kVARS%graupel_in_air)>0)               call mpdata_advect3d(domain%graupel_mass%data_3d,            domain%jacobian, domain%advection_dz, dx,dt,options)
+        !if (options%vars_to_advect(kVARS%ice_number_concentration)>0)     call mpdata_advect3d(domain%cloud_ice_number%data_3d,        domain%jacobian, domain%advection_dz, dx,dt,options)
+        !if (options%vars_to_advect(kVARS%rain_number_concentration)>0)    call mpdata_advect3d(domain%rain_number%data_3d,             domain%jacobian, domain%advection_dz, dx,dt,options)
+        !if (options%vars_to_advect(kVARS%snow_number_concentration)>0)    call mpdata_advect3d(domain%snow_number%data_3d,             domain%jacobian, domain%advection_dz, dx,dt,options)
+        !if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call mpdata_advect3d(domain%graupel_number%data_3d,          domain%jacobian, domain%advection_dz, dx,dt,options)
 
     end subroutine mpdata
 end module adv_mpdata

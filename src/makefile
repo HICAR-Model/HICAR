@@ -405,9 +405,11 @@ OBJS=	\
 		$(BUILD)mp_morrison.o           \
 		$(BUILD)cu_driver.o			\
 		$(BUILD)cu_tiedtke.o		\
+		$(BUILD)adv_fluxcorr.o      \
 		$(BUILD)advection_driver.o	\
 		$(BUILD)advect.o			\
 		$(BUILD)adv_mpdata.o                        \
+		$(BUILD)advect_4th.o                        \
 		$(BUILD)lsm_driver.o		\
 		$(BUILD)lsm_noahdrv.o		\
 		$(BUILD)lsm_noahlsm.o		\
@@ -856,11 +858,16 @@ $(BUILD)pbl_ysu.o: $(PHYS)pbl_ysu.f90
 #	Advection related code
 ###################################################################
 $(BUILD)advection_driver.o:$(PHYS)advection_driver.f90 $(BUILD)data_structures.o $(BUILD)advect.o \
-							$(BUILD)options_h.o $(BUILD)domain_h.o $(BUILD)adv_mpdata.o
+							$(BUILD)options_h.o $(BUILD)domain_h.o $(BUILD)adv_mpdata.o $(BUILD)advect_4th.o
+
+$(BUILD)adv_fluxcorr.o:$(PHYS)adv_fluxcorr.f90 $(BUILD)data_structures.o $(BUILD)domain_h.o
 
 $(BUILD)advect.o:$(PHYS)advect.f90 $(BUILD)data_structures.o $(BUILD)options_h.o $(BUILD)domain_h.o
+$(BUILD)advect_4th.o:$(PHYS)advect_4th.f90 $(BUILD)data_structures.o $(BUILD)options_h.o $(BUILD)domain_h.o \
+                                            $(BUILD)icar_constants.o $(BUILD)adv_fluxcorr.o
 
 $(BUILD)adv_mpdata.o:$(PHYS)adv_mpdata.f90 $(PHYS)adv_mpdata_FCT_core.f90 $(BUILD)data_structures.o $(BUILD)options_h.o $(BUILD)domain_h.o
+
 
 
 ###################################################################

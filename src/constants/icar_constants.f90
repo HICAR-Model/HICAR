@@ -325,6 +325,9 @@ module icar_constants
 
     integer, parameter :: kADV_UPWIND    = 1
     integer, parameter :: kADV_MPDATA    = 2
+    integer, parameter :: kADV_4TH       = 4
+
+    integer, parameter :: kFLUXCOR_WRF   = 1
 
     integer, parameter :: kWIND_LINEAR   = 1
     integer, parameter :: kCONSERVE_MASS = 2
