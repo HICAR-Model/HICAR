@@ -70,12 +70,12 @@ contains
     !-------------------------------------------------------------------------------------------------
     !Function expects u,v,w to all be multiplied by dt, and u and v to be divided by dx
     !-------------------------------------------------------------------------------------------------
-    subroutine upwind_advection(qfluxes, u, v, w, qold, dz,jaco)
+        subroutine upwind_advection(qin, u, v, w, q, dz, jaco)
         implicit none
-        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(inout) :: qfluxes
-        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in) :: qold, w 
+        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in) :: qin, w 
         real, dimension(ims+1:ime,  kms:kme,jms:jme),  intent(in) :: u
         real, dimension(ims:ime,  kms:kme,jms+1:jme),  intent(in) :: v
+        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(inout) :: q
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in) :: jaco, dz
         
         ! interal parameters
@@ -90,7 +90,7 @@ contains
         !    q(:,:,i)=qin(:,:,i)
         !enddo
         
-        !q = qfluxes
+        q = qin
         
         ! !$omp end do
         ! !$omp barrier
@@ -98,18 +98,16 @@ contains
             ! by manually inlining the flux2 call we should remove extra array copies that the compiler doesn't remove.
             ! equivalent flux2 calls are left in for reference (commented) to restore recall that f1,f3,f4... arrays should be 3D : n x m x 1
 
-        call flux3(qfluxes,u,v,w,flux_x,flux_z,flux_y)
-        
-        qfluxes = qold
+        call flux3(qin,u,v,w,flux_x,flux_z,flux_y)
 
         ! perform horizontal advection, from difference terms
-        qfluxes(its:ite,:,jts:jte)  = qfluxes(its:ite,:,jts:jte)  - &
+        q(its:ite,:,jts:jte)  = q(its:ite,:,jts:jte)  - &
                                    ((flux_x(its+1:ite+1,:,jts:jte) - flux_x(its:ite,:,jts:jte)) + &
                                    (flux_y(its:ite,:,jts+1:jte+1) - flux_y(its:ite,:,jts:jte))) &
                                    / (jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))                      
                ! then vertical (order doesn't matter because fluxes f1-6 are calculated before applying them)
                ! add fluxes to middle layers
-        qfluxes(its:ite,:,jts:jte) = qfluxes(its:ite,:,jts:jte)  &
+        q(its:ite,:,jts:jte) = q(its:ite,:,jts:jte)  &
                                    - (flux_z(its:ite,kms+1:kme+1,jts:jte) - flux_z(its:ite,kms:kme,jts:jte)) &
                                    / (dz(its:ite,:,jts:jte)*jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))
 
@@ -427,10 +425,10 @@ contains
         
     end subroutine flux_limiter
 
-    subroutine mpdata_advect3d(q,qold,jaco,dz,dx,dt,options)
+    subroutine mpdata_advect3d(q,jaco,dz,dx,dt,options)
         implicit none
         real,dimension(ims:ime,kms:kme,jms:jme), intent(inout) :: q
-        real,dimension(ims:ime,kms:kme,jms:jme), intent(in) :: jaco,dz,qold
+        real,dimension(ims:ime,kms:kme,jms:jme), intent(in) :: jaco,dz
         real, intent(in)    :: dt, dx
         type(options_t), intent(in)::options
 
@@ -442,7 +440,6 @@ contains
 
         integer :: iord, i
         
-        q2 = qold
         call upwind_advection(q, U_m, V_m, W_m, q2,dz,jaco)
         
         do iord=1,options%adv_options%mpdata_order
@@ -467,7 +464,6 @@ contains
                 else
                     w2 = w2*dz
                 endif
-                q = q2
                 call upwind_advection(q2, u2,v2,w2, q,dz,jaco)
             endif
             

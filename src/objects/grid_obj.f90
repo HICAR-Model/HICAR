@@ -153,7 +153,7 @@ contains
         else if (adv == kADV_MPDATA) then
             halo_size = 2
         else if (adv == kADV_4TH) then
-            halo_size = 2
+            halo_size = 3
         endif
     end function
     
