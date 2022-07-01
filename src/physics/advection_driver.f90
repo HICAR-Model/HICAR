@@ -145,29 +145,15 @@ contains
                              
                 else if(options%physics%advection==kADV_MPDATA) then
                 
-                    !Initial advection-tendency calculations
-                !    temp = var_to_advect%data_3d
-                !    call mpdata_advect3d(temp,var_to_advect%data_3d, domain%jacobian, &
-                !                            domain%advection_dz, domain%dx,dt/3.0,options)
-                !    call mpdata_advect3d(temp,var_to_advect%data_3d, domain%jacobian, &
-                !                            domain%advection_dz, domain%dx,dt/2.0,options)
-                    !final advection call with tendency-fluxes
-                !    call mpdata_advect3d(temp,var_to_advect%data_3d, domain%jacobian, &
-                !                            domain%advection_dz, domain%dx,dt,options)
-                                            
-                !    var_to_advect%data_3d = temp
-                    
-                    !Cheep flux correction -- to be replaced                    
-                !    where(var_to_advect%data_3d < 0) var_to_advect%data_3d = 0
+                    ! Not yet implemented (is it compatable w/ RK3?)
                 endif
             else
                 if (options%physics%advection==kADV_UPWIND) then
                     call upwind_advect3d(var_to_advect%data_3d,var_to_advect%data_3d, domain%advection_dz, domain%jacobian)
                 else if(options%physics%advection==kADV_MPDATA) then
-                    call mpdata_advect3d(var_to_advect%data_3d, var_to_advect%data_3d, domain%jacobian, domain%advection_dz, domain%dx,dt,options)
+                    call mpdata_advect3d(var_to_advect%data_3d, domain%jacobian, domain%advection_dz, domain%dx,dt,options)
                 else if (options%physics%advection==kADV_4TH) then
                     call adv4_advect3d(var_to_advect%data_3d,var_to_advect%data_3d, domain%advection_dz, domain%jacobian)
-                                        
                     !Cheep flux correction -- to be replaced                    
                     where(var_to_advect%data_3d < 0) var_to_advect%data_3d = 0
                 endif

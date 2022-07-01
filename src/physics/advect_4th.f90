@@ -49,10 +49,10 @@ contains
         !if (allocated(lastqv_m)) deallocate(lastqv_m)
 
         ! allocate the module level arrays
-        allocate(U_m     (its:ite+1,kms:kme,jts:jte  ))
-        allocate(V_m     (its:ite,  kms:kme,jts:jte+1))
-        allocate(W_m     (its:ite,  kms:kme,jts:jte  ))
-        allocate(rho(its:ite,  kms:kme,jts:jte  ))
+        allocate(U_m     (ims+1:ime,kms:kme,jms:jme  ))
+        allocate(V_m     (ims:ime,  kms:kme,jms+1:jme))
+        allocate(W_m     (ims:ime,  kms:kme,jms:jme  ))
+        allocate(rho     (ims:ime,  kms:kme,jms:jme  ))
         !allocate(lastqv_m(ims:ime,  kms:kme,jms:jme  ))
 
         !     if (.not.allocated(U_4cu_u)) then
@@ -112,31 +112,33 @@ contains
 
     subroutine flux3(q,u,v,w,flux_x,flux_z,flux_y)
         implicit none
-        real, dimension(ims:ime,  kms:kme,jms:jme),    intent(in) :: q
-        real, dimension(its:ite,  kms:kme,jts:jte),    intent(in) :: w
-        real, dimension(its:ite+1,  kms:kme,jts:jte),  intent(in) :: u
-        real, dimension(its:ite,  kms:kme,jts:jte+1),  intent(in) :: v
+        real, dimension(ims:ime,  kms:kme,jms:jme),    intent(in)          :: q
+        real, dimension(its-1:ite+1,  kms:kme,jts-1:jte+1), intent(in)     :: w
+        real, dimension(its-1:ite+2,  kms:kme,jts-1:jte+1),  intent(in)    :: u
+        real, dimension(its-1:ite+1,  kms:kme,jts-1:jte+2),  intent(in)    :: v
         
-        real, dimension(its:ite+1,kms:kme,jts:jte),intent(inout)          :: flux_x
-        real, dimension(its:ite,kms:kme,jts:jte+1),intent(inout)          :: flux_y
-        real, dimension(its:ite,kms:kme+1,jts:jte),intent(inout)  :: flux_z
+        real, dimension(its-1:ite+2,kms:kme,jts-1:jte+1),intent(inout)      :: flux_x
+        real, dimension(its-1:ite+1,kms:kme,jts-1:jte+2),intent(inout)      :: flux_y
+        real, dimension(its-1:ite+1,kms:kme+1,jts-1:jte+1),intent(inout)    :: flux_z
 
-        flux_x = 7*(q(its:ite+1,:,jts:jte)+q(its-1:ite,:,jts:jte)) - (q(its+1:ite+2,:,jts:jte)+q(its-2:ite-1,:,jts:jte))
+        flux_x = 7*(q(its-1:ite+2,:,jts-1:jte+1)+q(its-2:ite+1,:,jts-1:jte+1)) - &
+                            (q(its:ite+3,:,jts-1:jte+1)+q(its-3:ite,:,jts-1:jte+1))
         flux_x = (u*flux_x)/12
                 
-        flux_y = 7*(q(its:ite,:,jts:jte+1)+q(its:ite,:,jts-1:jte)) - (q(its:ite,:,jts+1:jte+2)+q(its:ite,:,jts-2:jte-1))
+        flux_y = 7*(q(its-1:ite+1,:,jts-1:jte+2)+q(its-1:ite+1,:,jts-2:jte+1)) - &
+                            (q(its-1:ite+1,:,jts:jte+3)+q(its-1:ite+1,:,jts-3:jte))
         flux_y = (v*flux_y)/12
         
-        flux_z(:,kms+1:kme,:) = ((w(:,kms:kme-1,:) + ABS(w(:,kms:kme-1,:))) * q(its:ite,kms:kme-1,jts:jte) + &
-                                 (w(:,kms:kme-1,:) - ABS(w(:,kms:kme-1,:))) * q(its:ite,kms+1:kme,jts:jte))  / 2
+        flux_z(:,kms+1:kme,:) = ((w(:,kms:kme-1,:) + ABS(w(:,kms:kme-1,:))) * q(its-1:ite+1,kms:kme-1,jts-1:jte+1) + &
+                                 (w(:,kms:kme-1,:) - ABS(w(:,kms:kme-1,:))) * q(its-1:ite+1,kms+1:kme,jts-1:jte+1))  / 2
                                  
-        flux_z(:,kms+2:kme-1,:) = 7*(q(its:ite,kms+2:kme-1,jts:jte)+q(its:ite,kms+1:kme-2,jts:jte)) - &
-                                    (q(its:ite,kms+3:kme,jts:jte)+q(its:ite,kms:kme-3,jts:jte))
+        flux_z(:,kms+2:kme-1,:) = 7*(q(its-1:ite+1,kms+2:kme-1,jts-1:jte+1)+q(its-1:ite+1,kms+1:kme-2,jts-1:jte+1)) - &
+                                    (q(its-1:ite+1,kms+3:kme,jts-1:jte+1)+q(its-1:ite+1,kms:kme-3,jts-1:jte+1))
         flux_z(:,kms+2:kme-1,:) = (w(:,kms+2:kme-1,:)*flux_z(:,kms+2:kme-1,:))/12
         
         !Handle top and bottom boundaries for z here
         flux_z(:,kms,:) = 0
-        flux_z(:,kme+1,:) = q(its:ite,kme,jts:jte) * w(:,kme,:)
+        flux_z(:,kme+1,:) = q(its-1:ite+1,kme,jts-1:jte+1) * w(:,kme,:)
 
                                          
     end subroutine flux3
@@ -151,9 +153,9 @@ contains
         real, optional,                              intent(in)      :: t_factor_in
         integer, optional,                           intent(in)      :: flux_corr
         ! interal parameters
-        real, dimension(its:ite+1,kms:kme,jts:jte)    :: flux_x
-        real, dimension(its:ite,kms:kme,jts:jte+1)    :: flux_y
-        real, dimension(its:ite,kms:kme+1,jts:jte)    :: flux_z
+        real, dimension(its-1:ite+2,kms:kme,jts-1:jte+1)    :: flux_x
+        real, dimension(its-1:ite+1,kms:kme,jts-1:jte+2)    :: flux_y
+        real, dimension(its-1:ite+1,kms:kme+1,jts-1:jte+1)    :: flux_z
         real                                          :: t_factor
         
         ! !$omp parallel shared(qin,q,u,v,w) firstprivate(nx,ny,nz) private(i,f1,f3,f4,f5)
@@ -172,12 +174,17 @@ contains
         t_factor = 1.0
         if (present(t_factor_in)) t_factor = t_factor_in
 
-        call flux3(qfluxes,U_m*t_factor,V_m*t_factor,W_m*t_factor,flux_x,flux_z,flux_y)
+        call flux3(qfluxes,U_m(its-1:ite+2,:,jts-1:jte+1)*t_factor,&
+                            V_m(its-1:ite+1,:,jts-1:jte+2)*t_factor,&
+                            W_m(its-1:ite+1,:,jts-1:jte+1)*t_factor,flux_x,flux_z,flux_y)
         
         if (present(flux_corr)) then
             if (flux_corr == kFLUXCOR_WRF) then
                 !Calculate flux corrections as done by WRF (Wang et al., 2009)
-                call WRF_flux_corr(qold,U_m,V_m,W_m,flux_x,flux_z,flux_y, jaco(its:ite,:,jts:jte),dz(its:ite,:,jts:jte),rho)
+                call WRF_flux_corr(qold,U_m(its-1:ite+2,:,jts-1:jte+1),&
+                                        V_m(its-1:ite+1,:,jts-1:jte+2),&
+                                        W_m(its-1:ite+1,:,jts-1:jte+1),flux_x,flux_z,flux_y, &
+                                jaco(its-1:ite+1,:,jts-1:jte+1),dz(its-1:ite+1,:,jts-1:jte+1),rho(its-1:ite+1,:,jts-1:jte+1))
             endif
         endif
 
@@ -185,14 +192,14 @@ contains
 
         ! perform horizontal advection, from difference terms
         qfluxes(its:ite,:,jts:jte)  = qfluxes(its:ite,:,jts:jte)  - &
-                                   ((flux_x(its+1:ite+1,:,:) - flux_x(its:ite,:,:)) + &
-                                   (flux_y(:,:,jts+1:jte+1) - flux_y(:,:,jts:jte))) &
-                                   / (jaco(its:ite,:,jts:jte)*rho)                      
+                                   ((flux_x(its+1:ite+1,:,jts:jte) - flux_x(its:ite,:,jts:jte)) + &
+                                   (flux_y(its:ite,:,jts+1:jte+1) - flux_y(its:ite,:,jts:jte))) &
+                                   / (jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))                      
                ! then vertical (order doesn't matter because fluxes f1-6 are calculated before applying them)
                ! add fluxes to middle layers
         qfluxes(its:ite,:,jts:jte) = qfluxes(its:ite,:,jts:jte)  &
-                                   - (flux_z(:,kms+1:kme+1,:) - flux_z(:,kms:kme,:)) &
-                                   / (dz(its:ite,:,jts:jte)*jaco(its:ite,:,jts:jte)*rho)
+                                   - (flux_z(its:ite,kms+1:kme+1,jts:jte) - flux_z(its:ite,kms:kme,jts:jte)) &
+                                   / (dz(its:ite,:,jts:jte)*jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))
 
         ! !$omp end do
         ! !$omp end parallel
@@ -330,14 +337,12 @@ contains
         type(domain_t),  intent(inout) :: domain
         real,intent(in)::dt
         
-        real, dimension(ims:ime, kms:kme, jms:jme) :: rho_temp
-
         ! if this if the first time we are called, we need to allocate the module level arrays
         ! Could/should be put in an init procedure
         if (.not.allocated(U_m)) then
-            allocate(U_m     (its:ite+1,kms:kme,jts:jte  ))
-            allocate(V_m     (its:ite,  kms:kme,jts:jte+1))
-            allocate(W_m     (its:ite,  kms:kme,jts:jte  ))
+            allocate(U_m     (ims+1:ime,kms:kme,jms:jme  ))
+            allocate(V_m     (ims:ime,  kms:kme,jms+1:jme))
+            allocate(W_m     (ims:ime,  kms:kme,jms:jme  ))
             !allocate(lastqv_m(ims:ime,  kms:kme,jms:jme  ))
         endif
 
@@ -353,23 +358,17 @@ contains
              ! since non-uniform dz spacing does not allow for the same spacing to be assumed on either side of a k+1/2 interface,
              ! as is required for the adv4 scheme.
              
-            rho_temp = 1
-            if (options%parameters%advect_density) rho_temp = domain%density%data_3d  
+            rho = 1
+            if (options%parameters%advect_density) rho = domain%density%data_3d  
         
-            U_m = domain%u%data_3d(its:ite+1,:,jts:jte) * dt * &
-                     (rho_temp(its:ite+1,:,jts:jte)+rho_temp(its-1:ite,:,jts:jte))*0.5 * &
-                    domain%jacobian_u(its:ite+1,:,jts:jte) / domain%dx
-            V_m = domain%v%data_3d(its:ite,:,jts:jte+1) * dt * &
-                     (rho_temp(its:ite,:,jts:jte+1)+rho_temp(its:ite,:,jts-1:jte))*0.5 * &
-                    domain%jacobian_v(its:ite,:,jts:jte+1) / domain%dx
+            U_m = domain%u%data_3d(ims+1:ime,:,:) * dt * (rho(ims+1:ime,:,:)+rho(ims:ime-1,:,:))*0.5 * &
+                    domain%jacobian_u(ims+1:ime,:,:) / domain%dx
+            V_m = domain%v%data_3d(:,:,jms+1:jme) * dt * (rho(:,:,jms+1:jme)+rho(:,:,jms:jme-1))*0.5 * &
+                    domain%jacobian_v(:,:,jms+1:jme) / domain%dx
                     
-            W_m(:,kms:kme-1,:) = domain%w%data_3d(its:ite,kms:kme-1,jts:jte) * dt * &
-                    domain%jacobian_w(its:ite,kms:kme-1,jts:jte) * &
-                    (rho_temp(its:ite,kms+1:kme,jts:jte)+rho_temp(its:ite,kms:kme-1,jts:jte)) * 0.5
-            W_m(:,kme,:) = domain%w%data_3d(its:ite,kme,jts:jte) * dt * &
-                    domain%jacobian_w(its:ite,kme,jts:jte) * rho_temp(its:ite,kme,jts:jte)
-
-            rho = rho_temp(its:ite,kms:kme,jts:jte)
+            W_m(:,kms:kme-1,:) = domain%w%data_3d(:,kms:kme-1,:) * dt * domain%jacobian_w(:,kms:kme-1,:) * &
+                    (rho(:,kms+1:kme,:)+rho(:,kms:kme-1,:)) * 0.5
+            W_m(:,kme,:) = domain%w%data_3d(:,kme,:) * dt * domain%jacobian_w(:,kme,:) * rho(:,kme,:)
 
     end subroutine adv4_compute_wind
 
