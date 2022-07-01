@@ -1,15 +1,16 @@
 !> ----------------------------------------------------------------------------
-!!  A simple upwind advection scheme
+!!  A 4th-order adv4 advection scheme
 !!
 !!  @author
-!!  Ethan Gutmann (gutmann@ucar.edu)
+!!  Dylan Reynolds (dylan.reynolds@slf.ch)
 !!
 !! ----------------------------------------------------------------------------
-module adv_upwind
+module adv_4th
     use data_structures
+    use icar_constants
     use options_interface, only: options_t
     use domain_interface,  only: domain_t
-
+    use adv_fluxcorr,      only: WRF_flux_corr
     implicit none
     private
     real,dimension(:,:,:),allocatable :: U_m, V_m, W_m, rho
@@ -19,11 +20,11 @@ module adv_upwind
     ! real,dimension(:,:,:),allocatable :: U_4cu_u, V_4cu_u, W_4cu_u
     ! real,dimension(:,:,:),allocatable :: U_4cu_v, V_4cu_v, W_4cu_v
 
-    public :: upwind, upwind_init, upwind_var_request, upwind_advect3d, upwind_compute_wind
+    public :: adv4, adv4_init, adv4_var_request, adv4_advect3d, adv4_compute_wind
 
 contains
 
-    subroutine upwind_init(domain,options)
+    subroutine adv4_init(domain,options)
         implicit none
         type(domain_t), intent(in) :: domain
         type(options_t),intent(in) :: options
@@ -71,18 +72,17 @@ contains
         !     endif
     end subroutine
 
-    subroutine upwind_var_request(options)
+    subroutine adv4_var_request(options)
         implicit none
         type(options_t), intent(inout) :: options
-        ! List the variables that are required to be allocated for upwind advection
+
+        ! List the variables that are required to be allocated for adv4 advection
         call options%alloc_vars( &
                         [kVARS%u,    kVARS%v,   kVARS%w,     kVARS%dz_interface, kVARS%water_vapor])
 
-        ! List the variables that are required for restarts with upwind advection
+        ! List the variables that are required for restarts with adv4 advection
         call options%restart_vars( &
                         [kVARS%u,    kVARS%v,   kVARS%w,     kVARS%dz_interface, kVARS%water_vapor])
-                        
-        call options%advect_vars([kVARS%water_vapor, kVARS%potential_temperature])
 
     end subroutine
 
@@ -121,13 +121,19 @@ contains
         real, dimension(its:ite,kms:kme,jts:jte+1),intent(inout)          :: flux_y
         real, dimension(its:ite,kms:kme+1,jts:jte),intent(inout)  :: flux_z
 
-        flux_x= ((u + ABS(u)) * q(its-1:ite,:,jts:jte)  + (u - ABS(u)) * q(its:ite+1,:,jts:jte))  / 2
-
-        flux_y= ((v + ABS(v)) * q(its:ite,:,jts-1:jte) +  (v - ABS(v)) * q(its:ite,:,jts:jte+1))  / 2
-
+        flux_x = 7*(q(its:ite+1,:,jts:jte)+q(its-1:ite,:,jts:jte)) - (q(its+1:ite+2,:,jts:jte)+q(its-2:ite-1,:,jts:jte))
+        flux_x = (u*flux_x)/12
+                
+        flux_y = 7*(q(its:ite,:,jts:jte+1)+q(its:ite,:,jts-1:jte)) - (q(its:ite,:,jts+1:jte+2)+q(its:ite,:,jts-2:jte-1))
+        flux_y = (v*flux_y)/12
+        
         flux_z(:,kms+1:kme,:) = ((w(:,kms:kme-1,:) + ABS(w(:,kms:kme-1,:))) * q(its:ite,kms:kme-1,jts:jte) + &
                                  (w(:,kms:kme-1,:) - ABS(w(:,kms:kme-1,:))) * q(its:ite,kms+1:kme,jts:jte))  / 2
-                                         
+                                 
+        flux_z(:,kms+2:kme-1,:) = 7*(q(its:ite,kms+2:kme-1,jts:jte)+q(its:ite,kms+1:kme-2,jts:jte)) - &
+                                    (q(its:ite,kms+3:kme,jts:jte)+q(its:ite,kms:kme-3,jts:jte))
+        flux_z(:,kms+2:kme-1,:) = (w(:,kms+2:kme-1,:)*flux_z(:,kms+2:kme-1,:))/12
+        
         !Handle top and bottom boundaries for z here
         flux_z(:,kms,:) = 0
         flux_z(:,kme+1,:) = q(its:ite,kme,jts:jte) * w(:,kme,:)
@@ -135,7 +141,7 @@ contains
                                          
     end subroutine flux3
 
-    subroutine upwind_advect3d(qfluxes,qold,dz,jaco,t_factor_in)
+    subroutine adv4_advect3d(qfluxes,qold,dz,jaco,t_factor_in,flux_corr)
 
         implicit none
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(inout)   :: qfluxes
@@ -143,10 +149,11 @@ contains
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: dz
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: jaco
         real, optional,                              intent(in)      :: t_factor_in
+        integer, optional,                           intent(in)      :: flux_corr
         ! interal parameters
         real, dimension(its:ite+1,kms:kme,jts:jte)    :: flux_x
         real, dimension(its:ite,kms:kme,jts:jte+1)    :: flux_y
-        real, dimension(its:ite,kms:kme+1,jts:jte)  :: flux_z
+        real, dimension(its:ite,kms:kme+1,jts:jte)    :: flux_z
         real                                          :: t_factor
         
         ! !$omp parallel shared(qin,q,u,v,w) firstprivate(nx,ny,nz) private(i,f1,f3,f4,f5)
@@ -166,6 +173,13 @@ contains
         if (present(t_factor_in)) t_factor = t_factor_in
 
         call flux3(qfluxes,U_m*t_factor,V_m*t_factor,W_m*t_factor,flux_x,flux_z,flux_y)
+        
+        if (present(flux_corr)) then
+            if (flux_corr == kFLUXCOR_WRF) then
+                !Calculate flux corrections as done by WRF (Wang et al., 2009)
+                call WRF_flux_corr(qold,U_m,V_m,W_m,flux_x,flux_z,flux_y, jaco(its:ite,:,jts:jte),dz(its:ite,:,jts:jte),rho)
+            endif
+        endif
 
         qfluxes = qold
 
@@ -182,7 +196,7 @@ contains
 
         ! !$omp end do
         ! !$omp end parallel
-    end subroutine upwind_advect3d
+    end subroutine adv4_advect3d
 
     ! subroutine setup_cu_winds(domain, options, dt)
     !     implicit none
@@ -309,7 +323,7 @@ contains
 
     end subroutine test_divergence
 
-    subroutine upwind_compute_wind(domain, options, dt)
+    subroutine adv4_compute_wind(domain, options, dt)
         implicit none
 
         type(options_t),    intent(in)  :: options
@@ -337,7 +351,7 @@ contains
         ! else
              ! Divide only U and V by dx. This minimizes the number of operations per advection step. W cannot be divided by dz,
              ! since non-uniform dz spacing does not allow for the same spacing to be assumed on either side of a k+1/2 interface,
-             ! as is required for the upwind scheme.
+             ! as is required for the adv4 scheme.
              
             rho_temp = 1
             if (options%parameters%advect_density) rho_temp = domain%density%data_3d  
@@ -357,7 +371,7 @@ contains
 
             rho = rho_temp(its:ite,kms:kme,jts:jte)
 
-    end subroutine upwind_compute_wind
+    end subroutine adv4_compute_wind
 
     subroutine setup_advection_dz(domain, options)
         implicit none
@@ -379,7 +393,7 @@ contains
 
 
     ! primary entry point, advect all scalars in domain
-    subroutine upwind(domain,options,dt)
+    subroutine adv4(domain,options,dt)
         implicit none
         type(domain_t),  intent(inout) :: domain
         type(options_t), intent(in)    :: options
@@ -391,7 +405,7 @@ contains
         call setup_advection_dz(domain, options)
 
         ! calculate U,V,W normalized for dt/dx (dx**2 for density advection so we can skip a /dx in the actual advection code)
-        call upwind_compute_wind(domain, options, dt)
+        call adv4_compute_wind(domain, options, dt)
 
         ! lastqv_m=domain%qv
 
@@ -399,17 +413,17 @@ contains
             call test_divergence(domain%advection_dz)
         endif
 
-        !if (options%vars_to_advect(kVARS%water_vapor)>0)                  call upwind_advect3d(domain%water_vapor%data_3d,    domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%cloud_water)>0)                  call upwind_advect3d(domain%cloud_water_mass%data_3d, domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%rain_in_air)>0)                  call upwind_advect3d(domain%rain_mass%data_3d,      domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%snow_in_air)>0)                  call upwind_advect3d(domain%snow_mass%data_3d,      domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%potential_temperature)>0)        call upwind_advect3d(domain%potential_temperature%data_3d, domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%cloud_ice)>0)                    call upwind_advect3d(domain%cloud_ice_mass%data_3d, domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%graupel_in_air)>0)               call upwind_advect3d(domain%graupel_mass%data_3d,   domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%ice_number_concentration)>0)     call upwind_advect3d(domain%cloud_ice_number%data_3d, domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%rain_number_concentration)>0)    call upwind_advect3d(domain%rain_number%data_3d,    domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%snow_number_concentration)>0)    call upwind_advect3d(domain%snow_number%data_3d,    domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call upwind_advect3d(domain%graupel_number%data_3d, domain%advection_dz, domain%jacobian)
+        !if (options%vars_to_advect(kVARS%water_vapor)>0)                  call adv4_advect3d(domain%water_vapor%data_3d,    domain%advection_dz, domain%jacobian)
+        !if (options%vars_to_advect(kVARS%cloud_water)>0)                  call adv4_advect3d(domain%cloud_water_mass%data_3d, domain%advection_dz, domain%jacobian)
+        !if (options%vars_to_advect(kVARS%rain_in_air)>0)                  call adv4_advect3d(domain%rain_mass%data_3d,      domain%advection_dz, domain%jacobian)
+        !if (options%vars_to_advect(kVARS%snow_in_air)>0)                  call adv4_advect3d(domain%snow_mass%data_3d,      domain%advection_dz, domain%jacobian)
+        !if (options%vars_to_advect(kVARS%potential_temperature)>0)        call adv4_advect3d(domain%potential_temperature%data_3d, domain%advection_dz, domain%jacobian)
+        !if (options%vars_to_advect(kVARS%cloud_ice)>0)                    call adv4_advect3d(domain%cloud_ice_mass%data_3d, domain%advection_dz, domain%jacobian)
+        !if (options%vars_to_advect(kVARS%graupel_in_air)>0)               call adv4_advect3d(domain%graupel_mass%data_3d,   domain%advection_dz, domain%jacobian)
+        !if (options%vars_to_advect(kVARS%ice_number_concentration)>0)     call adv4_advect3d(domain%cloud_ice_number%data_3d, domain%advection_dz, domain%jacobian)
+        !if (options%vars_to_advect(kVARS%rain_number_concentration)>0)    call adv4_advect3d(domain%rain_number%data_3d,    domain%advection_dz, domain%jacobian)
+        !if (options%vars_to_advect(kVARS%snow_number_concentration)>0)    call adv4_advect3d(domain%snow_number%data_3d,    domain%advection_dz, domain%jacobian)
+        !if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call adv4_advect3d(domain%graupel_number%data_3d, domain%advection_dz, domain%jacobian)
 
         ! if (options%physics%convection > 0) then
         !     call advect_cu_winds(domain, options, dt)
@@ -417,6 +431,6 @@ contains
 
         ! used in some physics routines
         ! domain%tend%qv_adv = (domain%qv - lastqv_m) / dt
-    end subroutine upwind
+    end subroutine adv4
 
-end module adv_upwind
+end module adv_4th

@@ -2238,7 +2238,7 @@ contains
                       kVARS%latitude,               kVARS%longitude,                &
                       kVARS%u_latitude,             kVARS%u_longitude,              &
                       kVARS%v_latitude,             kVARS%v_longitude,              &
-                      kVars%temperature_interface                                   ])
+                      kVars%temperature_interface,  kVars%density                   ])
 
         if (trim(options%parameters%rain_var) /= "") call options%alloc_vars([kVARS%external_precipitation])
 
@@ -2250,7 +2250,6 @@ contains
                       kVARS%u_latitude,             kVARS%u_longitude,              &
                       kVARS%v_latitude,             kVARS%v_longitude               ])
 
-        call options%advect_vars([kVARS%potential_temperature])
 
     end subroutine var_request
 
