@@ -130,10 +130,10 @@ contains
             flux_y(:,:,jts:jte+1) = min(scale_out(:,:,jts:jte+1),scale_in(:,:,jts-1:jte))*flux_y(:,:,jts:jte+1)
         end where
         
-        where(flux_z(:,kms+1:kme-1,:) > 0)
-            flux_z(:,kms+1:kme-1,:) = min(scale_in(:,kms+1:kme-1,:),scale_out(:,kms:kme-2,:))*flux_z(:,kms+1:kme-1,:)
-        else where(flux_z(:,kms+1:kme-1,:) < 0)
-            flux_z(:,kms+1:kme-1,:) = min(scale_out(:,kms+1:kme-1,:),scale_in(:,kms:kme-2,:))*flux_z(:,kms+1:kme-1,:)
+        where(flux_z(:,kms+1:kme,:) > 0)
+            flux_z(:,kms+1:kme,:) = min(scale_in(:,kms+1:kme,:),scale_out(:,kms:kme-1,:))*flux_z(:,kms+1:kme,:)
+        else where(flux_z(:,kms+1:kme,:) < 0)
+            flux_z(:,kms+1:kme,:) = min(scale_out(:,kms+1:kme,:),scale_in(:,kms:kme-1,:))*flux_z(:,kms+1:kme,:)
         end where
 
           
