@@ -48,16 +48,16 @@ contains
         
         if (options%vars_to_advect(kVARS%water_vapor)>0) call var_list%add_var('qv', domain%water_vapor%meta_data)
         
-        !if (options%vars_to_advect(kVARS%potential_temperature)>0) call var_list%add_var('theta', domain%potential_temperature%meta_data) 
-        !if (options%vars_to_advect(kVARS%cloud_water)>0) call var_list%add_var('qc', domain%cloud_water_mass%meta_data)                  
-        !if (options%vars_to_advect(kVARS%rain_in_air)>0) call var_list%add_var('qr', domain%rain_mass%meta_data)                    
-        !if (options%vars_to_advect(kVARS%snow_in_air)>0) call var_list%add_var('qs', domain%snow_mass%meta_data)                    
-        !if (options%vars_to_advect(kVARS%cloud_ice)>0) call var_list%add_var('qi', domain%cloud_ice_mass%meta_data)                      
-        !if (options%vars_to_advect(kVARS%graupel_in_air)>0) call var_list%add_var('qg', domain%graupel_mass%meta_data)                 
-        !if (options%vars_to_advect(kVARS%ice_number_concentration)>0)  call var_list%add_var('ni', domain%cloud_ice_number%meta_data)       
-        !if (options%vars_to_advect(kVARS%rain_number_concentration)>0) call var_list%add_var('nr', domain%rain_number%meta_data)      
-        !if (options%vars_to_advect(kVARS%snow_number_concentration)>0) call var_list%add_var('ns', domain%snow_number%meta_data)      
-        !if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call var_list%add_var('ng', domain%graupel_number%meta_data)   
+        if (options%vars_to_advect(kVARS%potential_temperature)>0) call var_list%add_var('theta', domain%potential_temperature%meta_data) 
+        if (options%vars_to_advect(kVARS%cloud_water)>0) call var_list%add_var('qc', domain%cloud_water_mass%meta_data)                  
+        if (options%vars_to_advect(kVARS%rain_in_air)>0) call var_list%add_var('qr', domain%rain_mass%meta_data)                    
+        if (options%vars_to_advect(kVARS%snow_in_air)>0) call var_list%add_var('qs', domain%snow_mass%meta_data)                    
+        if (options%vars_to_advect(kVARS%cloud_ice)>0) call var_list%add_var('qi', domain%cloud_ice_mass%meta_data)                      
+        if (options%vars_to_advect(kVARS%graupel_in_air)>0) call var_list%add_var('qg', domain%graupel_mass%meta_data)                 
+        if (options%vars_to_advect(kVARS%ice_number_concentration)>0)  call var_list%add_var('ni', domain%cloud_ice_number%meta_data)       
+        if (options%vars_to_advect(kVARS%rain_number_concentration)>0) call var_list%add_var('nr', domain%rain_number%meta_data)      
+        if (options%vars_to_advect(kVARS%snow_number_concentration)>0) call var_list%add_var('ns', domain%snow_number%meta_data)      
+        if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call var_list%add_var('ng', domain%graupel_number%meta_data)   
 
 
     end subroutine adv_init
@@ -136,7 +136,9 @@ contains
                     !Initial advection-tendency calculations
                     temp = var_to_advect%data_3d
                     call adv4_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,t_factor_in=0.333)
+                    !call var_to_advect%exchange()
                     call adv4_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,t_factor_in=0.5)
+                    !call var_to_advect%exchange()
 
                     !final advection call with tendency-fluxes
                     call adv4_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, &
