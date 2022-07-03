@@ -110,9 +110,13 @@ contains
                             !              + max(abs(w(i,k,j)), abs(w(i,k+zoffset,j))) ) &
                             !              / (rho(i,k,j) * dz(i,k,j) * dx)
                         else
-                            current_wind = max(abs(u(i,k,j)), abs(u(i+1,k,j))) / dx &
-                                          +max(abs(v(i,k,j)), abs(v(i,k,j+1))) / dx &
-                                          +max(abs(w(i,k,j)), abs(w(i,k+zoffset,j))) / dz(k)
+                            !current_wind = max(abs(u(i,k,j)), abs(u(i+1,k,j))) / dx &
+                            !              +max(abs(v(i,k,j)), abs(v(i,k,j+1))) / dx &
+                            !              +max(abs(w(i,k,j)), abs(w(i,k+zoffset,j))) / dz(k)
+                                          
+                            current_wind = max(( max( abs(u(i,k,j)), abs(u(i+1,k,j)) ) / dx), &
+                                               ( max( abs(v(i,k,j)), abs(v(i,k,j+1)) ) / dx), &
+                                               ( max( abs(w(i,k,j)), abs(w(i,k+zoffset,j)) ) / dz(k) ))
                         endif
                         maxwind3d = max(maxwind3d, current_wind)
                     ENDDO

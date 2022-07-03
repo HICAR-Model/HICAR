@@ -41,8 +41,8 @@ contains
         real, dimension(its-1:ite+2,  kms:kme,jts-1:jte+1),  intent(in) :: u
         real, dimension(its-1:ite+1,  kms:kme,jts-1:jte+2),  intent(in) :: v
         
-        real, dimension(its-1:ite+2,kms:kme,jts-1:jte+1),intent(inout)          :: flux_x
-        real, dimension(its-1:ite+1,kms:kme,jts-1:jte+2),intent(inout)          :: flux_y
+        real, dimension(its-1:ite+2,kms:kme,  jts-1:jte+1),intent(inout)          :: flux_x
+        real, dimension(its-1:ite+1,kms:kme,  jts-1:jte+2),intent(inout)          :: flux_y
         real, dimension(its-1:ite+1,kms:kme+1,jts-1:jte+1),intent(inout)    :: flux_z
         
         
@@ -154,6 +154,7 @@ contains
         real, dimension(its-1:ite+2,kms:kme,jts-1:jte+1),intent(inout)          :: flux_x
         real, dimension(its-1:ite+1,kms:kme,jts-1:jte+2),intent(inout)          :: flux_y
         real, dimension(its-1:ite+1,kms:kme+1,jts-1:jte+1),intent(inout)    :: flux_z
+        
         
         flux_x= ((u + ABS(u)) * q(its-2:ite+1,:,jts-1:jte+1)  + (u - ABS(u)) * q(its-1:ite+2,:,jts-1:jte+1))  / 2
 
