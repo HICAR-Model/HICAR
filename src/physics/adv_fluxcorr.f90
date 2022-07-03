@@ -86,20 +86,20 @@ contains
         flux_out = flux_out + (max(0.,flux_z(:,kms+1:kme+1,:)) - min(0.,flux_z(:,kms:kme,:))) / (dz*jaco*rho)
         
                             
-        where (u(its:ite+1,:,:) > 0)
-            qmax(its:ite+1,:,:) = max(q(its-1:ite,:,jts-1:jte+1),qmax(its:ite+1,:,:))
-            qmin(its:ite+1,:,:) = min(q(its-1:ite,:,jts-1:jte+1),qmin(its:ite+1,:,:))
-        else where (u(its:ite+1,:,:) < 0)
-            qmax(its-1:ite,:,:) = max(q(its:ite+1,:,jts-1:jte+1),qmax(its-1:ite,:,:))
-            qmin(its-1:ite,:,:) = min(q(its:ite+1,:,jts-1:jte+1),qmin(its-1:ite,:,:))
+        where (u(its-1:ite+1,:,:) > 0)
+            qmax(:,:,:) = max(q(its-2:ite,:,jts-1:jte+1),qmax(:,:,:))
+            qmin(:,:,:) = min(q(its-2:ite,:,jts-1:jte+1),qmin(:,:,:))
+        else where (u(its:ite+2,:,:) < 0)
+            qmax(:,:,:) = max(q(its:ite+2,:,jts-1:jte+1),qmax(:,:,:))
+            qmin(:,:,:) = min(q(its:ite+2,:,jts-1:jte+1),qmin(:,:,:))
         end where
         
-        where (v(:,:,jts:jte+1) > 0)
-            qmax(:,:,jts:jte+1) = max(q(its-1:ite+1,:,jts-1:jte),qmax(:,:,jts:jte+1))
-            qmin(:,:,jts:jte+1) = min(q(its-1:ite+1,:,jts-1:jte),qmin(:,:,jts:jte+1))
-        else where (v(:,:,jts:jte+1) < 0)
-            qmax(:,:,jts-1:jte) = max(q(its-1:ite+1,:,jts:jte+1),qmax(:,:,jts-1:jte))
-            qmin(:,:,jts-1:jte) = min(q(its-1:ite+1,:,jts:jte+1),qmin(:,:,jts-1:jte))
+        where (v(:,:,jts-1:jte+1) > 0)
+            qmax(:,:,:) = max(q(its-1:ite+1,:,jts-2:jte),qmax(:,:,:))
+            qmin(:,:,:) = min(q(its-1:ite+1,:,jts-2:jte),qmin(:,:,:))
+        else where (v(:,:,jts:jte+2) < 0)
+            qmax(:,:,:) = max(q(its-1:ite+1,:,jts:jte+2),qmax(:,:,:))
+            qmin(:,:,:) = min(q(its-1:ite+1,:,jts:jte+2),qmin(:,:,:))
         end where
         
         where (w(:,kms:kme-1,:) > 0)
