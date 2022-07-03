@@ -129,12 +129,15 @@ contains
                             (q(its-1:ite+1,:,jts:jte+3)+q(its-1:ite+1,:,jts-3:jte))
         flux_y = (v*flux_y)/12
         
-        flux_z(:,kms+1:kme,:) = ((w(:,kms:kme-1,:) + ABS(w(:,kms:kme-1,:))) * q(its-1:ite+1,kms:kme-1,jts-1:jte+1) + &
-                                 (w(:,kms:kme-1,:) - ABS(w(:,kms:kme-1,:))) * q(its-1:ite+1,kms+1:kme,jts-1:jte+1))  / 2
-                                 
+        !Do simple upwind for the cells who's stencil does not allow 4th-order
+        flux_z(:,kms+1,:) = ((w(:,kms,:) + ABS(w(:,kms,:))) * q(its-1:ite+1,kms,jts-1:jte+1) + &
+                             (w(:,kms,:) - ABS(w(:,kms,:))) * q(its-1:ite+1,kms+1,jts-1:jte+1))  / 2
+        flux_z(:,kme,:) = ((w(:,kme-1,:) + ABS(w(:,kme-1,:))) * q(its-1:ite+1,kme-1,jts-1:jte+1) + &
+                           (w(:,kme-1,:) - ABS(w(:,kme-1,:))) * q(its-1:ite+1,kme,jts-1:jte+1))  / 2
+                                                          
         flux_z(:,kms+2:kme-1,:) = 7*(q(its-1:ite+1,kms+2:kme-1,jts-1:jte+1)+q(its-1:ite+1,kms+1:kme-2,jts-1:jte+1)) - &
                                     (q(its-1:ite+1,kms+3:kme,jts-1:jte+1)+q(its-1:ite+1,kms:kme-3,jts-1:jte+1))
-        flux_z(:,kms+2:kme-1,:) = (w(:,kms+2:kme-1,:)*flux_z(:,kms+2:kme-1,:))/12
+        flux_z(:,kms+2:kme-1,:) = (w(:,kms+1:kme-2,:)*flux_z(:,kms+2:kme-1,:))/12
         
         !Handle top and bottom boundaries for z here
         flux_z(:,kms,:) = 0
