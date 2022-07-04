@@ -37,7 +37,7 @@ contains
     subroutine WRF_flux_corr(q,u,v,w,flux_x,flux_z,flux_y,jaco,dz,rho)
         implicit none
         real, dimension(ims:ime,  kms:kme,jms:jme),    intent(in) :: q
-        real, dimension(its-1:ite+1,  kms:kme,jts-1:jte+1),    intent(in) :: w, jaco, dz, rho
+        real, dimension(its-1:ite+1,  kms:kme,jts-1:jte+1),  intent(in) :: w, jaco, dz, rho
         real, dimension(its-1:ite+2,  kms:kme,jts-1:jte+1),  intent(in) :: u
         real, dimension(its-1:ite+1,  kms:kme,jts-1:jte+2),  intent(in) :: v
         
@@ -48,7 +48,7 @@ contains
         
         real, dimension(its-1:ite+2,kms:kme,  jts-1:jte+1)         :: upwind_flux_x
         real, dimension(its-1:ite+1,kms:kme,  jts-1:jte+2)         :: upwind_flux_y
-        real, dimension(its-1:ite+1,kms:kme+1,jts-1:jte+1) :: upwind_flux_z
+        real, dimension(its-1:ite+1,kms:kme+1,jts-1:jte+1)         :: upwind_flux_z
         
         real, dimension(its-1:ite+1,  kms:kme,jts-1:jte+1)   :: flux_in, scale_in, flux_out, scale_out, temp, qmax, qmin
 
@@ -111,10 +111,9 @@ contains
         end where
 
         
-        where(flux_in  .gt. (qmax-temp))  scale_in = max(0.,(qmax-temp)/(flux_in + 1.E-15))
-        where(flux_out .gt. (temp-qmin)) scale_out = max(0.,(temp-qmin)/(flux_out+ 1.E-15))
-        
-                            
+        where(flux_in  > (qmax-temp))  scale_in = max(0.,(qmax-temp)/(flux_in + 1.E-15))
+        where(flux_out > (temp-qmin)) scale_out = max(0.,(temp-qmin)/(flux_out+ 1.E-15))
+       
         ! We are now done with merged fluxes, so they can be overwritten to save memory
         ! flux now represents the normalized fluxes
                 

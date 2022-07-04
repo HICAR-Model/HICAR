@@ -121,13 +121,45 @@ contains
         real, dimension(its-1:ite+1,kms:kme,jts-1:jte+2),intent(inout)      :: flux_y
         real, dimension(its-1:ite+1,kms:kme+1,jts-1:jte+1),intent(inout)    :: flux_z
 
-        flux_x = 7*(q(its-1:ite+2,:,jts-1:jte+1)+q(its-2:ite+1,:,jts-1:jte+1)) - &
-                            (q(its:ite+3,:,jts-1:jte+1)+q(its-3:ite,:,jts-1:jte+1))
-        flux_x = (u*flux_x)/12
+        !Old code -- 4th order horz fluxes
+        !flux_x = 7*(q(its-1:ite+2,:,jts-1:jte+1)+q(its-2:ite+1,:,jts-1:jte+1)) - &
+        !                    (q(its:ite+3,:,jts-1:jte+1)+q(its-3:ite,:,jts-1:jte+1))
+        !flux_x = (u*flux_x)/12
                 
-        flux_y = 7*(q(its-1:ite+1,:,jts-1:jte+2)+q(its-1:ite+1,:,jts-2:jte+1)) - &
-                            (q(its-1:ite+1,:,jts:jte+3)+q(its-1:ite+1,:,jts-3:jte))
-        flux_y = (v*flux_y)/12
+        !flux_y = 7*(q(its-1:ite+1,:,jts-1:jte+2)+q(its-1:ite+1,:,jts-2:jte+1)) - &
+        !                    (q(its-1:ite+1,:,jts:jte+3)+q(its-1:ite+1,:,jts-3:jte))
+        !flux_y = (v*flux_y)/12
+        
+        !Calculation of 6th order fluxes for later application of 5th order diffusive terms
+        flux_x = 37*(q(its-1:ite+2,:,jts-1:jte+1)+q(its-2:ite+1,:,jts-1:jte+1)) - &
+                            8*(q(its:ite+3,:,jts-1:jte+1)+q(its-3:ite,:,jts-1:jte+1)) + &
+                            (q(its+1:ite+4,:,jts-1:jte+1)+q(its-4:ite-1,:,jts-1:jte+1))
+        flux_x = (u*flux_x)/60
+        !Application of 5th order diffusive terms
+        flux_x = flux_x - (abs(u)/60) * (10*(q(its-1:ite+2,:,jts-1:jte+1)-q(its-2:ite+1,:,jts-1:jte+1)) - &
+                            5*(q(its:ite+3,:,jts-1:jte+1)-q(its-3:ite,:,jts-1:jte+1)) + &
+                            (q(its+1:ite+4,:,jts-1:jte+1)-q(its-4:ite-1,:,jts-1:jte+1)))
+                
+        !Calculation of 6th order fluxes for later application of 5th order diffusive terms
+        flux_y = 37*(q(its-1:ite+1,:,jts-1:jte+2)+q(its-1:ite+1,:,jts-2:jte+1)) - &
+                            8*(q(its-1:ite+1,:,jts:jte+3)+q(its-1:ite+1,:,jts-3:jte)) + &
+                            (q(its-1:ite+1,:,jts+1:jte+4)+q(its-1:ite+1,:,jts-4:jte-1))
+        flux_y = (v*flux_y)/60
+        !Application of 5th order diffusive terms
+        flux_y = flux_y - (abs(v)/60) * (37*(q(its-1:ite+1,:,jts-1:jte+2)-q(its-1:ite+1,:,jts-2:jte+1)) - &
+                            8*(q(its-1:ite+1,:,jts:jte+3)-q(its-1:ite+1,:,jts-3:jte)) + &
+                            (q(its-1:ite+1,:,jts+1:jte+4)-q(its-1:ite+1,:,jts-4:jte-1)))
+
+        
+        !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
+        flux_z(:,kms+2:kme-1,:) = 7*(q(its-1:ite+1,kms+2:kme-1,jts-1:jte+1)+q(its-1:ite+1,kms+1:kme-2,jts-1:jte+1)) - &
+                                    (q(its-1:ite+1,kms+3:kme,jts-1:jte+1)+q(its-1:ite+1,kms:kme-3,jts-1:jte+1))
+        flux_z(:,kms+2:kme-1,:) = (w(:,kms+1:kme-2,:)*flux_z(:,kms+2:kme-1,:))/12
+        !Application of 3rd order diffusive terms
+        flux_z(:,kms+2:kme-1,:) = flux_z(:,kms+2:kme-1,:) - (abs(w(:,kms+1:kme-2,:))/12) * &
+                        (3 * (q(its-1:ite+1,kms+2:kme-1,jts-1:jte+1) - q(its-1:ite+1,kms+1:kme-2,jts-1:jte+1)) - &
+                            (q(its-1:ite+1,kms+3:kme,jts-1:jte+1)   - q(its-1:ite+1,kms:kme-3,jts-1:jte+1)))
+        
         
         !Do simple upwind for the cells who's stencil does not allow 4th-order
         flux_z(:,kms+1,:) = ((w(:,kms,:) + ABS(w(:,kms,:))) * q(its-1:ite+1,kms,jts-1:jte+1) + &
@@ -135,10 +167,7 @@ contains
         flux_z(:,kme,:) = ((w(:,kme-1,:) + ABS(w(:,kme-1,:))) * q(its-1:ite+1,kme-1,jts-1:jte+1) + &
                            (w(:,kme-1,:) - ABS(w(:,kme-1,:))) * q(its-1:ite+1,kme,jts-1:jte+1))  / 2
                                                           
-        flux_z(:,kms+2:kme-1,:) = 7*(q(its-1:ite+1,kms+2:kme-1,jts-1:jte+1)+q(its-1:ite+1,kms+1:kme-2,jts-1:jte+1)) - &
-                                    (q(its-1:ite+1,kms+3:kme,jts-1:jte+1)+q(its-1:ite+1,kms:kme-3,jts-1:jte+1))
-        flux_z(:,kms+2:kme-1,:) = (w(:,kms+1:kme-2,:)*flux_z(:,kms+2:kme-1,:))/12
-        
+
         !Handle top and bottom boundaries for z here
         flux_z(:,kms,:) = 0
         flux_z(:,kme+1,:) = q(its-1:ite+1,kme,jts-1:jte+1) * w(:,kme,:)
@@ -190,7 +219,6 @@ contains
                                 jaco(its-1:ite+1,:,jts-1:jte+1),dz(its-1:ite+1,:,jts-1:jte+1),rho(its-1:ite+1,:,jts-1:jte+1))
             endif
         endif
-
         qfluxes = qold
 
         ! perform horizontal advection, from difference terms
