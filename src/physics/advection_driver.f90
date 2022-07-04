@@ -145,6 +145,37 @@ contains
                                        domain%jacobian,flux_corr=options%adv_options%flux_corr)
                     var_to_advect%data_3d = temp
                              
+                             
+                                             
+                    !Initial advection-tendency calculations
+                    !temp = var_to_advect
+                    !call upwind_advect3d(temp%meta_data%data_3d,var_to_advect%meta_data%data_3d, domain%advection_dz, &
+                    !                   domain%jacobian,t_factor_in=0.333)
+                    !call upwind_advect3d(temp%meta_data%data_3d,var_to_advect%meta_data%data_3d, domain%advection_dz, &
+                    !                   domain%jacobian,t_factor_in=0.5)
+                                            
+                    !final advection call with tendency-fluxes
+                    !call upwind_advect3d(temp%meta_data%data_3d,var_to_advect%meta_data%data_3d, domain%advection_dz, &
+                    !                    domain%jacobian)
+                                            
+                    !var_to_advect = temp
+                    
+                !else if (options%physics%advection==kADV_4TH) then
+                
+                    !Initial advection-tendency calculations
+                    !temp = var_to_advect
+                    !call adv4_advect3d(temp%meta_data%data_3d,var_to_advect%meta_data%data_3d, domain%advection_dz, &
+                    !                   domain%jacobian,t_factor_in=0.333)
+                    !call temp%exchange()
+                    !call adv4_advect3d(temp%meta_data%data_3d,var_to_advect%meta_data%data_3d, domain%advection_dz, &
+                    !                   domain%jacobian,t_factor_in=0.5)
+                    !call temp%exchange()
+
+                    !final advection call with tendency-fluxes
+                    !call adv4_advect3d(temp%meta_data%data_3d,var_to_advect%meta_data%data_3d, domain%advection_dz, &
+                    !                   domain%jacobian,flux_corr=options%adv_options%flux_corr)
+                    !var_to_advect = temp
+                    
                 else if(options%physics%advection==kADV_MPDATA) then
                 
                     ! Not yet implemented (is it compatable w/ RK3?)
