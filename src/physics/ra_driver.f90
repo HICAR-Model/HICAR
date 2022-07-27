@@ -483,8 +483,8 @@ contains
                             read_ghg=options%rad_options%read_ghg                  &
                             )
             endif
-            domain%temperature%data_3d = domain%temperature%data_3d+domain%tend%th_lwrad*dt+domain%tend%th_swrad*dt
-            domain%potential_temperature%data_3d = domain%temperature%data_3d/domain%exner%data_3d
+            domain%potential_temperature%data_3d = domain%potential_temperature%data_3d+domain%tend%th_lwrad*dt+domain%tend%th_swrad*dt
+            domain%temperature%data_3d = domain%potential_temperature%data_3d*domain%exner%data_3d
             domain%tend_swrad%data_3d = domain%tend%th_swrad
         endif
 

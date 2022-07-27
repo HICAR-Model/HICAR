@@ -73,7 +73,7 @@ contains
         call domain%init(options)
 
         if (this_image()==1) write(*,*) "Initializing boundary condition data structure"
-        call boundary%init(options)
+        call boundary%init(options,domain%variables_to_force)
 
         ! if (this_image()==1) then
         !     write(*,*) "options%parameters%external_files: ", trim(options%parameters%external_files)

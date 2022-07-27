@@ -82,7 +82,7 @@ contains
         call options%restart_vars( &
                         [kVARS%u,    kVARS%v,   kVARS%w,     kVARS%dz_interface, kVARS%water_vapor])
                         
-        call options%advect_vars([kVARS%water_vapor, kVARS%potential_temperature])
+        call options%advect_vars([kVARS%water_vapor])
 
     end subroutine
 

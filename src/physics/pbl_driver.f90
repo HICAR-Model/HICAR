@@ -97,7 +97,9 @@ contains
                             domain% exner                 %data_3d,     &
                             domain% density               %data_3d,     &
                             domain% z                     %data_3d,     &
+                            domain% advection_dz                  ,     &
                             domain% dz_mass               %data_3d,     &
+                            domain% jacobian                      ,     &
                             domain% terrain               %data_2d,     &
                             its, ite, jts, jte, kts, kte,               &
                             dt_in)

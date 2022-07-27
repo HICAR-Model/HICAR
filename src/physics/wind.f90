@@ -362,6 +362,7 @@ contains
 
             ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
             call make_winds_grid_relative(domain%u%data_3d, domain%v%data_3d, domain%sintheta, domain%costheta,ims, ime, kms, kme, jms, jme)
+
             call domain%u%exchange_x()
             call domain%v%exchange_y()
 
@@ -402,7 +403,7 @@ contains
                              domain%w%data_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
-                             
+
                 !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
                 if (options%parameters%wvar=="") domain%w_real%data_3d = 0.0  
                 domain%w%data_3d = (domain%w_real%data_3d-domain%w%data_3d)/domain%jacobian
@@ -515,7 +516,7 @@ contains
         if (ims==ids) alpha(ims,:,:) = alpha(ims+1,:,:)
         if (jme==jde) alpha(:,:,jme) = alpha(:,:,jme-1)
         if (ime==ide) alpha(ime,:,:) = alpha(ime-1,:,:)
-        
+        !alpha = 1.0
     end subroutine calc_alpha
     
     subroutine calc_w_real(u,v,w_grid,w_real,dzdx,dzdy,jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)

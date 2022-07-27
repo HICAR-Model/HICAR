@@ -55,23 +55,14 @@ contains
     if (.not.allocated(neighbors)) call this%set_neighbors(grid)
 
     if (present(metadata)) then
-        call this%set_outputdata(metadata)
+        this%meta_data = metadata
     else
-        call this%set_outputdata()
+        call this%meta_data%initialize(grid, forcing_var)
     endif
-
-    if (present(forcing_var)) this%meta_data%forcing_var = forcing_var
-
-    if (trim(this%meta_data%forcing_var) /= "") then
-        allocate(this%meta_data%dqdt_3d(grid%ims:grid%ime,    &
-                                        grid%kms:grid%kme,    &
-                                        grid%jms:grid%jme), stat=err)
-        if (err /= 0) stop "exchangeable:dqdt_3d: Allocation request failed"
-
-        this%meta_data%dqdt_3d = 0
-    endif
-
-
+    
+    this%meta_data%data_3d => this%data_3d
+    this%meta_data%three_d = .True.
+        
   end subroutine
 
   module subroutine set_neighbors(this, grid)
@@ -127,17 +118,8 @@ contains
     class(exchangeable_t), intent(inout)  :: this
     type(variable_t),      intent(in),    optional :: metadata
 
-    if (present(metadata)) then
-        this%meta_data = metadata
-    endif
 
-    this%meta_data%data_3d => this%data_3d
-    this%meta_data%three_d = .True.
 
-    if (.not.allocated(this%meta_data%dim_len)) allocate(this%meta_data%dim_len(3))
-    this%meta_data%dim_len(1) = size(this%data_3d,1)
-    this%meta_data%dim_len(2) = size(this%data_3d,2)
-    this%meta_data%dim_len(3) = size(this%data_3d,3)
 
   end subroutine
 

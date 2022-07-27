@@ -179,7 +179,7 @@ contains
 
         ! List the variables that are required to be advected for the simple microphysics
         call options%advect_vars( &
-                      [kVARS%potential_temperature, kVARS%water_vapor, kVARS%cloud_water,  kVARS%rain_number_concentration, &
+                      [kVARS%water_vapor, kVARS%cloud_water,  kVARS%rain_number_concentration, &
                        kVARS%snow_in_air,           kVARS%cloud_ice,   &
                        kVARS%rain_in_air,           kVARS%ice_number_concentration, kVARS%graupel_in_air, &
                        kVARS%graupel_number_concentration, kVARS%snow_number_concentration] )
@@ -686,6 +686,14 @@ contains
             !last_model_time = domain%model_time%seconds()
             if (present(subset)) then
                 last_model_time = domain%model_time%seconds()
+                call calc_w_real(domain% u %data_3d,      &
+                             domain% v %data_3d,      &
+                             domain% w %data_3d,      &
+                             domain% w_real %data_3d,      &
+                             domain%dzdx_u, domain%dzdy_v,    &
+                             domain%jacobian,domain%ims,domain%ime,domain%kms,domain%kme,\
+                             domain%jms,domain%jme,domain%its,domain%ite,domain%jts,domain%jte)
+                             
                 call process_subdomain(domain, options, mp_dt,                 &
                                        its = its + subset, ite = ite - subset, &
                                        jts = jts + subset, jte = jte - subset, &

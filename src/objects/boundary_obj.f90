@@ -26,9 +26,10 @@ contains
     !! Distributes initial conditions to all other images
     !!
     !!------------------------------------------------------------
-    module subroutine init(this, options)
+    module subroutine init(this, options, domain_vars)
         class(boundary_t), intent(inout) :: this
         type(options_t),   intent(inout) :: options
+        type(var_dict_t),  intent(inout) :: domain_vars
 
         character(len=kMAX_NAME_LENGTH), allocatable :: vars_to_read(:)
         integer,                         allocatable :: var_dimensions(:)
@@ -53,8 +54,8 @@ contains
                                  options%parameters%zvar,           &
                                  options%parameters%time_var,       &
                                  options%parameters%pvar,           &
-                                 options%parameters%psvar           &
-                                 )
+                                 options%parameters%psvar,           &
+                                 domain_vars)
 
         ! endif
         ! call this%distribute_initial_conditions()
@@ -205,7 +206,7 @@ contains
     !!
     !!------------------------------------------------------------
     module subroutine init_local(this, options, file_list, var_list, dim_list, start_time, &
-                                 lat_var, lon_var, z_var, time_var, p_var, ps_var)
+                                 lat_var, lon_var, z_var, time_var, p_var, ps_var, domain_vars)
         class(boundary_t),               intent(inout)  :: this
         type(options_t),                 intent(inout)  :: options
         character(len=kMAX_NAME_LENGTH), intent(in)     :: file_list(:)
@@ -218,6 +219,7 @@ contains
         character(len=kMAX_NAME_LENGTH), intent(in)     :: time_var
         character(len=kMAX_NAME_LENGTH), intent(in)     :: p_var
         character(len=kMAX_NAME_LENGTH), intent(in)     :: ps_var
+        type(var_dict_t),                intent(inout)  :: domain_vars
 
         type(variable_t)  :: test_variable
         real, allocatable :: temp_z(:,:,:)
@@ -258,12 +260,16 @@ contains
 
 
         ! call assert(size(var_list) == size(dim_list), "list of variable dimensions must match list of variables")
-
         do i=1, size(var_list)
-
             call add_var_to_dict(this%variables, file_list(this%curfile), var_list(i), dim_list(i), this%curstep, [nx, nz, ny])
-
         end do
+        
+        call domain_vars%reset_iterator()
+
+        do while (domain_vars%has_more_elements())
+            test_variable = domain_vars%next()
+            call add_var_hi_to_dict(this%variables_hi, test_variable%forcing_var, test_variable%n_dimensions, test_variable%dim_len)
+        enddo
 
         call update_computed_vars(this, options, update=options%parameters%time_varying_z)
 
@@ -364,6 +370,26 @@ contains
         endif
 
     end subroutine
+    
+    subroutine add_var_hi_to_dict(var_dict, var_name, ndims, dims)
+        implicit none
+        type(var_dict_t), intent(inout) :: var_dict
+        character(len=*), intent(in)    :: var_name
+        integer,          intent(in)    :: ndims
+        integer,          intent(in)    :: dims(3)
+
+        type(variable_t)  :: new_variable
+
+        if (ndims==2) then
+            call new_variable%initialize( [dims(1), dims(2)] , var_name)
+            call var_dict%add_var(var_name, new_variable)
+        elseif (ndims==3) then
+            call new_variable%initialize( [dims(1),dims(2),dims(3)] , var_name)
+            call var_dict%add_var(var_name, new_variable)
+        endif
+
+    end subroutine
+
 
     !>------------------------------------------------------------
     !! Reads a new set of forcing data for the next time step
@@ -586,7 +612,7 @@ contains
 
         qvar = list%get_var(options%parameters%qvvar)
 
-        qvar%data_3d = qvar%data_3d / (1 + qvar%data_3d)
+        qvar%data_3d = qvar%data_3d / (1 - qvar%data_3d)
 
     end subroutine compute_mixing_ratio_from_sh
 
@@ -974,5 +1000,34 @@ contains
 
     end subroutine read_bc_time
 
+    module subroutine update_delta_fields(this, dt)
+        implicit none
+        class(boundary_t),    intent(inout) :: this
+        type(time_delta_t), intent(in)    :: dt
+
+        ! temporary to hold the variable to be interpolated to
+        type(variable_t) :: var_to_update
+        
+        ! make sure the dictionary is reset to point to the first variable
+        call this%variables_hi%reset_iterator()
+
+        ! Now iterate through the dictionary as long as there are more elements present
+        do while (this%variables_hi%has_more_elements())
+            ! get the next variable
+            var_to_update = this%variables_hi%next()
+
+            if (var_to_update%two_d) then
+                var_to_update%dqdt_2d = (var_to_update%dqdt_2d - var_to_update%data_2d) / dt%seconds()
+            else if (var_to_update%three_d) then
+                var_to_update%dqdt_3d = (var_to_update%dqdt_3d - var_to_update%data_3d) / dt%seconds()
+            endif
+
+        enddo
+
+        ! w has to be handled separately because it is the only variable that can be updated using the delta fields but is not
+        ! actually read from disk. Note that if we move to balancing winds every timestep, then it doesn't matter.
+        !var_to_update = this%w%meta_data
+        !var_to_update%dqdt_3d = (var_to_update%dqdt_3d - var_to_update%data_3d) / dt%seconds()
+    end subroutine update_delta_fields
 
 end submodule

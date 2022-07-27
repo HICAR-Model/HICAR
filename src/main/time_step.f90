@@ -19,6 +19,7 @@ module time_step
     use radiation,                  only : rad
     use wind,                       only : balance_uvw
     use domain_interface,           only : domain_t
+    use boundary_interface,         only : boundary_t
     use options_interface,          only : options_t
     use debug_module,               only : domain_check
     use string,                     only : str
@@ -272,9 +273,10 @@ contains
     !! @param next_output   Next time to write an output file (in "model_time")
     !!
     !!------------------------------------------------------------
-    subroutine step(domain, end_time, options)
+    subroutine step(domain, forcing, end_time, options)
         implicit none
         type(domain_t),     intent(inout)   :: domain
+        type(boundary_t),   intent(in)      :: forcing
         type(Time_type),    intent(in)      :: end_time
         type(options_t),    intent(in)      :: options
 
@@ -345,7 +347,7 @@ contains
 
 
                 ! ! apply/update boundary conditions including internal wind and pressure changes.
-                call domain%apply_forcing(dt)
+                call domain%apply_forcing(forcing,dt)
  
                 !If we are in the last ~10 updates of a time step and a variable drops below 0, we have probably over-shot a value of 0. Force back to 0
                 if ((end_time%seconds() - domain%model_time%seconds()) < (dt%seconds()*10)) then
