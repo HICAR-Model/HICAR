@@ -45,6 +45,7 @@ module land_surface
     use options_interface,   only : options_t
     use domain_interface,    only : domain_t
     use module_ra_simple, only: calc_solar_elevation
+    use io_routines,          only : io_write
 
     implicit none
 
@@ -105,7 +106,7 @@ contains
         implicit none
         type(options_t),intent(inout) :: options
 
-        if (options%physics%landsurface == kLSM_NOAH) then
+        if (options%physics%landsurface == kLSM_NOAH .or. options%physics%landsurface == kLSM_BASIC) then
             call options%alloc_vars( &
                          [kVARS%water_vapor, kVARS%potential_temperature, kVARS%precipitation, kVARS%temperature,       &
                          kVARS%exner, kVARS%dz_interface, kVARS%density, kVARS%pressure_interface, kVARS%shortwave,     &
@@ -237,6 +238,34 @@ contains
         where(Ri<0)  F2=(1-(15*Ri)/(1+((70.5*karman**2 * sqrt(-Ri * z_atm/zo))/(lnz_atm_term**2))) )
 
     end subroutine F2_formula
+    
+    subroutine psi_m_stable_formula(rat,psi_m)
+        real, dimension(:,:),intent(in) :: rat
+        real, dimension(:,:),intent(inout) :: psi_m
+
+        real :: a, b
+
+        a = 6.1
+        b = 2.5
+        
+        psi_m = -a * log(rat + (1 + rat**(b))**(1/b))
+    
+    end subroutine psi_m_stable_formula
+    
+    subroutine psi_h_stable_formula(rat,psi_h)
+        real, dimension(:,:),intent(in) :: rat
+        real, dimension(:,:),intent(inout) :: psi_h
+
+        real :: c, d
+
+        c = 5.3
+        d = 1.1
+        
+        psi_h = -c * log(rat + (1 + rat**(d))**(1/d))
+    
+    end subroutine psi_h_stable_formula
+    
+    
 !From Appendix A.2 in Chen et al 1997
 ! Impact of Atmospheric Surface-layer Parameterizations in the new Land-surface Scheme of the Ncep Mesoscale ETA Model
 ! Boundary-Layer Meteorology 85:391-421
@@ -257,6 +286,25 @@ contains
         where(exchange_C > MAX_EXCHANGE_C) exchange_C=MAX_EXCHANGE_C
         where(exchange_C < MIN_EXCHANGE_C) exchange_C=MIN_EXCHANGE_C
     end subroutine calc_mahrt_holtslag_exchange_coefficient
+    
+    
+    subroutine calc_revised_MM5_coefficient(wind,tskin,airt,znt, exchange_C)
+        implicit none
+        real, dimension(:,:),intent(inout) :: wind,tskin
+        real, dimension(:,:,:),intent(inout) :: airt
+        real,dimension(:,:),intent(inout) :: exchange_C, znt
+
+        real :: a, b, c, d
+        real, dimension(:,:,:), allocatable :: psi_m, psi_h
+
+        !psi_m = 
+        !psi_h = 
+
+        ! Richardson number
+        where(wind==0) wind=1e-10
+        Ri = gravity/airt(:,1,:) * (airt(:,1,:)-tskin)*z_atm/(wind**2)
+   
+    end subroutine calc_revised_MM5_coefficient
 
     subroutine surface_diagnostics(HFX, QFX, TSK, QSFC, CHS2, CQS2,T2, Q2, PSFC, &
                                     VEGFRAC, veg_type, land_mask, T2veg, T2bare, Q2veg, Q2bare)
@@ -338,10 +386,14 @@ contains
 
         ! convert latent heat flux to a mixing ratio tendancy term
         ! (J/(s*m^2) * s / (J/kg) => kg/m^2) ... / (kg/m^3 * m) => kg/kg
-        lhdQV=(latent_heat(its:ite,jts:jte) / LH_vaporization * dt) &
+        
+        !latent_heat = latent_heat+100
+        !where (latent_heat < 0) latent_heat = 0
+        
+        lhdQV=((latent_heat(its:ite,jts:jte)) / LH_vaporization * dt) &
              / (density(its:ite,kts,jts:jte) * dz(its:ite,kts,jts:jte))
         ! add water vapor in kg/kg
-        qv(its:ite,kts,jts:jte) = qv(its:ite,kts,jts:jte) + lhdQV
+        qv(its:ite,kts,jts:jte) = qv(its:ite,kts,jts:jte) + lhdQV !+ lhdQV
 
         ! enforce some minimum water vapor content... just in case
         where(qv(its:ite,kts,jts:jte) < SMALL_QV) qv(its:ite,kts,jts:jte) = SMALL_QV
@@ -856,11 +908,12 @@ contains
                                   domain%land_mask,                     &
                                   QSFC,                                 &
                                   QFX,                                  &
-                                  domain%skin_temperature%data_2d)
+                                  domain%skin_temperature%data_2d,      &
+                                  its, ite, kts, kte, jts, jte)
             endif
 
             where(windspd<1) windspd=1 ! minimum wind speed to prevent the exchange coefficient from blowing up
-            CHS = CHS * windspd
+            CHS = CHS * windspd * 2            
             CHS2 = CHS
             CQS2 = CHS
 
