@@ -348,7 +348,7 @@ module icar_constants
     ! could be calculated as 2.5E6 + (-2112.0)*temp_degC ?
     real, parameter :: Rd  = 287.058   ! J/(kg K) specific gas constant for dry air
     real, parameter :: Rw  = 461.5     ! J/(kg K) specific gas constant for moist air
-    real, parameter :: cp  = 1012.0    ! J/kg/K   specific heat capacity of moist STP air?
+    real, parameter :: cp  = 1000.0    ! J/kg/K   specific heat capacity of moist STP air?
     real, parameter :: gravity= 9.81   ! m/s^2    gravity
     real, parameter :: pi  = 3.1415927 ! pi
     real, parameter :: stefan_boltzmann = 5.67e-8 ! the Stefan-Boltzmann constant

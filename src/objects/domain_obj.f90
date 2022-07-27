@@ -51,6 +51,8 @@ contains
         call read_land_variables(this, options)
 
         call setup_meta_data(this, options)
+        
+        call init_relax_filters(this)
 
     end subroutine
 
@@ -290,7 +292,7 @@ contains
         if (0<opt%vars_to_allocate( kVARS%w) )                          call setup(this%w_real,                   this%grid,   forcing_var=opt%parameters%wvar,       list=this%variables_to_force, force_boundaries=.False. )
         if (0<opt%vars_to_allocate( kVARS%nsquared) )                   call setup(this%nsquared,                 this%grid )
         if (0<opt%vars_to_allocate( kVARS%water_vapor) )                call setup(this%water_vapor,              this%grid,     forcing_var=opt%parameters%qvvar,      list=this%variables_to_force, force_boundaries=.True.)
-        if (0<opt%vars_to_allocate( kVARS%potential_temperature) )      call setup(this%potential_temperature,    this%grid,     forcing_var=opt%parameters%tvar,       list=this%variables_to_force, force_boundaries=.True.)
+        if (0<opt%vars_to_allocate( kVARS%potential_temperature) )      call setup(this%potential_temperature,    this%grid,     forcing_var=opt%parameters%tvar,       list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%cloud_water) )                call setup(this%cloud_water_mass,         this%grid,     forcing_var=opt%parameters%qcvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%cloud_number_concentration))  call setup(this%cloud_number,             this%grid,     forcing_var=opt%parameters%qncvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%cloud_ice) )                  call setup(this%cloud_ice_mass,           this%grid,     forcing_var=opt%parameters%qivar,      list=this%variables_to_force, force_boundaries=.True.)
@@ -316,10 +318,10 @@ contains
         if (0<opt%vars_to_allocate( kVARS%pressure_interface) )         call setup(this%pressure_interface,       this%grid )
         if (0<opt%vars_to_allocate( kVARS%graupel) )                    call setup(this%graupel,                  this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%cloud_fraction) )             call setup(this%cloud_fraction,           this%grid2d )
-        if (0<opt%vars_to_allocate( kVARS%shortwave) )                  call setup(this%shortwave,                this%grid2d,   forcing_var=opt%parameters%swdown_var,  list=this%variables_to_force)
+        if (0<opt%vars_to_allocate( kVARS%shortwave) )                  call setup(this%shortwave,                this%grid2d,   forcing_var=opt%parameters%swdown_var,  list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%shortwave_direct) )           call setup(this%shortwave_direct,         this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%shortwave_diffuse) )          call setup(this%shortwave_diffuse,        this%grid2d)
-        if (0<opt%vars_to_allocate( kVARS%longwave) )                   call setup(this%longwave,                 this%grid2d,   forcing_var=opt%parameters%lwdown_var,  list=this%variables_to_force)
+        if (0<opt%vars_to_allocate( kVARS%longwave) )                   call setup(this%longwave,                 this%grid2d,   forcing_var=opt%parameters%lwdown_var,  list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%vegetation_fraction) )        call setup(this%vegetation_fraction,      this%grid_monthly )
         if (0<opt%vars_to_allocate( kVARS%vegetation_fraction_max) )    call setup(this%vegetation_fraction_max,  this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%vegetation_fraction_out) )    call setup(this%vegetation_fraction_out,  this%grid2d )
@@ -375,7 +377,7 @@ contains
         if (0<opt%vars_to_allocate( kVARS%snow_layer_liquid_water) )    call setup(this%snow_layer_liquid_water,  this%grid_snow )
         if (0<opt%vars_to_allocate( kVARS%snow_age_factor) )            call setup(this%snow_age_factor,          this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%snow_height) )                call setup(this%snow_height,              this%grid2d )
-        if (0<opt%vars_to_allocate( kVARS%sst) )                        call setup(this%sst,                      this%grid2d,   forcing_var=opt%parameters%sst_var,     list=this%variables_to_force)
+        if (0<opt%vars_to_allocate( kVARS%sst) )                        call setup(this%sst,                      this%grid2d,   forcing_var=opt%parameters%sst_var,     list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%skin_temperature) )           call setup(this%skin_temperature,         this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%soil_water_content) )         call setup(this%soil_water_content,       this%grid_soil)
         if (0<opt%vars_to_allocate( kVARS%eq_soil_moisture) )           call setup(this%eq_soil_moisture,         this%grid_soil)
@@ -391,8 +393,8 @@ contains
         if (0<opt%vars_to_allocate( kVARS%v_longitude) )                call setup(this%v_longitude,              this%v_grid2d)
         if (0<opt%vars_to_allocate( kVARS%terrain) )                    call setup(this%terrain,                  this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%terrain) )                    call setup(this%forcing_terrain,          this%grid2d) !,    forcing_var=opt%parameters%hgtvar, list=this%variables_to_force)
-        if (0<opt%vars_to_allocate( kVARS%sensible_heat) )              call setup(this%sensible_heat,            this%grid2d)
-        if (0<opt%vars_to_allocate( kVARS%latent_heat) )                call setup(this%latent_heat,              this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%sensible_heat) )              call setup(this%sensible_heat,            this%grid2d,   forcing_var=opt%parameters%shvar,     list=this%variables_to_force, force_boundaries=.False.)
+        if (0<opt%vars_to_allocate( kVARS%latent_heat) )                call setup(this%latent_heat,              this%grid2d,   forcing_var=opt%parameters%lhvar,     list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%u_10m) )                      call setup(this%u_10m,                    this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%v_10m) )                      call setup(this%v_10m,                    this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%coeff_momentum_drag) )        call setup(this%coeff_momentum_drag,      this%grid2d)
@@ -1861,9 +1863,11 @@ contains
         integer :: i, nsoil
         real, allocatable :: temporary_data(:,:), temporary_data_3d(:,:,:)
         real :: soil_thickness(20)
+        real :: init_surf_temp
 
         soil_thickness = 1.0
         soil_thickness(1:4) = [0.1, 0.2, 0.5, 1.0]
+        init_surf_temp = 280
 
         if (this_image()==1) write (*,*) "Reading Land Variables"
         if (associated(this%soil_water_content%data_3d)) then
@@ -1903,12 +1907,12 @@ contains
                     if (this_image()==1) print*, trim(options%parameters%init_conditions_file),"  ",trim(options%parameters%soil_deept_var)
                 endif
                 if (minval(this%soil_deep_temperature%data_2d)< 200) then
-                    where(this%soil_deep_temperature%data_2d<200) this%soil_deep_temperature%data_2d=280 ! <200 is just broken, set to mean annual air temperature at mid-latidudes
+                    where(this%soil_deep_temperature%data_2d<200) this%soil_deep_temperature%data_2d=init_surf_temp ! <200 is just broken, set to mean annual air temperature at mid-latidudes
                 endif
             endif
         else
             if (associated(this%soil_deep_temperature%data_2d)) then
-                this%soil_deep_temperature%data_2d = 280
+                this%soil_deep_temperature%data_2d = init_surf_temp
             endif
         endif
 
@@ -2059,21 +2063,22 @@ contains
         endif
 
         ! these will all be udpated by either forcing data or the land model, but initialize to sensible values to avoid breaking other initialization routines
-        if (associated(this%skin_temperature%data_2d)) this%skin_temperature%data_2d = 280
+        if (associated(this%skin_temperature%data_2d)) this%skin_temperature%data_2d = init_surf_temp
+        if (associated(this%sst%data_2d)) this%sst%data_2d = init_surf_temp
         if (associated(this%roughness_z0%data_2d)) this%roughness_z0%data_2d = 0.001
         if (associated(this%sensible_heat%data_2d)) this%sensible_heat%data_2d=0
         if (associated(this%latent_heat%data_2d)) this%latent_heat%data_2d=0
         if (associated(this%u_10m%data_2d)) this%u_10m%data_2d=0
         if (associated(this%v_10m%data_2d)) this%v_10m%data_2d=0
-        if (associated(this%temperature_2m%data_2d)) this%temperature_2m%data_2d=280
+        if (associated(this%temperature_2m%data_2d)) this%temperature_2m%data_2d=init_surf_temp
         if (associated(this%humidity_2m%data_2d)) this%humidity_2m%data_2d=0.001
         if (associated(this%surface_pressure%data_2d)) this%surface_pressure%data_2d=102000
         if (associated(this%longwave_up%data_2d)) this%longwave_up%data_2d=0
         if (associated(this%ground_heat_flux%data_2d)) this%ground_heat_flux%data_2d=0
-        if (associated(this%veg_leaf_temperature%data_2d)) this%veg_leaf_temperature%data_2d=280
-        if (associated(this%ground_surf_temperature%data_2d)) this%ground_surf_temperature%data_2d=280
+        if (associated(this%veg_leaf_temperature%data_2d)) this%veg_leaf_temperature%data_2d=init_surf_temp
+        if (associated(this%ground_surf_temperature%data_2d)) this%ground_surf_temperature%data_2d=init_surf_temp
         if (associated(this%canopy_vapor_pressure%data_2d)) this%canopy_vapor_pressure%data_2d=2000
-        if (associated(this%canopy_temperature%data_2d)) this%canopy_temperature%data_2d=280
+        if (associated(this%canopy_temperature%data_2d)) this%canopy_temperature%data_2d=init_surf_temp
         if (associated(this%coeff_momentum_drag%data_2d)) this%coeff_momentum_drag%data_2d=0
         if (associated(this%coeff_heat_exchange%data_2d)) this%coeff_heat_exchange%data_2d=0
         if (associated(this%canopy_fwet%data_2d)) this%canopy_fwet%data_2d=0
@@ -2514,10 +2519,129 @@ contains
 
     end subroutine
 
+    module subroutine init_relax_filters(this)
+        implicit none
+        class(domain_t),    intent(inout) :: this
+        integer :: hs, nr, k, i
+        real, dimension(7) :: rs, rs_r
+        logical :: corner
+        !Setup relaxation filters, start with 2D then expand for 3D version
+        
+        allocate(this%relax_filter_2d(this%ims:this%ime,this%jms:this%jme))
+        allocate(this%relax_filter_3d(this%ims:this%ime,this%kms:this%kme,this%jms:this%jme))
+        
+        associate( relax_filter => this%relax_filter_2d, relax_filter_3d => this%relax_filter_3d)
+
+        corner = ((this%west_boundary .or. this%east_boundary) .and. (this%north_boundary .or. this%south_boundary))
+
+        hs = this%grid%halo_size
+
+        !relaxation boundary -- set to be 7 for default
+        nr = min(7,(this%ime-this%ims-hs),(this%jme-this%jms-hs))
+        
+        rs = (/0.9, 0.75, 0.6, 0.5, 0.4, 0.25, 0.1 /)
+        rs_r = (/0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9/)
+        relax_filter = 0.0
+        
+        if (.not.(corner)) then
+            if (this%west_boundary) then
+                relax_filter(this%ims:this%ims+hs-1,this%jms:this%jme) = 1.0
+                do k=this%jms,this%jme
+                    relax_filter(this%ims+hs:this%ims+hs+nr-1,k) = rs(:nr)
+                enddo
+            else if (this%east_boundary) then
+                relax_filter(this%ime-hs+1:this%ime,this%jms:this%jme) = 1.0
+                do k=this%jms,this%jme
+                    relax_filter(this%ime-hs-nr+1:this%ime-hs,k) = rs_r(:nr)        
+                enddo
+            else if (this%north_boundary) then
+                relax_filter(this%ims:this%ime,this%jme-hs-1:this%jme) = 1.0
+                do k=this%ims,this%ime
+                    relax_filter(k,this%jme-hs-nr+1:this%jme-hs) = rs_r(:nr)
+                enddo
+            else if (this%south_boundary) then
+                relax_filter(this%ims:this%ime,this%jms:this%jms+hs-1) = 1.0
+                do k=this%ims,this%ime
+                    relax_filter(k,this%jms+hs:this%jms+hs+nr-1) = rs(:nr)
+                enddo
+            endif
+        else
+            if (this%north_boundary .and. this%west_boundary) then
+                relax_filter(this%ims:this%ims+hs-1,this%jms:this%jme) = 1.0
+                relax_filter(this%ims:this%ime,this%jme-hs-1:this%jme) = 1.0
+
+                do k=this%jms,this%jme-hs
+                    relax_filter(this%ims+hs:this%ims+hs+nr-1,k) = rs(:nr)
+                enddo
+                do k=this%ims+hs,this%ime
+                    relax_filter(k,this%jme-hs-nr+1:this%jme-hs) = rs_r(:nr)
+                enddo
+                do i = 1, nr
+                    do k = 1, nr
+                        relax_filter(this%ims+hs+i-1,this%jme-hs-k+1) = rs(min(i,k))
+                    enddo
+                enddo
+            else if (this%north_boundary .and. this%east_boundary) then
+                relax_filter(this%ime-hs+1:this%ime,this%jms:this%jme) = 1.0   
+                relax_filter(this%ims:this%ime,this%jme-hs-1:this%jme) = 1.0
+
+                do k=this%jms,this%jme-hs
+                    relax_filter(this%ime-hs-nr+1:this%ime-hs,k) = rs_r(:nr)        
+                enddo        
+                do k=this%ims,this%ime-hs
+                    relax_filter(k,this%jme-hs-nr+1:this%jme-hs) = rs_r(:nr)
+                enddo
+                do i = 1, nr
+                    do k = 1, nr
+                        relax_filter(this%ime-hs-i+1,this%jme-hs-k+1) = rs(min(i,k))
+                    enddo
+                enddo
+            else if (this%south_boundary .and. this%west_boundary) then
+                relax_filter(this%ims:this%ims+hs-1,this%jms:this%jme) = 1.0
+                relax_filter(this%ims:this%ime,this%jms:this%jms+hs-1) = 1.0
+
+                do k=this%jms+hs,this%jme
+                    relax_filter(this%ims+hs:this%ims+hs+nr-1,k) = rs(:nr)
+                enddo
+                do k=this%ims+hs,this%ime
+                    relax_filter(k,this%jms+hs:this%jms+hs+nr-1) = rs(:nr)
+                enddo
+                do i = 1, nr
+                    do k = 1, nr
+                        relax_filter(this%ims+hs+i-1,this%jms+hs+k-1) = rs(min(i,k))
+                    enddo
+                enddo
+            else if (this%south_boundary .and. this%east_boundary) then
+                relax_filter(this%ime-hs+1:this%ime,this%jms:this%jme) = 1.0   
+                relax_filter(this%ims:this%ime,this%jms:this%jms+hs-1) = 1.0
+            
+                do k=this%jms+hs,this%jme
+                    relax_filter(this%ime-hs-nr+1:this%ime-hs,k) = rs_r(:nr)        
+                enddo        
+                do k=this%ims,this%ime-hs
+                    relax_filter(k,this%jms+hs:this%jms+hs+nr-1) = rs(:nr)
+                enddo
+                do i = 1, nr
+                    do k = 1, nr
+                        relax_filter(this%ime-hs-i+1,this%jms+hs+k-1) = rs(min(i,k))
+                    enddo
+                enddo
+            endif
+        endif
+
+        do k=this%kms,this%kme
+            relax_filter_3d(:,k,:) = relax_filter
+        enddo
+        
+        end associate
+    end subroutine init_relax_filters
+    
+    
     !> -------------------------------
-    !! Update the dQdt fields for all forced variables
-    !!
-    !! This routine is the partner of apply_forcing below.
+    !! Update the dQdt fields for all forced variables which force the whole domain
+    !! Forced variables which force just the boundary are handeled by a similar function called on the boundary object
+    !! 
+    !! For domain-forced variables, this routine is the partner of apply_forcing below.
     !! update_delta_fields normalizes the difference by the time step of that difference field
     !! apply_forcing multiplies that /second value and multiplies it by the current time step before adding it
     !!
@@ -2529,6 +2653,7 @@ contains
 
         ! temporary to hold the variable to be interpolated to
         type(variable_t) :: var_to_update
+        
         
         !Ensure that input data for hydrometeors after interpolation have been forced to 0-minimum
         call this%enforce_limits(update_in=.True.)
@@ -2542,12 +2667,9 @@ contains
             var_to_update = this%variables_to_force%next()
 
             if (var_to_update%two_d) then
-                var_to_update%dqdt_2d = (var_to_update%dqdt_2d - var_to_update%data_2d) / dt%seconds()
-
+                if (.not.(var_to_update%force_boundaries)) var_to_update%dqdt_2d = (var_to_update%dqdt_2d - var_to_update%data_2d) / dt%seconds()
             else if (var_to_update%three_d) then
-
-                var_to_update%dqdt_3d = (var_to_update%dqdt_3d - var_to_update%data_3d) / dt%seconds()
-
+                if (.not.(var_to_update%force_boundaries)) var_to_update%dqdt_3d = (var_to_update%dqdt_3d - var_to_update%data_3d) / dt%seconds()
             endif
 
         enddo
@@ -2569,61 +2691,48 @@ contains
     !! apply forcing multiplies that /second value and multiplies it by the current time step before adding it
     !!
     !! -------------------------------
-    module subroutine apply_forcing(this, dt)
+    module subroutine apply_forcing(this, forcing, dt)
         implicit none
         class(domain_t),    intent(inout) :: this
+        class(boundary_t),  intent(in)    :: forcing
         type(time_delta_t), intent(in)    :: dt
-        integer :: ims, ime, jms, jme, hs
-        
+        integer :: ims, ime, jms, jme
         ! temporary to hold the variable to be interpolated to
         type(variable_t) :: var_to_update
-
-        hs = this%grid%halo_size
+        type(variable_t) :: forcing_hi
 
         ! make sure the dictionary is reset to point to the first variable
         call this%variables_to_force%reset_iterator()
+        if (this_image()==12)  call io_write("relax_filter_3d.nc", "this%relax_filter_3d", this%relax_filter_3d(:,:,:) )
 
         ! No iterate through the dictionary as long as there are more elements present
         do while (this%variables_to_force%has_more_elements())
             ! get the next variable
             var_to_update = this%variables_to_force%next()
+            
+            forcing_hi = forcing%variables_hi%get_var(var_to_update%forcing_var)
 
             if (var_to_update%two_d) then
                 ! apply forcing throughout the domain for 2D diagnosed variables (e.g. SST, SW)
-                var_to_update%data_2d = var_to_update%data_2d + (var_to_update%dqdt_2d * dt%seconds())
+                if (.not.(var_to_update%force_boundaries)) then
+                    var_to_update%data_2d = var_to_update%data_2d + (var_to_update%dqdt_2d * dt%seconds())
+                else
+                    !Update forcing data to current time step
+                    forcing_hi%data_2d = forcing_hi%data_2d + (forcing_hi%dqdt_2d * dt%seconds())
+                    var_to_update%data_2d = var_to_update%data_2d + (this%relax_filter_2d * dt%seconds()/3600.0) * &
+                        (forcing_hi%data_2d - var_to_update%data_2d)
+                endif 
 
             else if (var_to_update%three_d) then
                 ! only apply forcing data on the boundaries for advected scalars (e.g. temperature, humidity)
-                if (var_to_update%force_boundaries) then
-                    ims = lbound(var_to_update%data_3d, 1)
-                    ime = ubound(var_to_update%data_3d, 1)
-                    jms = lbound(var_to_update%data_3d, 3)
-                    jme = ubound(var_to_update%data_3d, 3)
-
-                    if (this%west_boundary) then
-                        var_to_update%data_3d(ims:(ims+hs-1),:,jms+hs:jme-hs) = &
-                        var_to_update%data_3d(ims:(ims+hs-1),:,jms+hs:jme-hs) + &
-                        (var_to_update%dqdt_3d(ims:(ims+hs-1),:,jms+hs:jme-hs) * dt%seconds())
-                    endif
-                    if (this%east_boundary) then
-                        var_to_update%data_3d((ime-hs+1):ime,:,jms+hs:jme-hs) = &
-                        var_to_update%data_3d((ime-hs+1):ime,:,jms+hs:jme-hs) + &
-                        (var_to_update%dqdt_3d((ime-hs+1):ime,:,jms+hs:jme-hs) * dt%seconds())
-                    endif
-                    if (this%south_boundary) then
-                        var_to_update%data_3d(:,:,jms:(jms+hs-1)) = &
-                        var_to_update%data_3d(:,:,jms:(jms+hs-1)) + &
-                        (var_to_update%dqdt_3d(:,:,jms:(jms+hs-1)) * dt%seconds())
-                    endif
-                    if (this%north_boundary) then
-                        var_to_update%data_3d(:,:,(jme-hs+1):jme) = &
-                        var_to_update%data_3d(:,:,(jme-hs+1):jme) + &
-                        (var_to_update%dqdt_3d(:,:,(jme-hs+1):jme) * dt%seconds())
-                    endif
-
-                ! apply forcing throughout the domain for diagnosed variables (e.g. pressure, wind)
-                else
+                ! applying forcing to the edges has already been handeled when updating dqdt using the relaxation filter
+                if (.not.(var_to_update%force_boundaries)) then
                     var_to_update%data_3d = var_to_update%data_3d + (var_to_update%dqdt_3d * dt%seconds())
+                else
+                    !Update forcing data to current time step
+                    forcing_hi%data_3d = forcing_hi%data_3d + (forcing_hi%dqdt_3d * dt%seconds())
+                    var_to_update%data_3d = var_to_update%data_3d + (this%relax_filter_3d * dt%seconds()/3600.0) * &
+                        (forcing_hi%data_3d - var_to_update%data_3d)
                 endif
             endif
 
@@ -2765,6 +2874,7 @@ contains
         type(variable_t) :: pressure, potential_temp
         ! temporary to hold the forcing variable to be interpolated from
         type(variable_t) :: input_data
+        type(variable_t) :: forcing_hi
 
         ! number of layers has to be used when subsetting for update_pressure (for now)
         integer :: nz
@@ -2780,6 +2890,8 @@ contains
         do while (this%variables_to_force%has_more_elements())
             ! get the next variable
             var_to_interpolate = this%variables_to_force%next()
+            
+            forcing_hi = forcing%variables_hi%get_var(var_to_interpolate%forcing_var)
 
             ! get the associated forcing data
             input_data = forcing%variables%get_var(var_to_interpolate%forcing_var)
@@ -2787,9 +2899,13 @@ contains
             ! interpolate
             if (var_to_interpolate%two_d) then
                 if (update_only) then
-                    call geo_interp2d(var_to_interpolate%dqdt_2d, input_data%data_2d, forcing%geo%geolut)
+                    call geo_interp2d(forcing_hi%dqdt_2d, input_data%data_2d, forcing%geo%geolut)
+                    !If this variable is forcing the whole domain, we can copy the next forcing step directly over to domain
+                    if (.not.(var_to_interpolate%force_boundaries)) var_to_interpolate%dqdt_2d = forcing_hi%dqdt_2d
                 else
-                    call geo_interp2d(var_to_interpolate%data_2d, input_data%data_2d, forcing%geo%geolut)
+                    call geo_interp2d(forcing_hi%data_2d, input_data%data_2d, forcing%geo%geolut)
+                    !If this is an initialization step, copy high res directly over to domain
+                    var_to_interpolate%data_2d = forcing_hi%data_2d
                 endif
 
             else
@@ -2799,31 +2915,43 @@ contains
                 var_is_v = (trim(var_to_interpolate%forcing_var) == trim(this%v%meta_data%forcing_var))
                 
                 !If we are dealing with anything but pressure and temperature (basically mass/number species), consider height above ground
-                !for interpolation. If the user has not selecte AGL interpolation in the namelist, this will result in standard z-interpolation
-                agl_interp = .not.(var_is_pressure .or. var_is_potential_temp)
+                !for interpolation. If the user has not selected AGL interpolation in the namelist, this will result in standard z-interpolation
+                agl_interp = .not.(var_is_pressure .and. var_is_potential_temp)
 
                 ! if just updating, use the dqdt variable otherwise use the 3D variable
                 if (update_only) then
-                    call interpolate_variable(var_to_interpolate%dqdt_3d, input_data, forcing, this, &
+                    call interpolate_variable(forcing_hi%dqdt_3d, input_data, forcing, this, &
                                     interpolate_agl_in=agl_interp, var_is_u=var_is_u, var_is_v=var_is_v, nsmooth=this%nsmooth)
-                                    
+                    !If this variable is forcing the whole domain, we can copy the next forcing step directly over to domain
+                    if (.not.(var_to_interpolate%force_boundaries)) var_to_interpolate%dqdt_3d = forcing_hi%dqdt_3d
                 else
-                    call interpolate_variable(var_to_interpolate%data_3d, input_data, forcing, this, &
+                    call interpolate_variable(forcing_hi%data_3d, input_data, forcing, this, &
                                     interpolate_agl_in=agl_interp, var_is_u=var_is_u, var_is_v=var_is_v, nsmooth=this%nsmooth)
+                    !If this is an initialization step, copy high res directly over to domain
+                    var_to_interpolate%data_3d = forcing_hi%data_3d
                 endif
                 
-                if (var_is_pressure) pressure = var_to_interpolate
-                if (var_is_potential_temp) potential_temp = var_to_interpolate
+
+                if (var_is_pressure) pressure = forcing_hi
+                if (var_is_potential_temp) potential_temp = forcing_hi
             endif
+            
         enddo
 
         !Adjust potential temperature (first) and pressure (second) to account for points below forcing grid
-        
+        !Only domain-wide-forced variables are updated with the domain dqdt_3d
         if (update_only) then
             call adjust_pressure_temp(pressure%dqdt_3d,potential_temp%dqdt_3d, forcing%geo%z, this%geo%z)
+            this%pressure%dqdt_3d = pressure%dqdt_3d
+            this%potential_temperature%meta_data%dqdt_3d = potential_temp%dqdt_3d
+
         else
             call adjust_pressure_temp(pressure%data_3d,potential_temp%data_3d, forcing%geo%z, this%geo%z)
+            pressure%data_3d = pressure%data_3d
+            this%pressure%data_3d = pressure%data_3d
+            this%potential_temperature%data_3d = potential_temp%data_3d
         endif
+        
 
     end subroutine
 

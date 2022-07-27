@@ -139,6 +139,7 @@ program icar
             
             ! Make the boundary condition dXdt values into units of [X]/s
             call domain%update_delta_fields(boundary%current_time - domain%model_time)
+            call boundary%update_delta_fields(boundary%current_time - domain%model_time)
         endif
         call input_timer%stop()
 
@@ -158,10 +159,10 @@ program icar
         ! this is the meat of the model physics, run all the physics for the current time step looping over internal timesteps
         if (.not.(options%wind%wind_only)) then
             call physics_timer%start()
-            call step(domain, step_end(boundary%current_time, next_output), options)
+            call step(domain, boundary, step_end(boundary%current_time, next_output), options)
             call physics_timer%stop()
         else
-            call domain%apply_forcing(options%output_options%output_dt)
+            call domain%apply_forcing(boundary, options%output_options%output_dt)
             domain%model_time = next_output
         endif
 

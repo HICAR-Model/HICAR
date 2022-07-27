@@ -249,6 +249,8 @@ module domain_interface
     complex(C_DOUBLE_COMPLEX),  allocatable :: terrain_frequency(:,:) ! FFT(terrain)
     double precision,           allocatable :: costheta(:,:)
     double precision,           allocatable :: sintheta(:,:)
+    real,                       allocatable :: relax_filter_2d(:,:)
+    real,                       allocatable :: relax_filter_3d(:,:,:)
     real,                       allocatable :: advection_dz(:,:,:)
     ! store the ratio between the average dz and each grid cells topographically modified dz (for space varying dz only)
     real,                       allocatable :: jacobian(:,:,:)
@@ -414,9 +416,10 @@ module domain_interface
         type(time_delta_t), intent(in)    :: dt
     end subroutine
 
-    module subroutine apply_forcing(this, dt)
+    module subroutine apply_forcing(this, forcing, dt)
         implicit none
         class(domain_t),    intent(inout) :: this
+        class(boundary_t),  intent(in)    :: forcing
         type(time_delta_t), intent(in)    :: dt
     end subroutine
 

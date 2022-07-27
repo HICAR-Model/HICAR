@@ -7,6 +7,7 @@ module boundary_interface
     use time_object,              only : Time_type
     use time_delta_object,        only : time_delta_t
     use data_structures,          only : interpolable_type
+    use grid_interface,           only : grid_t
     use icar_constants
 
     implicit none
@@ -31,6 +32,7 @@ module boundary_interface
         character(len=kMAX_STRING_LENGTH) :: time_var       ! the name of the input time variable [optional]
 
         type(var_dict_t)                  :: variables      ! a dictionary with all forcing data
+        type(var_dict_t)                  :: variables_hi   ! a dictionary with all forcing data interpolated to high-res grid
 
         ! boundary data coordinate system
         real, dimension(:,:),   allocatable :: lat, lon
@@ -47,6 +49,7 @@ module boundary_interface
         procedure :: init
         procedure :: init_external
         procedure :: update_forcing
+        procedure :: update_delta_fields
 
         procedure :: distribute_update
         procedure :: distribute_initial_conditions
@@ -60,10 +63,12 @@ module boundary_interface
     interface
 
     ! Set default component values
-    module subroutine init(this, options)
+    module subroutine init(this, options, domain_vars)
         implicit none
         class(boundary_t), intent(inout) :: this
         type(options_t),   intent(inout) :: options
+        type(var_dict_t),  intent(inout) :: domain_vars
+
     end subroutine
 
     module subroutine init_external(this, options)
@@ -90,7 +95,7 @@ module boundary_interface
     end subroutine
 
     module subroutine init_local(this, options, file_list, var_list, dim_list, start_time, &
-                                 lat_var, lon_var, z_var, time_var, p_var, ps_var)
+                                 lat_var, lon_var, z_var, time_var, p_var, ps_var, domain_vars)
         implicit none
         class(boundary_t),               intent(inout)  :: this
         type(options_t),                 intent(inout)  :: options
@@ -104,6 +109,7 @@ module boundary_interface
         character(len=kMAX_NAME_LENGTH), intent(in)     :: time_var
         character(len=kMAX_NAME_LENGTH), intent(in)     :: p_var
         character(len=kMAX_NAME_LENGTH), intent(in)     :: ps_var
+        type(var_dict_t),                intent(inout)  :: domain_vars
     end subroutine
 
     module subroutine update_forcing(this, options)
@@ -122,6 +128,12 @@ module boundary_interface
         class(boundary_t), intent(inout) :: this
     end subroutine
 
+    module subroutine update_delta_fields(this, dt)
+        implicit none
+        class(boundary_t),    intent(inout) :: this
+        type(time_delta_t), intent(in)    :: dt
+    end subroutine
+    
   end interface
 
 end module
