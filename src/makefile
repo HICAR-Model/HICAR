@@ -392,6 +392,7 @@ OBJS=	\
 		$(BUILD)lt_lut_io.o			\
 		$(BUILD)pbl_driver.o		\
 		$(BUILD)pbl_simple.o		\
+		$(BUILD)pbl_diagnostic.o		\
 		$(BUILD)ra_driver.o			\
 		$(BUILD)ra_simple.o			\
 		$(BUILD)ra_rrtmg_lw.o           \
@@ -847,9 +848,11 @@ $(BUILD)lsm_noahmp_glacier.o: $(PHYS)lsm_noahmp_glacier.f90
 ###################################################################
 #	Planetary Boundary Layer code
 ###################################################################
-$(BUILD)pbl_driver.o: $(PHYS)pbl_driver.f90 $(BUILD)pbl_simple.o $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)data_structures.o
+$(BUILD)pbl_driver.o: $(PHYS)pbl_driver.f90 $(BUILD)pbl_diagnostic.o $(BUILD)pbl_simple.o $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)data_structures.o
 
 $(BUILD)pbl_simple.o: $(PHYS)pbl_simple.f90 $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)data_structures.o
+
+$(BUILD)pbl_diagnostic.o: $(PHYS)pbl_diagnostic.f90 $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)data_structures.o
 
 $(BUILD)pbl_ysu.o: $(PHYS)pbl_ysu.f90
 
