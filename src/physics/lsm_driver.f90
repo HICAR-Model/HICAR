@@ -1303,9 +1303,9 @@ contains
 
             endif
         endif
-        if (options%physics%landsurface>0) then
-            call apply_fluxes(domain, dt)
-        endif
+        !if (options%physics%landsurface>0) then
+        !    call apply_fluxes(domain, dt)
+        !endif
 
     end subroutine lsm
 end module land_surface

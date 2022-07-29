@@ -67,13 +67,15 @@ module pbl_diagnostic
 
 
 contains
-    subroutine diagnostic_pbl(th, qv, cloud, ice, qrain, qsnow, um, vm, pii, rho, z, adv_dz, dz, jaco, jaco_w, terrain, its, ite, jts, jte, kts, kte_in, dt, tend_qv_pbl)
+    subroutine diagnostic_pbl(th, qv, cloud, ice, qrain, qsnow, lh, sh, um, vm, pii, rho, z, adv_dz, dz, jaco, jaco_w, terrain, its, ite, jts, jte, kts, kte_in, dt, tend_qv_pbl)
         real,   intent(inout), dimension(ims:ime, kms:kme, jms:jme) :: th            ! potential temperature [K]
         real,   intent(inout), dimension(ims:ime, kms:kme, jms:jme) :: qv            ! water vapor mixing ratio [kg/kg]
         real,   intent(inout), dimension(ims:ime, kms:kme, jms:jme) :: cloud         ! cloud water mixing ratio [kg/kg]
         real,   intent(inout), dimension(ims:ime, kms:kme, jms:jme) :: ice           ! cloud ice mixing ratio [kg/kg]
         real,   intent(inout), dimension(ims:ime, kms:kme, jms:jme) :: qrain         ! rain water mixing ratio [kg/kg]
         real,   intent(inout), dimension(ims:ime, kms:kme, jms:jme) :: qsnow         ! snow mixing ratio [kg/kg]
+        real,   intent(in), dimension(ims:ime, jms:jme) :: lh         ! snow mixing ratio [kg/kg]
+        real,   intent(in), dimension(ims:ime, jms:jme) :: sh         ! snow mixing ratio [kg/kg]
         real,   intent(in),    dimension(ims:ime, kms:kme, jms:jme) :: um            ! east-west wind speed on mass grid [m/s]
         real,   intent(in),    dimension(ims:ime, kms:kme, jms:jme) :: vm            ! north south wind speed on mass grid [m/s]
         real,   intent(in),    dimension(ims:ime, kms:kme, jms:jme) :: pii           ! exner function
@@ -89,7 +91,9 @@ contains
         real,   intent(inout), dimension(ims:ime,kms:kme,jms:jme), optional :: tend_qv_pbl   ! output water vapor tendency [kg/kg/s] (for use in other physics)
 
         ! local
-        real, dimension(ims:ime,kms:kme-1,jms:jme)                   :: dz_mass_i
+        real, dimension(ims:ime,kms:kme-1,jms:jme) :: dz_mass_i
+        real, dimension(ims:ime)                   :: qv_flux, th_flux
+
         integer :: i,j,k, kte
 
         ! don't process the top model level regardless, there shouldn't be any real pbl diffusion occuring there
@@ -153,9 +157,16 @@ contains
                 
             enddo
             
+            th_flux = (sh(ims:ime,j) * dt/cp)  &
+             / (rho(ims:ime,kts,j) * adv_dz(ims:ime,kts,j) * jaco(ims:ime,kts,j)*pii(ims:ime,kts,j))
+                
+            qv_flux = ( lh(ims:ime,j) * dt / LH_vaporization ) &
+             / (rho(its:ite,kts,j) * adv_dz(ims:ime,kts,j) * jaco(ims:ime,kts,j))
+                
             !Stagger Kq_m to vertical faces
             Kq_m(its:ite,kts:kte-1,j) = (Kq_m(its:ite,kts+1:kte,j) + Kq_m(its:ite,kts:kte-1,j))/2
-            call pbl_diffusion(qv, th, cloud, ice, qrain, qsnow, rho, adv_dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
+            call pbl_diffusion(qv, th, cloud, ice, qrain, qsnow, qv_flux, th_flux, &
+                               rho, adv_dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
 
             ! tend_qv_pbl(:,:,j+1) = (qv(:,:,j+1) - lastqv_m(:,:,j+1)) / dt
         enddo
@@ -164,49 +175,45 @@ contains
 
     end subroutine diagnostic_pbl
 
-    subroutine diffuse_variable(q, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
+    subroutine diffuse_variable(q, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w, bot_flux)
         real,   intent(inout),  dimension(ims:ime,kms:kme,jms:jme) :: q
         real,   intent(in),     dimension(ims:ime,kms:kme,jms:jme) :: jaco, rho, dz, jaco_w
         real,   intent(in),     dimension(ims:ime,kms:kme-1,jms:jme) :: dz_mass_i
         real,   intent(in),     dimension(ims:ime,kms:kme) :: rho_stag
+        real,   intent(in),  optional, dimension(ims:ime) :: bot_flux
+
 
         integer,intent(in) :: its, ite, kts, kte, j
 
         real, dimension(its:ite,kts:kte+1) :: fluxes
         integer :: k
+        
+        fluxes(its:ite,kms) = 0
+        if (present(bot_flux)) fluxes(its:ite,kms) = bot_flux
 
-        do k = kts, kte
+        do k = kts+1, kte
             ! Eventually this should be made into an implicit solution to avoid substepping
             ! if gradient is downward (qv[z+1]>qv[z]) then flux is negative
-            if (k == kts) then
-                fluxes(its:ite, k) = 0!*Kq_m(its:ite, k, j) * rho(its:ite, k,j) * (-3*q(its:ite, k, j) + 4*q(its:ite, k+1, j) - q(its:ite, k+2, j)) / &
-            else
-                fluxes(its:ite,k) = Kq_m(its:ite, k-1, j)*rho_stag(its:ite, k-1)*(q(its:ite, k, j) - q(its:ite, k-1, j)) / &
+            fluxes(its:ite,k) = Kq_m(its:ite, k-1, j)*rho_stag(its:ite, k-1)*(q(its:ite, k, j) - q(its:ite, k-1, j)) / &
                                     (dz_mass_i(its:ite, k-1, j)*jaco_w(its:ite, k-1, j))
-            endif
         enddo
         fluxes(its:ite,kte+1) = fluxes(its:ite,kte)
-        ! first layer assumes no flow through the surface, that comes from the LSM
-        !q(its:ite, kts,j) = q(its:ite, kts, j) + (-3*fluxes(its:ite,kts) + 4*fluxes(its:ite,kts+1) - fluxes(its:ite,kts+2)) / &
-        !                            (rho(its:ite, kts,j)*jaco(its:ite,kts,j)*(dz_mass_i(its:ite,kts,j)+dz_mass_i(its:ite,kts+1,j)))  
-                                    
-        ! middle layers (no change for top layer assuming flux in = flux out)
+
         q(its:ite, kts:kte,j) = q(its:ite, kts:kte, j) + (fluxes(its:ite,kts+1:kte+1) - fluxes(its:ite,kts:kte)) / &
                                     (rho(its:ite,kts:kte,j)*jaco(its:ite,kts:kte,j)*dz(its:ite,kts:kte,j))  
-                                    
-        ! make sure top fluxes end up in top layer
-        !q(its:ite, kte,j) = q(its:ite, kte, j) + (3*fluxes(its:ite,kte) - 4*fluxes(its:ite,kte-1) + fluxes(its:ite,kte-2)) / &
-        !                            (rho(its:ite, kte,j)*jaco(its:ite,kte,j)*(dz_mass_i(its:ite,kte-1,j)+dz_mass_i(its:ite,kte-2,j)))
+
         
     end subroutine diffuse_variable
 
-    subroutine pbl_diffusion(qv, th, cloud, ice, qrain, qsnow, rho, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
+    subroutine pbl_diffusion(qv, th, cloud, ice, qrain, qsnow, qv_flux, th_flux, rho, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
         real, intent(inout), dimension(ims:ime, kms:kme, jms:jme) :: th            ! potential temperature [K]
         real, intent(inout), dimension(ims:ime, kms:kme, jms:jme) :: qv            ! water vapor mixing ratio [kg/kg]
         real, intent(inout), dimension(ims:ime, kms:kme, jms:jme) :: cloud         ! cloud water mixing ratio [kg/kg]
         real, intent(inout), dimension(ims:ime, kms:kme, jms:jme) :: ice           ! cloud ice mixing ratio [kg/kg]
         real, intent(inout), dimension(ims:ime, kms:kme, jms:jme) :: qrain         ! rain water mixing ratio [kg/kg]
         real, intent(inout), dimension(ims:ime, kms:kme, jms:jme) :: qsnow         ! snow mixing ratio [kg/kg]
+        real, intent(in),    dimension(ims:ime) :: qv_flux         ! snow mixing ratio [kg/kg]
+        real, intent(in),    dimension(ims:ime) :: th_flux         ! snow mixing ratio [kg/kg]
         real, intent(in),    dimension(ims:ime, kms:kme, jms:jme) :: rho           ! air density [kg / m^3]
         real, intent(in),    dimension(ims:ime, kms:kme, jms:jme) :: dz            ! model level thickness
         real, intent(in),    dimension(ims:ime, kms:kme-1, jms:jme) :: dz_mass_i   ! model level thickness from mass-point to mass-point [m]
@@ -226,21 +233,10 @@ contains
                 rho_stag(ims:ime, k) = rho(ims:ime, k, j)
             endif
         enddo
-        ! note Kq_m already has dt/dz embedded in it
-        ! diffusion fluxes within the PBL
-        ! q = q + (k dq/dz)/dz *dt
 
-        !if K >1 we are in violation of the CFL condition and we need to subset (or make implicit...)
-        ! for most regions it is < 0.5, for the small regions it isn't just substep for now.
-        ! nsubsteps will often be 1, but allow up to N sub-steps in extreme cases
-        !where((Kq_m(its:ite, kts:kte,j)) > N_substeps*dz(its:ite, kts:kte,j))   &
-        !      Kq_m(its:ite, kts:kte, j) = dz(its:ite, kts:kte, j) * N_substeps
-
-        !nsubsteps = ceiling( 2 * maxval(Kq_m(its:ite, kts:kte, j) / dz(its:ite, kts:kte, j)))
-        !Kq_m(its:ite, kts:kte, j) = Kq_m(its:ite, kts:kte, j) / nsubsteps
         do t = 1, 2 !nsubsteps
             ! First water vapor
-            call diffuse_variable(qv, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
+            call diffuse_variable(qv, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w, bot_flux=qv_flux)
             ! and cloud water
             call diffuse_variable(cloud, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
             ! and cloud ice
@@ -250,7 +246,7 @@ contains
             ! and rain
             call diffuse_variable(qrain, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
             ! ditto for potential temperature
-            call diffuse_variable(th, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
+            call diffuse_variable(th, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w, bot_flux=th_flux)
             ! don't bother with graupel assuming they are falling fast *enough* not entirely fair...
         enddo
     end subroutine pbl_diffusion
