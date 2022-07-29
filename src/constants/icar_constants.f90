@@ -307,9 +307,10 @@ module icar_constants
     integer, parameter :: kMP_WSM6       = 4
     integer, parameter :: kMP_THOMP_AER  = 5
 
-    integer, parameter :: kPBL_BASIC     = 1
-    integer, parameter :: kPBL_SIMPLE    = 2
-    integer, parameter :: kPBL_YSU       = 3
+    integer, parameter :: kPBL_BASIC       = 1
+    integer, parameter :: kPBL_SIMPLE      = 2
+    integer, parameter :: kPBL_DIAGNOSTIC  = 3
+    integer, parameter :: kPBL_YSU         = 4
 
     integer, parameter :: kWATER_BASIC   = 1
     integer, parameter :: kWATER_SIMPLE  = 2
