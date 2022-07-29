@@ -23,7 +23,6 @@ module pbl_diagnostic
     use data_structures
     use domain_interface,   only : domain_t
     use options_interface,  only : options_t
-
     private
     public :: diagnostic_pbl, finalize_diagnostic_pbl, init_diagnostic_pbl
 
@@ -98,7 +97,6 @@ contains
         call calc_BVF(th, qv, dz_mass_i, cloud, ice, qrain, qsnow, kts, kte)
 
         call calc_pbl_stability_function()
-        
         !For diffusion calculations, use advection dz
         dz_mass_i(:,kms:kme-1,:) = ((adv_dz(:,kms:kme-1,:) + adv_dz(:,kms+1:kme,:))/2)
 
@@ -122,14 +120,16 @@ contains
 
                 ! rescale diffusion to cut down on excessive mixing
                 Kq_m(its:ite,k,j) = Kq_m(its:ite, k,j) * dt
-                                                
+                Kq_m(its:ite,k,j) = 1000.0               
             enddo
             
-            th_flux = -(sh(ims:ime,j) * dt/cp)  &
-             / (pii(ims:ime,kts,j))
-                
-            qv_flux = -(lh(ims:ime,j) * dt / LH_vaporization )
-                
+            !th_flux = -(sh(ims:ime,j) * dt/cp)  &
+            ! / (pii(ims:ime,kts,j))
+            th_flux = (-1 * dt/cp)  &
+             / (pii(ims:ime,kts,j))                
+            !qv_flux = -(lh(ims:ime,j) * dt / LH_vaporization )
+            qv_flux = (-1 * dt / LH_vaporization )
+
             !Stagger Kq_m to vertical faces
             Kq_m(its:ite,kts:kte-1,j) = (Kq_m(its:ite,kts+1:kte,j) + Kq_m(its:ite,kts:kte-1,j))/2
             call pbl_diffusion(qv, th, cloud, ice, qrain, qsnow, qv_flux, th_flux, &
@@ -152,8 +152,8 @@ contains
         real, dimension(its:ite,kts:kte+1) :: fluxes
         integer :: k
         
-        fluxes(its:ite,kms) = 0
-        if (present(bot_flux)) fluxes(its:ite,kms) = bot_flux(its:ite)
+        fluxes(its:ite,kts) = 0
+        if (present(bot_flux)) fluxes(its:ite,kts) = bot_flux(its:ite)
 
         do k = kts+1, kte
             ! Eventually this should be made into an implicit solution to avoid substepping
@@ -298,7 +298,7 @@ contains
         kds = domain%kds
         kde = domain%kde
 
-        allocate(BVF                     (ims:ime,kms:kme,jms:jme))
+        allocate(BVF                      (ims:ime,kms:kme,jms:jme))
         allocate(rig_m                    (ims:ime,kms:kme,jms:jme))
         allocate(ri_flux                  (ims:ime,kms:kme,jms:jme))
         allocate(stability_m              (ims:ime,kms:kme,jms:jme))
