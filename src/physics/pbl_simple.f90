@@ -125,8 +125,6 @@ contains
                         Kq_m(i,k,j)=1
                     endif
                 enddo
-                Kq_m(i,k,j)=1000
-
             enddo
 
             call pbl_diffusion(qv, th, cloud, ice, qrain, qsnow, rho, dz, its, ite, kts, kte, j)
