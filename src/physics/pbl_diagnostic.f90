@@ -23,6 +23,8 @@ module pbl_diagnostic
     use data_structures
     use domain_interface,   only : domain_t
     use options_interface,  only : options_t
+    use io_routines,          only : io_write
+
     private
     public :: diagnostic_pbl, finalize_diagnostic_pbl, init_diagnostic_pbl
 
@@ -53,7 +55,8 @@ module pbl_diagnostic
     integer :: ids, ide, jds, jde, kds, kde
 
 
-    real, parameter :: asymp_length_scale = 1/500.0 !m from COSMO doccumentation (Part 2 section 3) 
+    real, parameter :: asymp_length_scale = 500.0 !m from COSMO doccumentation (Part 2 section 3) 
+    real, parameter :: N_substeps=100. ! number of substeps to allow (puts a cap on K to match CFL)
 
 
 contains
@@ -88,6 +91,7 @@ contains
 
         ! don't process the top model level regardless, there shouldn't be any real pbl diffusion occuring there
         kte = min(kme, kte_in)
+        Kq_m = 1.0
         
         !For stability calculations, use physical dz
         dz_mass_i(:,kms:kme-1,:) = ((dz(:,kms:kme-1,:) + dz(:,kms+1:kme,:))/2)
@@ -105,38 +109,41 @@ contains
                 lastqv_m(:,k,j) = qv(:,k,j)
 
                 ! from eqn 12 in HP96
-                l_m(its:ite,k,j) = 1 / (1/(karman*(z(its:ite,k,j) - terrain(its:ite,j))) + asymp_length_scale)
-
-                where (rig_m(its:ite,k,j) > 0.38)
-                    Kq_m(its:ite,k,j) = 0.007 * l_m(its:ite,k,j)**2  * shear_m(its:ite,k,j)
-                else where (rig_m(its:ite,k,j) <= 0.38)
-                    
-                    Kq_m(its:ite,k,j) = l_m(its:ite,k,j)**2 * stability_m(its:ite,k,j)**(3/2.0) * &
+                !l_m(its:ite,k,j) = 1 / (1/(karman*(z(its:ite,k,j) - terrain(its:ite,j))) + asymp_length_scale)
+                l_m(its:ite,k,j) = karman * (z(its:ite,k,j) - terrain(its:ite,j))/(1+(z(its:ite,k,j) - terrain(its:ite,j))/asymp_length_scale)
+                where (stability_m(its:ite,k,j) < 0)
+                    Kq_m(its:ite,k,j) = (l_m(its:ite,k,j)**2)  * sqrt(shear_m(its:ite,k,j)) * 0.007
+                else where (stability_m(its:ite,k,j) >= 0)
+                    Kq_m(its:ite,k,j) = l_m(its:ite,k,j)**2 * stability_m(its:ite,k,j)**(3./2.) * &
                                     sqrt(max(0.0, (shear_m(its:ite,k,j)  - stability_h(its:ite,k,j) * BVF(its:ite,k,j)) ))
                     ! diffusion for scalars
                     Kq_m(its:ite,k,j) = Kq_m(its:ite,k,j) * stability_h(its:ite,k,j)
                 end where
 
-
-                ! rescale diffusion to cut down on excessive mixing
-                Kq_m(its:ite,k,j) = Kq_m(its:ite, k,j) * dt
-                Kq_m(its:ite,k,j) = 1000.0               
             enddo
             
-            !th_flux = -(sh(ims:ime,j) * dt/cp)  &
-            ! / (pii(ims:ime,kts,j))
-            th_flux = (-1 * dt/cp)  &
-             / (pii(ims:ime,kts,j))                
-            !qv_flux = -(lh(ims:ime,j) * dt / LH_vaporization )
-            qv_flux = (-1 * dt / LH_vaporization )
+            th_flux = -(sh(ims:ime,j) * dt/cp)  &
+             / (pii(ims:ime,kts,j))              
+            qv_flux = -(lh(ims:ime,j) * dt / LH_vaporization )
 
             !Stagger Kq_m to vertical faces
+            where ( Kq_m(its:ite,kts:kte,j) < 1.0) Kq_m(its:ite,kts:kte,j) = 1.0
             Kq_m(its:ite,kts:kte-1,j) = (Kq_m(its:ite,kts+1:kte,j) + Kq_m(its:ite,kts:kte-1,j))/2
+            Kq_m(its:ite,kts:kte,j) = Kq_m(its:ite,kts:kte,j) * dt
+            where ( Kq_m(its:ite,kts:kte,j) > 1000.0) Kq_m(its:ite,kts:kte,j) = 1000.0
+
+            
             call pbl_diffusion(qv, th, cloud, ice, qrain, qsnow, qv_flux, th_flux, &
                                rho, adv_dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
 
         enddo
-
+        !call io_write("shear_m.nc", "shear_m", shear_m(:,:,:) )
+        !call io_write("rig_m.nc", "rig_m", rig_m(:,:,:) )
+        !call io_write("l_m.nc", "l_m", l_m(:,:,:) )
+        !call io_write("stability_h.nc", "stability_h", stability_h(:,:,:) )
+        !call io_write("stability_m.nc", "stability_m", stability_m(:,:,:) )
+        !call io_write("BVF.nc", "BVF", BVF(:,:,:) )
+        !call io_write("Kq_m.nc", "Kq_m", Kq_m(:,:,:) )
     end subroutine diagnostic_pbl
 
     subroutine diffuse_variable(q, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w, bot_flux)
@@ -158,12 +165,12 @@ contains
         do k = kts+1, kte
             ! Eventually this should be made into an implicit solution to avoid substepping
             ! if gradient is downward (qv[z+1]>qv[z]) then flux is negative
-            fluxes(its:ite,k) = Kq_m(its:ite, k-1, j)*rho_stag(its:ite, k-1)*(q(its:ite, k, j) - q(its:ite, k-1, j)) / &
+            fluxes(its:ite,k) = -Kq_m(its:ite, k-1, j)*rho_stag(its:ite, k-1)*(q(its:ite, k, j) - q(its:ite, k-1, j)) / &
                                     (dz_mass_i(its:ite, k-1, j)*jaco_w(its:ite, k-1, j))
         enddo
-        fluxes(its:ite,kte+1) = fluxes(its:ite,kte)
+        fluxes(its:ite,kte+1) = 0 !fluxes(its:ite,kte)
 
-        q(its:ite, kts:kte,j) = q(its:ite, kts:kte, j) + (fluxes(its:ite,kts+1:kte+1) - fluxes(its:ite,kts:kte)) / &
+        q(its:ite, kts:kte,j) = q(its:ite, kts:kte, j) - (fluxes(its:ite,kts+1:kte+1) - fluxes(its:ite,kts:kte)) / &
                                     (rho(its:ite,kts:kte,j)*jaco(its:ite,kts:kte,j)*dz(its:ite,kts:kte,j))  
 
         
@@ -187,7 +194,7 @@ contains
         integer,intent(in) :: its, ite, kts, kte, j
 
         ! locals
-        integer :: k
+        integer :: k, nsubsteps, t
         real, dimension(ims:ime, kms:kme) :: rho_stag
 
         do k = kts, kte
@@ -198,19 +205,26 @@ contains
             endif
         enddo
 
-        ! First water vapor
-        call diffuse_variable(qv, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w, bot_flux=qv_flux)
-        ! and cloud water
-        call diffuse_variable(cloud, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
-        ! and cloud ice
-        call diffuse_variable(ice, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
-        ! and snow
-        call diffuse_variable(qsnow, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
-        ! and rain
-        call diffuse_variable(qrain, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
-        ! ditto for potential temperature
-        call diffuse_variable(th, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w, bot_flux=th_flux)
-        ! don't bother with graupel assuming they are falling fast *enough* not entirely fair...
+        !where((Kq_m(its:ite, kts:kte,j)) > N_substeps*dz(its:ite, kts:kte,j))   &
+        !      Kq_m(its:ite, kts:kte, j) = dz(its:ite, kts:kte, j) * N_substeps
+
+        !nsubsteps = ceiling( 2 * maxval(Kq_m(its:ite, kts:kte, j) / dz(its:ite, kts:kte, j)))
+        !Kq_m(its:ite, kts:kte, j) = Kq_m(its:ite, kts:kte, j) / nsubsteps
+        do t = 1, 2
+            ! First water vapor
+            call diffuse_variable(qv, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w, bot_flux=qv_flux)
+            ! and cloud water
+            call diffuse_variable(cloud, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
+            ! and cloud ice
+            call diffuse_variable(ice, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
+            ! and snow
+            call diffuse_variable(qsnow, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
+            ! and rain
+            call diffuse_variable(qrain, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w)
+            ! ditto for potential temperature
+            call diffuse_variable(th, rho, rho_stag, dz, dz_mass_i, its, ite, kts, kte, j, jaco, jaco_w, bot_flux=th_flux)
+            ! don't bother with graupel assuming they are falling fast *enough* not entirely fair...
+        enddo
     end subroutine pbl_diffusion
 
     subroutine calc_shear_sq(u_mass, v_mass, dz_mass_i,kts,kte)
@@ -241,16 +255,18 @@ contains
         real, intent(in),    dimension(ims:ime, kms:kme-1, jms:jme) :: dz_mass_i     ! model level thickness [m]
         integer,intent(in) :: kts, kte
 
-        real, dimension(ims:ime, kms:kme, jms:jme) :: vth                        ! virtual potential temperature
-        real, dimension(ims:ime, kms:kme, jms:jme) :: virt_pot_temp_zgradient_m  ! virtual potential z-gradient
+        real, allocatable, dimension(:,:,:) :: vth                        ! virtual potential temperature
+        real, allocatable, dimension(:,:,:) :: virt_pot_temp_zgradient_m  ! virtual potential z-gradient
 
+        allocate(vth(ims:ime, kms:kme, jms:jme))
+        allocate(virt_pot_temp_zgradient_m(ims:ime, kms:kme, jms:jme))
         ! first calculate the virtual potential temperature
         ! vth=th*(1+0.61*qv-(qc+qi+qr+qs))
         vth = th * (1 + 0.61 * qv - (cloud + ice + qrain + qsnow))
                              
                                              
         virt_pot_temp_zgradient_m(:, kts,:) = (-3*vth(:, kts,:) + 4*vth(:, kts+1,:) - vth(:, kts+2,:)) / (dz_mass_i(:,kts,:)+dz_mass_i(:,kts+1,:))
-        virt_pot_temp_zgradient_m(:, kts+1:kte-1,:) = (vth(:, kts+2:kte,:) + vth(:, kts:kte-2,:)) / (dz_mass_i(:,kts+1:kte-1,:)+dz_mass_i(:,kts:kte-2,:))                 
+        virt_pot_temp_zgradient_m(:, kts+1:kte-1,:) = (vth(:, kts+2:kte,:) - vth(:, kts:kte-2,:)) / (dz_mass_i(:,kts+1:kte-1,:)+dz_mass_i(:,kts:kte-2,:))                 
         virt_pot_temp_zgradient_m(:, kte,:) = ( 3*vth(:, kte,:) - 4*vth(:, kte-1,:) + vth(:, kte-2,:)) / (dz_mass_i(:,kte-1,:)+dz_mass_i(:,kte-2,:))
                                              
         BVF = (gravity/vth)*virt_pot_temp_zgradient_m
@@ -259,14 +275,16 @@ contains
 
     ! calculate the stability function based on HP96
     subroutine calc_pbl_stability_function()
-        real, dimension(ims:ime, kms:kme, jms:jme) :: gamma 
+        real, allocatable, dimension(:,:,:) :: gamma 
+
+        allocate(gamma(ims:ime, kms:kme, jms:jme))
 
         rig_m = BVF/shear_m
         
-        where(rig_m > 0)  ri_flux = 0.8333*(rig_m + 0.2805 - sqrt(max(0.0, rig_m**2 - 0.1122*rig_m + 0.2805**2)))
-        where(rig_m <= 0) ri_flux = 1.285 *(rig_m + 0.2305 - sqrt(max(0.0, rig_m**2 + 0.1023*rig_m + 0.2305**2)))
+        where(rig_m > 0)  ri_flux = 0.8333*(rig_m + 0.2805 - sqrt(max(0.0, (rig_m**2 - 0.1122*rig_m + 0.2805**2) )))
+        where(rig_m <= 0) ri_flux = 1.285 *(rig_m + 0.2305 - sqrt(max(0.0, (rig_m**2 + 0.1023*rig_m + 0.2305**2) )))
 
-        gamma = 1/(1-ri_flux)
+        gamma = ri_flux/(1-ri_flux)
         
         where(rig_m > 0)  stability_h = (1-2.5648*gamma)/(1-1.1388*gamma)
         where(rig_m <= 0) stability_h = (1-3.337*gamma) /(1-0.688*gamma)
