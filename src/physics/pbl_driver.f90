@@ -114,6 +114,9 @@ contains
                             domain% cloud_ice_mass        %data_3d,     &
                             domain% rain_mass             %data_3d,     &
                             domain% snow_mass             %data_3d,     &
+                            domain% cloud_ice_number      %data_3d,     &
+                            domain% rain_number           %data_3d,     &
+                            domain% snow_number           %data_3d,     &
                             domain% latent_heat           %data_2d,     &
                             domain% sensible_heat         %data_2d,     &
                             domain% u_mass                %data_3d,     &

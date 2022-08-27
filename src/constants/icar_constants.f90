@@ -47,6 +47,16 @@ module icar_constants
         integer :: snow_number_concentration
         integer :: graupel_in_air
         integer :: graupel_number_concentration
+        integer :: ice1_a
+        integer :: ice1_c
+        integer :: ice2_mass
+        integer :: ice2_number
+        integer :: ice2_a
+        integer :: ice2_c
+        integer :: ice3_mass
+        integer :: ice3_number
+        integer :: ice3_a
+        integer :: ice3_c
         integer :: precipitation
         integer :: convective_precipitation
         integer :: external_precipitation
@@ -250,7 +260,8 @@ module icar_constants
                                                             161, 162, 163, 164, 165, 166, 167, 168, 169, 170,  &
                                                             171, 172, 173, 174, 175, 176, 177, 178, 179, 180,  &
                                                             181, 182, 183, 184, 185, 186, 187, 188, 189, 190,  &
-                                                            191, 192, 193, 194, 195, 196, 197, 198, 199, 200)
+                                                            191, 192, 193, 194, 195, 196, 197, 198, 199, 200,  &
+                                                            201, 202, 203, 204, 205, 206, 207, 208, 209, 210)
 
     integer, parameter :: kINTEGER_BITS     = storage_size(kINTEGER_BITS)
     integer, parameter :: kMAX_STORAGE_VARS = storage_size(kVARS) / kINTEGER_BITS
@@ -306,7 +317,8 @@ module icar_constants
     integer, parameter :: kMP_MORRISON   = 3
     integer, parameter :: kMP_WSM6       = 4
     integer, parameter :: kMP_THOMP_AER  = 5
-
+    integer, parameter :: kMP_ISHMAEL    = 6
+    
     integer, parameter :: kPBL_BASIC       = 1
     integer, parameter :: kPBL_SIMPLE      = 2
     integer, parameter :: kPBL_DIAGNOSTIC  = 3
@@ -347,9 +359,9 @@ module icar_constants
 ! ------------------------------------------------
     real, parameter :: LH_vaporization=2260000.0 ! J/kg
     ! could be calculated as 2.5E6 + (-2112.0)*temp_degC ?
-    real, parameter :: Rd  = 287.058   ! J/(kg K) specific gas constant for dry air
-    real, parameter :: Rw  = 461.5     ! J/(kg K) specific gas constant for moist air
-    real, parameter :: cp  = 1000.0    ! J/kg/K   specific heat capacity of moist STP air?
+    real, parameter :: Rd  = 287   ! J/(kg K) specific gas constant for dry air
+    real, parameter :: Rw  = 461.6     ! J/(kg K) specific gas constant for moist air
+    real, parameter :: cp  = 1004.5    ! J/kg/K   specific heat capacity of moist STP air?
     real, parameter :: gravity= 9.81   ! m/s^2    gravity
     real, parameter :: pi  = 3.1415927 ! pi
     real, parameter :: stefan_boltzmann = 5.67e-8 ! the Stefan-Boltzmann constant

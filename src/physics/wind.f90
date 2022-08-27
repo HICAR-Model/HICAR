@@ -94,9 +94,9 @@ contains
         associate(dx         => domain%dx,                         &
                   rho        => domain%density%data_3d,            &
                   dz         => domain%advection_dz,               &
-                  jaco_u    => domain%jacobian_u,                  &
-                  jaco_v    => domain%jacobian_v,                  &
-                  jaco_w    => domain%jacobian_w)
+                  jaco_u     => domain%jacobian_u,                 &
+                  jaco_v     => domain%jacobian_v,                 &
+                  jaco_w     => domain%jacobian_w)
 
         ims = domain%ims
         ime = domain%ime
@@ -167,24 +167,34 @@ contains
         real,    intent(inout) :: w(:,:,:)
         real,    intent(in)    :: div(:,:,:), dz(:,:,:), jaco_w(:,:,:), rho(:,:,:)
         logical, intent(in)    :: adv_den
-        integer kms, kme, k
         
+        real, allocatable, dimension(:,:,:) :: rho_i
+        integer ims, ime, kms, kme, jms, jme, k
+
+        ims = lbound(div,1)
+        ime = ubound(div,1)
         kms = lbound(div,2)
         kme = ubound(div,2)
+        jms = lbound(div,3)
+        jme = ubound(div,3)
+        
+        allocate(rho_i(ims:ime,kms:kme-1,jms:jme))
+        
+        rho_i(:,kms:kme-1,:) = ( rho(:,kms:kme-1,:)*dz(:,kms:kme-1,:) + rho(:,kms+1:kme,:)*dz(:,kms+1:kme,:) ) / (dz(:,kms:kme-1,:)+dz(:,kms+1:kme,:))
         
         do k = kms,kme
             if (adv_den) then
                 if (k==kms) then
                     w(:,k,:) = 0 - div(:,k,:) * dz(:,k,:) &
-                                                / (jaco_w(:,k,:) * (rho(:,k,:)+rho(:,k+1,:))/2 )
+                                                / (jaco_w(:,k,:) * rho_i(:,k,:) )
                 elseif (k==kme) then
-                    w(:,k,:) = (w(:,k-1,:) * ((rho(:,k,:)+rho(:,k-1,:))/2) &
-                                                * jaco_w(:,k-1,:) - div(:,k,:) * dz(:,k,:)) &
+                    w(:,k,:) = ((w(:,k-1,:) * rho_i(:,k-1,:) &
+                                                * jaco_w(:,k-1,:)) - div(:,k,:) * dz(:,k,:)) &
                                                 / (jaco_w(:,k,:) * rho(:,k,:))
                 else
-                    w(:,k,:) = (w(:,k-1,:) * ((rho(:,k,:)+rho(:,k-1,:))/2) * &
-                                jaco_w(:,k-1,:) - div(:,k,:) * dz(:,k,:)) / &
-                                (jaco_w(:,k,:) *  (rho(:,k,:)+rho(:,k+1,:))/2 )
+                    w(:,k,:) = ( (w(:,k-1,:) * rho_i(:,k-1,:) * &
+                                jaco_w(:,k-1,:)) - div(:,k,:) * dz(:,k,:)) / &
+                                (jaco_w(:,k,:) *  rho_i(:,k,:) )
                 endif
             else
                 if (k==kms) then
@@ -204,10 +214,10 @@ contains
         real,           intent(in)    :: u(:,:,:), v(:,:,:), w(:,:,:), dz(:,:,:), jaco_u(:,:,:), jaco_v(:,:,:), jaco_w(:,:,:), rho(:,:,:)
 
         real,           intent(in)    :: dx
-        logical, optional, intent(in)  :: horz_only
         type(options_t),intent(in)    :: options
-
-        real, allocatable, dimension(:,:,:) :: diff_U, diff_V, u_met, v_met, w_met
+        logical, optional, intent(in) :: horz_only
+        
+        real, allocatable, dimension(:,:,:) :: diff_U, diff_V, u_met, v_met, w_met, rho_i
         integer :: ims, ime, jms, jme, kms, kme, k
         logical :: horz
 
@@ -226,6 +236,7 @@ contains
         allocate(u_met(ims:ime+1,kms:kme,jms:jme))
         allocate(v_met(ims:ime,kms:kme,jms:jme+1))
         allocate(w_met(ims:ime,kms:kme,jms:jme))
+        allocate(rho_i(ims:ime,kms:kme-1,jms:jme))
 
         !Multiplication of U/V by metric terms, converting jacobian to staggered-grid where possible, otherwise making assumption of
         !Constant jacobian at edges
@@ -238,6 +249,8 @@ contains
             v_met(:,:,jms+1:jme) = v(:,:,jms+1:jme) * jaco_v(:,:,jms+1:jme) * (rho(:,:,jms:jme-1) + rho(:,:,jms+1:jme))/2
             v_met(:,:,jms) = v(:,:,jms) * jaco_v(:,:,jms) * (1.5*rho(:,:,jms) - 0.5*rho(:,:,jms+1))
             v_met(:,:,jme+1) = v(:,:,jme+1) * jaco_v(:,:,jme+1) * (1.5*rho(:,:,jme) - 0.5*rho(:,:,jme-1))
+
+            rho_i(:,kms:kme-1,:) = ( rho(:,kms:kme-1,:)*dz(:,kms:kme-1,:) + rho(:,kms+1:kme,:)*dz(:,kms+1:kme,:) ) / (dz(:,kms:kme-1,:)+dz(:,kms+1:kme,:))
 
         else
             u_met = u * jaco_u
@@ -252,7 +265,7 @@ contains
         if (.NOT.(horz)) then
             if (options%parameters%advect_density) then
                 w_met(:,kme,:) = w(:,kme,:) * jaco_w(:,kme,:) * rho(:,kme,:)
-                w_met(:,kms:kme-1,:) = w(:,kms:kme-1,:) * jaco_w(:,kms:kme-1,:) * (rho(:,kms+1:kme,:) + rho(:,kms:kme-1,:))/2 
+                w_met(:,kms:kme-1,:) = w(:,kms:kme-1,:) * jaco_w(:,kms:kme-1,:) * rho_i
             else
                 w_met = w*jaco_w
             end if
@@ -265,11 +278,6 @@ contains
                                    (w_met(ims:ime,k,jms:jme)-w_met(ims:ime,k-1,jms:jme))/(dz(ims:ime,k,jms:jme))
                 endif
             enddo
-        ! technically, div should now be divided by the jacobian, however, no application of the full divergence in the code
-        ! requires this. The only time that the full divergence is calculated is for use in the variational-calc solver, and the
-        ! formulation of these equations has the constraint of 0-divergence. This leads to pure component-wise summation of
-        ! divergence, and never dividing by the jacobian. <-- a technical note, in case I ever come back here and am confused.
-
         endif
 
     end subroutine calc_divergence
@@ -402,16 +410,17 @@ contains
                              domain%w%data_3d*0.0,      &
                              domain%w%data_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
+                             domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
 
                 !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
                 if (options%parameters%wvar=="") domain%w_real%data_3d = 0.0  
                 domain%w%data_3d = (domain%w_real%data_3d-domain%w%data_3d)/domain%jacobian
-
                 call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
                                 domain%density%data_3d,options,horz_only=.False.)
-                call calc_iter_winds(domain,alpha,div)
+
+                call calc_iter_winds(domain,alpha,div,options%parameters%advect_density)
+
 
             endif
             ! else assumes even flow over the mountains
@@ -425,7 +434,7 @@ contains
                              domain% w %data_3d,      &
                              domain% w_real %data_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
+                             domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
         else
 
             call update_stability(domain)
@@ -467,7 +476,7 @@ contains
                              domain%w%meta_data%dqdt_3d*0.0,      &
                              domain%w%meta_data%dqdt_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
+                             domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
                              
                 !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
                 if (options%parameters%wvar=="") then
@@ -479,7 +488,8 @@ contains
                 call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
                                 domain%density%data_3d,options,horz_only=.False.)
-                call calc_iter_winds(domain,alpha,div,update_in=.True.)
+                                
+                call calc_iter_winds(domain,alpha,div,options%parameters%advect_density,update_in=.True.)
 
             endif
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
@@ -491,7 +501,7 @@ contains
                              domain% w %meta_data%dqdt_3d,      &
                              domain% w_real %dqdt_3d,           &
                              domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
+                             domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
 
 
         endif
@@ -516,13 +526,12 @@ contains
         if (ims==ids) alpha(ims,:,:) = alpha(ims+1,:,:)
         if (jme==jde) alpha(:,:,jme) = alpha(:,:,jme-1)
         if (ime==ide) alpha(ime,:,:) = alpha(ime-1,:,:)
-        !alpha = 1.0
     end subroutine calc_alpha
     
-    subroutine calc_w_real(u,v,w_grid,w_real,dzdx,dzdy,jacobian,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
+    subroutine calc_w_real(u,v,w_grid,w_real,dzdx,dzdy,jaco_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
 
         implicit none
-        real, intent(in), dimension(ims:ime,kms:kme,jms:jme)   :: w_grid,jacobian
+        real, intent(in), dimension(ims:ime,kms:kme,jms:jme)   :: w_grid,jaco_w
         real, intent(in), dimension(ims:ime+1,kms:kme,jms:jme) :: u,dzdx
         real, intent(in), dimension(ims:ime,kms:kme,jms:jme+1) :: v,dzdy
         real, intent(inout)                                    :: w_real(ims:ime,kms:kme,jms:jme)
@@ -559,7 +568,7 @@ contains
             ! currw = w(its:its, z, jts:jts) * dz_interface(its:its, z, jts:jts) / domain%dx
 
             ! the W grid relative motion
-            currw = w_grid(its:ite, z, jts:jte)
+            currw = w_grid(its:ite, z, jts:jte) * jaco_w(its:ite, z, jts:jte)
 
             ! if (options%physics%convection>0) then
             !     currw = currw + domain%w_cu(2:nx-1,z,2:ny-1) * domain%dz_inter(2:nx-1,z,2:ny-1) / domain%dx
@@ -569,7 +578,7 @@ contains
             ! includes vertical interpolation between w_z-1/2 and w_z+1/2
             w_real(its:ite, z, jts:jte) = (uw(its:ite,:) + uw(its+1:ite+1,:))*0.5 &
                                                  +(vw(:,jts:jte) + vw(:,jts+1:jte+1))*0.5 &
-                                                 +jacobian(its:ite,z,jts:jte)*(lastw + currw) * 0.5
+                                                 +(lastw + currw) * 0.5
             lastw = currw ! could avoid this memcopy cost using pointers or a single manual loop unroll
         end do
                 
