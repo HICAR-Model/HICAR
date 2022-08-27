@@ -117,7 +117,7 @@ contains
         class(domain_t),  intent(inout)   :: this
         type(options_t), intent(in)      :: options
         integer :: z
-        real, allocatable :: temp_1(:,:), temp_2(:,:)
+        real, allocatable :: temp_1(:,:), temp_2(:,:), temp_3(:,:,:), qsum(:,:,:)
         logical :: use_delta_terrain
 
         associate(ims => this%ims, ime => this%ime,                             &
@@ -128,10 +128,12 @@ contains
                   exner                 => this%exner%data_3d,                  &
                   pressure              => this%pressure%data_3d,               &
                   pressure_i            => this%pressure_interface%data_3d,     &
-                  dz_interface          => this%dz_interface%data_3d,           &
+                  dz_i                  => this%dz_interface%data_3d,           &
+                  dz_mass               => this%dz_mass%data_3d,                &
                   psfc                  => this%surface_pressure%data_2d,       &
                   density               => this%density%data_3d,                &
                   temperature           => this%temperature%data_3d,            &
+                  qv                    => this%water_vapor%data_3d,            &       
                   temperature_i         => this%temperature_interface%data_3d,  &
                   u                     => this%u%data_3d,                      &
                   v                     => this%v%data_3d,                      &
@@ -141,6 +143,48 @@ contains
 
         exner = exner_function(pressure)
 
+        temperature = potential_temperature * exner
+        temperature_i(:,kms+1:kme, :) = (temperature(:,kms:kme-1, :) + temperature(:,kms+1:kme, :)) / 2
+        temperature_i(:, kms, :) = temperature(:, kms, :) + (temperature(:, kms, :) - temperature(:, kms+1, :)) / 2
+
+        if (associated(this%density%data_3d)) then
+            allocate( qsum( ims:ime, kms:kme, jms:jme))
+            qsum = qv
+            if(associated(this%cloud_water_mass%data_3d)) then
+                qsum = qsum + this%cloud_water_mass%data_3d
+            endif
+            if(associated(this%cloud_ice_mass%data_3d)) then
+                qsum = qsum + this%cloud_ice_mass%data_3d
+            endif
+            if(associated(this%rain_mass%data_3d)) then
+                qsum = qsum + this%rain_mass%data_3d
+            endif
+            if(associated(this%snow_mass%data_3d)) then
+                qsum = qsum + this%snow_mass%data_3d
+            endif
+            if(associated(this%graupel_mass%data_3d)) then
+                qsum = qsum + this%graupel_mass%data_3d
+            endif
+            density =  pressure / &
+                        (Rd * temperature*(1+qsum)) ! kg/m^3
+        endif
+        if (associated(this%u_mass%data_3d)) then
+            u_mass = (u(ims+1:ime+1,:,:) + u(ims:ime,:,:)) / 2
+        endif
+        if (associated(this%v_mass%data_3d)) then
+            v_mass = (v(:,:,jms+1:jme+1) + v(:,:,jms:jme)) / 2
+        endif
+
+        !if( .not.(allocated(temp_3))) allocate( temp_3( ims:ime, kms:kme, jms:jme))
+        !temp_3(:,kms:kme-1,:) = ( density(:,kms:kme-1,:)*dz_i(:,kms:kme-1,:) + density(:,kms+1:kme,:)*dz_i(:,kms+1:kme,:) ) / (dz_i(:,kms:kme-1,:)+dz_i(:,kms+1:kme,:))
+
+        !do z=(kme-1),kms,-1
+        !   pressure(:,z,:) = pressure(:,z+1,:) + temp_3(:,z,:)*9.81*dz_mass(:,z+1,:)
+        !enddo
+        
+        !if (associated(this%density%data_3d)) then
+        !   density =  pressure /(Rd * temperature*(1+qsum)) ! kg/m^3
+        !endif
         ! domain%p_inter=domain%p
         ! call update_pressure(domain%p_inter, domain%z, domain%z_inter, domain%t)
         pressure_i(:,kms+1:kme, :) = (pressure(:,kms:kme-1, :) + pressure(:,kms+1:kme, :)) / 2
@@ -150,23 +194,7 @@ contains
         if (associated(this%surface_pressure%data_2d)) then
             psfc = pressure_i(:, kms, :)
         endif
-
-        temperature = potential_temperature * exner
-        temperature_i(:,kms+1:kme, :) = (temperature(:,kms:kme-1, :) + temperature(:,kms+1:kme, :)) / 2
-        temperature_i(:, kms, :) = temperature(:, kms, :) + (temperature(:, kms, :) - temperature(:, kms+1, :)) / 2
-
-        if (associated(this%density%data_3d)) then
-            density =  pressure / &
-                        (Rd * temperature) ! kg/m^3
-        endif
-        if (associated(this%u_mass%data_3d)) then
-            u_mass = (u(ims+1:ime+1,:,:) + u(ims:ime,:,:)) / 2
-        endif
-        if (associated(this%v_mass%data_3d)) then
-            v_mass = (v(:,:,jms+1:jme+1) + v(:,:,jms:jme)) / 2
-        endif
-
-
+        
     ! NOTE: all code below is not implemented in ICAR 2.0 yet
     ! it is left as a reminder of what needs to be done, and example when the time comes
     !
@@ -229,6 +257,16 @@ contains
       if (associated(this%snow_number%data_3d))           call this%snow_number%send()
       if (associated(this%graupel_mass%data_3d))          call this%graupel_mass%send()
       if (associated(this%graupel_number%data_3d))        call this%graupel_number%send()
+      if (associated(this%ice1_a%data_3d))                call this%ice1_a%send()
+      if (associated(this%ice1_c%data_3d))                call this%ice1_c%send()
+      if (associated(this%ice2_mass%data_3d))             call this%ice2_mass%send()
+      if (associated(this%ice2_number%data_3d))           call this%ice2_number%send()
+      if (associated(this%ice2_a%data_3d))                call this%ice2_a%send()
+      if (associated(this%ice2_c%data_3d))                call this%ice2_c%send()
+      if (associated(this%ice3_mass%data_3d))             call this%ice3_mass%send()
+      if (associated(this%ice3_number%data_3d))           call this%ice3_number%send()
+      if (associated(this%ice3_a%data_3d))                call this%ice3_a%send()
+      if (associated(this%ice3_c%data_3d))                call this%ice3_c%send()
 
     end subroutine
 
@@ -250,6 +288,17 @@ contains
       if (associated(this%snow_number%data_3d))           call this%snow_number%retrieve(no_sync=.True.)
       if (associated(this%graupel_mass%data_3d))          call this%graupel_mass%retrieve(no_sync=.True.)
       if (associated(this%graupel_number%data_3d))        call this%graupel_number%retrieve(no_sync=.True.)
+      if (associated(this%ice1_a%data_3d))                call this%ice1_a%retrieve(no_sync=.True.)
+      if (associated(this%ice1_c%data_3d))                call this%ice1_c%retrieve(no_sync=.True.)
+      if (associated(this%ice2_mass%data_3d))             call this%ice2_mass%retrieve(no_sync=.True.)
+      if (associated(this%ice2_number%data_3d))           call this%ice2_number%retrieve(no_sync=.True.)
+      if (associated(this%ice2_a%data_3d))                call this%ice2_a%retrieve(no_sync=.True.)
+      if (associated(this%ice2_c%data_3d))                call this%ice2_c%retrieve(no_sync=.True.)
+      if (associated(this%ice3_mass%data_3d))             call this%ice3_mass%retrieve(no_sync=.True.)
+      if (associated(this%ice3_number%data_3d))           call this%ice3_number%retrieve(no_sync=.True.)
+      if (associated(this%ice3_a%data_3d))                call this%ice3_a%retrieve(no_sync=.True.)
+      if (associated(this%ice3_c%data_3d))                call this%ice3_c%retrieve(no_sync=.True.)
+
     end subroutine
 
     !> -------------------------------
@@ -292,7 +341,7 @@ contains
         if (0<opt%vars_to_allocate( kVARS%w) )                          call setup(this%w_real,                   this%grid,   forcing_var=opt%parameters%wvar,       list=this%variables_to_force, force_boundaries=.False. )
         if (0<opt%vars_to_allocate( kVARS%nsquared) )                   call setup(this%nsquared,                 this%grid )
         if (0<opt%vars_to_allocate( kVARS%water_vapor) )                call setup(this%water_vapor,              this%grid,     forcing_var=opt%parameters%qvvar,      list=this%variables_to_force, force_boundaries=.True.)
-        if (0<opt%vars_to_allocate( kVARS%potential_temperature) )      call setup(this%potential_temperature,    this%grid,     forcing_var=opt%parameters%tvar,       list=this%variables_to_force, force_boundaries=.False.)
+        if (0<opt%vars_to_allocate( kVARS%potential_temperature) )      call setup(this%potential_temperature,    this%grid,     forcing_var=opt%parameters%tvar,       list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%cloud_water) )                call setup(this%cloud_water_mass,         this%grid,     forcing_var=opt%parameters%qcvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%cloud_number_concentration))  call setup(this%cloud_number,             this%grid,     forcing_var=opt%parameters%qncvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%cloud_ice) )                  call setup(this%cloud_ice_mass,           this%grid,     forcing_var=opt%parameters%qivar,      list=this%variables_to_force, force_boundaries=.True.)
@@ -303,6 +352,17 @@ contains
         if (0<opt%vars_to_allocate( kVARS%snow_number_concentration) )  call setup(this%snow_number,              this%grid,     forcing_var=opt%parameters%qnsvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%graupel_in_air) )             call setup(this%graupel_mass,             this%grid,     forcing_var=opt%parameters%qgvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%graupel_number_concentration))call setup(this%graupel_number,           this%grid,     forcing_var=opt%parameters%qngvar,      list=this%variables_to_force, force_boundaries=.True.)
+        if (0<opt%vars_to_allocate( kVARS%ice1_a))                      call setup(this%ice1_a,           this%grid)
+        if (0<opt%vars_to_allocate( kVARS%ice1_c))                      call setup(this%ice1_c,           this%grid)
+        if (0<opt%vars_to_allocate( kVARS%ice2_mass))                   call setup(this%ice2_mass,        this%grid)
+        if (0<opt%vars_to_allocate( kVARS%ice2_number))                 call setup(this%ice2_number,      this%grid)
+        if (0<opt%vars_to_allocate( kVARS%ice2_a))                      call setup(this%ice2_a,           this%grid)
+        if (0<opt%vars_to_allocate( kVARS%ice2_c))                      call setup(this%ice2_c,           this%grid)
+        if (0<opt%vars_to_allocate( kVARS%ice3_mass))                   call setup(this%ice3_mass,        this%grid)
+        if (0<opt%vars_to_allocate( kVARS%ice3_number))                 call setup(this%ice3_number,      this%grid)
+        if (0<opt%vars_to_allocate( kVARS%ice3_a))                      call setup(this%ice3_a,           this%grid)
+        if (0<opt%vars_to_allocate( kVARS%ice3_c))                      call setup(this%ice3_c,           this%grid)
+
         if (0<opt%vars_to_allocate( kVARS%precipitation) )              call setup(this%accumulated_precipitation,this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%convective_precipitation) )   call setup(this%accumulated_convective_pcp,this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%external_precipitation) )     call setup(this%external_precipitation,   this%grid2d,   forcing_var=opt%parameters%rain_var,  list=this%variables_to_force)
@@ -1354,6 +1414,7 @@ contains
         type(options_t), intent(in)     :: options
 
         real, allocatable :: temp(:,:,:)
+        integer :: i, j
 
         call read_core_variables(this, options)
 
@@ -1375,6 +1436,8 @@ contains
                   jms => this%jms,      jme => this%jme,                        &
                   kms => this%kms,      kme => this%kme,                        &
                   z                     => this%z%data_3d,                      &
+                  dz                    => options%parameters%dz_levels,        &
+                  dz_i                  => this%dz_interface%data_3d,           &
                   global_jacobian       => this%global_jacobian,                &
                   jacobian              => this%jacobian,                       &
                   jacobian_u            => this%jacobian_u,                     &
@@ -1386,6 +1449,7 @@ contains
 
             if (allocated(temp)) deallocate(temp)
             allocate(temp(this%ids:this%ide+1, this%kds:this%kde, this%jds:this%jde+1))
+
             temp(this%ids,:,this%jds:this%jde) = global_jacobian(this%ids,:,this%jds:this%jde)
             temp(this%ide+1,:,this%jds:this%jde) = global_jacobian(this%ide,:,this%jds:this%jde)
             temp(this%ids+1:this%ide,:,this%jds:this%jde) = (global_jacobian(this%ids+1:this%ide,:,this%jds:this%jde) + &
@@ -1398,11 +1462,10 @@ contains
                                                 global_jacobian(this%ids:this%ide,:,this%jds:this%jde-1))/2
             jacobian_v = temp(ims:ime,:,jms:jme+1)
 
-            temp(this%ids:this%ide,this%kme,this%jds) = global_jacobian(this%ids:this%ide,this%kme,this%jds)
-            temp(this%ids:this%ide,this%kms:this%kme-1,this%jds:this%jde) = (global_jacobian(this%ids:this%ide,this%kms:this%kme-1,this%jds:this%jde) + &
-                                                                            global_jacobian(this%ids:this%ide,this%kms+1:this%kme,this%jds:this%jde))/2
-            jacobian_w = temp(ims:ime,:,jms:jme)
-
+            jacobian_w(:,this%kme,:) = jacobian(:,this%kme,:)
+            jacobian_w(:,this%kms:this%kme-1,:) = (dz_i(:,this%kms:this%kme-1,:)* jacobian(:,this%kms:this%kme-1,:) + &
+                                                   dz_i(:,this%kms+1:this%kme,:)* jacobian(:,this%kms+1:this%kme,:))/ &
+                                                                                (dz_i(:,this%kms:this%kme-1,:)+dz_i(:,this%kms+1:this%kme,:))
             call setup_dzdxy(this, options)
 
                 ! technically these should probably be defined to the k+1 model top as well bu not used at present.
@@ -1569,7 +1632,7 @@ contains
         this%dzdx(:,:,:) = global_dzdx(this%ims:this%ime,:,this%jms:this%jme)
                   
         
-        global_dzdx(this%ids+1:this%ide,:,:) = (global_z(this%ids+1:this%ide,:,:) - global_z(this%ids:this%ide-1,:,:))/this%dx
+        global_dzdx(this%ids+1:this%ide,:,:) = (global_dzdx(this%ids+1:this%ide,:,:) + global_dzdx(this%ids:this%ide-1,:,:))/2.0
         global_dzdx(this%ids,:,:) = global_dzdx(this%ids+1,:,:) 
         global_dzdx(this%ide+1,:,:) = global_dzdx(this%ide,:,:)
                 
@@ -1585,7 +1648,7 @@ contains
                                          4*global_z(:,:,this%jde-1) + global_z(:,:,this%jde-2)) / (2*this%dx)
         this%dzdy(:,:,:) = global_dzdy(this%ims:this%ime,:,this%jms:this%jme)
         
-        global_dzdy(:,:,this%jds+1:this%jde) = (global_z(:,:,this%jds+1:this%jde) - global_z(:,:,this%jds:this%jde-1))/this%dx
+        global_dzdy(:,:,this%jds+1:this%jde) = (global_dzdy(:,:,this%jds+1:this%jde) + global_dzdy(:,:,this%jds:this%jde-1))/2.0
         global_dzdy(:,:,this%jds) = global_dzdy(:,:,this%jds+1) 
         global_dzdy(:,:,this%jde+1) = global_dzdy(:,:,this%jde)
                 
@@ -2354,18 +2417,29 @@ contains
       if (present(update_in)) update = update_in
 
       if (update) then
-        if (associated(this%water_vapor%meta_data%dqdt_3d)           ) where(this%water_vapor%meta_data%dqdt_3d < 0)             this%water_vapor%meta_data%dqdt_3d = 0
-        if (associated(this%potential_temperature%meta_data%dqdt_3d) ) where(this%potential_temperature%meta_data%dqdt_3d < 0)   this%potential_temperature%meta_data%dqdt_3d = 0
-        if (associated(this%cloud_water_mass%meta_data%dqdt_3d)      ) where(this%cloud_water_mass%meta_data%dqdt_3d < 0)        this%cloud_water_mass%meta_data%dqdt_3d = 0
-        if (associated(this%cloud_number%meta_data%dqdt_3d)          ) where(this%cloud_number%meta_data%dqdt_3d < 0)            this%cloud_number%meta_data%dqdt_3d = 0
-        if (associated(this%cloud_ice_mass%meta_data%dqdt_3d)        ) where(this%cloud_ice_mass%meta_data%dqdt_3d < 0)          this%cloud_ice_mass%meta_data%dqdt_3d = 0
-        if (associated(this%cloud_ice_number%meta_data%dqdt_3d)      ) where(this%cloud_ice_number%meta_data%dqdt_3d < 0)        this%cloud_ice_number%meta_data%dqdt_3d = 0
-        if (associated(this%rain_mass%meta_data%dqdt_3d)             ) where(this%rain_mass%meta_data%dqdt_3d < 0)               this%rain_mass%meta_data%dqdt_3d = 0
-        if (associated(this%rain_number%meta_data%dqdt_3d)           ) where(this%rain_number%meta_data%dqdt_3d < 0)             this%rain_number%meta_data%dqdt_3d = 0
-        if (associated(this%snow_mass%meta_data%dqdt_3d)             ) where(this%snow_mass%meta_data%dqdt_3d < 0)               this%snow_mass%meta_data%dqdt_3d = 0
-        if (associated(this%snow_number%meta_data%dqdt_3d)           ) where(this%snow_number%meta_data%dqdt_3d < 0)             this%snow_number%meta_data%dqdt_3d = 0
-        if (associated(this%graupel_mass%meta_data%dqdt_3d)          ) where(this%graupel_mass%meta_data%dqdt_3d < 0)            this%graupel_mass%meta_data%dqdt_3d = 0
-        if (associated(this%graupel_number%meta_data%dqdt_3d)        ) where(this%graupel_number%meta_data%dqdt_3d < 0)          this%graupel_number%meta_data%dqdt_3d = 0
+        if (associated(this%water_vapor%meta_data%dqdt_3d)      ) where(this%water_vapor%meta_data%dqdt_3d < 0)           this%water_vapor%meta_data%dqdt_3d = 0
+        if (associated(this%potential_temperature%meta_data%dqdt_3d) ) where(this%potential_temperature%meta_data%dqdt_3d < 0) this%potential_temperature%meta_data%dqdt_3d = 0
+        if (associated(this%cloud_water_mass%meta_data%dqdt_3d) ) where(this%cloud_water_mass%meta_data%dqdt_3d < 0)      this%cloud_water_mass%meta_data%dqdt_3d = 0
+        if (associated(this%cloud_number%meta_data%dqdt_3d)     ) where(this%cloud_number%meta_data%dqdt_3d < 0)          this%cloud_number%meta_data%dqdt_3d = 0
+        if (associated(this%cloud_ice_mass%meta_data%dqdt_3d)   ) where(this%cloud_ice_mass%meta_data%dqdt_3d < 0)        this%cloud_ice_mass%meta_data%dqdt_3d = 0
+        if (associated(this%cloud_ice_number%meta_data%dqdt_3d) ) where(this%cloud_ice_number%meta_data%dqdt_3d < 0)      this%cloud_ice_number%meta_data%dqdt_3d = 0
+        if (associated(this%rain_mass%meta_data%dqdt_3d)        ) where(this%rain_mass%meta_data%dqdt_3d < 0)             this%rain_mass%meta_data%dqdt_3d = 0
+        if (associated(this%rain_number%meta_data%dqdt_3d)      ) where(this%rain_number%meta_data%dqdt_3d < 0)           this%rain_number%meta_data%dqdt_3d = 0
+        if (associated(this%snow_mass%meta_data%dqdt_3d)        ) where(this%snow_mass%meta_data%dqdt_3d < 0)             this%snow_mass%meta_data%dqdt_3d = 0
+        if (associated(this%snow_number%meta_data%dqdt_3d)      ) where(this%snow_number%meta_data%dqdt_3d < 0)           this%snow_number%meta_data%dqdt_3d = 0
+        if (associated(this%graupel_mass%meta_data%dqdt_3d)     ) where(this%graupel_mass%meta_data%dqdt_3d < 0)          this%graupel_mass%meta_data%dqdt_3d = 0
+        if (associated(this%graupel_number%meta_data%dqdt_3d)   ) where(this%graupel_number%meta_data%dqdt_3d < 0)        this%graupel_number%meta_data%dqdt_3d = 0
+        if (associated(this%ice1_a%meta_data%dqdt_3d)           ) where(this%ice1_a%meta_data%dqdt_3d < 0)                this%ice1_a%meta_data%dqdt_3d = 0
+        if (associated(this%ice1_c%meta_data%dqdt_3d)           ) where(this%ice1_c%meta_data%dqdt_3d < 0)                this%ice1_c%meta_data%dqdt_3d = 0
+        if (associated(this%ice2_mass%meta_data%dqdt_3d)        ) where(this%ice2_mass%meta_data%dqdt_3d < 0)             this%ice2_mass%meta_data%dqdt_3d = 0
+        if (associated(this%ice2_number%meta_data%dqdt_3d)      ) where(this%ice2_number%meta_data%dqdt_3d < 0)           this%ice2_number%meta_data%dqdt_3d = 0
+        if (associated(this%ice2_a%meta_data%dqdt_3d)           ) where(this%ice2_a%meta_data%dqdt_3d < 0)                this%ice2_a%meta_data%dqdt_3d = 0
+        if (associated(this%ice2_c%meta_data%dqdt_3d)           ) where(this%ice2_c%meta_data%dqdt_3d < 0)                this%ice2_c%meta_data%dqdt_3d = 0
+        if (associated(this%ice3_mass%meta_data%dqdt_3d)        ) where(this%ice3_mass%meta_data%dqdt_3d < 0)             this%ice3_mass%meta_data%dqdt_3d = 0
+        if (associated(this%ice3_number%meta_data%dqdt_3d)      ) where(this%ice3_number%meta_data%dqdt_3d < 0)           this%ice3_number%meta_data%dqdt_3d = 0
+        if (associated(this%ice3_a%meta_data%dqdt_3d)           ) where(this%ice3_a%meta_data%dqdt_3d < 0)                this%ice3_a%meta_data%dqdt_3d = 0
+        if (associated(this%ice3_c%meta_data%dqdt_3d)           ) where(this%ice3_c%meta_data%dqdt_3d < 0)                this%ice3_c%meta_data%dqdt_3d = 0
+
       else
         if (associated(this%water_vapor%data_3d)           ) where(this%water_vapor%data_3d < 0)             this%water_vapor%data_3d = 0
         if (associated(this%potential_temperature%data_3d) ) where(this%potential_temperature%data_3d < 0)   this%potential_temperature%data_3d = 0
@@ -2379,6 +2453,17 @@ contains
         if (associated(this%snow_number%data_3d)           ) where(this%snow_number%data_3d < 0)             this%snow_number%data_3d = 0
         if (associated(this%graupel_mass%data_3d)          ) where(this%graupel_mass%data_3d < 0)            this%graupel_mass%data_3d = 0
         if (associated(this%graupel_number%data_3d)        ) where(this%graupel_number%data_3d < 0)          this%graupel_number%data_3d = 0
+        if (associated(this%ice1_a%data_3d)                ) where(this%ice1_a%data_3d < 0)                  this%ice1_a%data_3d = 0
+        if (associated(this%ice1_c%data_3d)                ) where(this%ice1_c%data_3d < 0)                  this%ice1_c%data_3d = 0
+        if (associated(this%ice2_mass%data_3d)             ) where(this%ice2_mass%data_3d < 0)               this%ice2_mass%data_3d = 0
+        if (associated(this%ice2_number%data_3d)           ) where(this%ice2_number%data_3d < 0)             this%ice2_number%data_3d = 0
+        if (associated(this%ice2_a%data_3d)                ) where(this%ice2_a%data_3d < 0)                  this%ice2_a%data_3d = 0
+        if (associated(this%ice2_c%data_3d)                ) where(this%ice2_c%data_3d < 0)                  this%ice2_c%data_3d = 0
+        if (associated(this%ice3_mass%data_3d)             ) where(this%ice3_mass%data_3d < 0)               this%ice3_mass%data_3d = 0
+        if (associated(this%ice3_number%data_3d)           ) where(this%ice3_number%data_3d < 0)             this%ice3_number%data_3d = 0
+        if (associated(this%ice3_a%data_3d)                ) where(this%ice3_a%data_3d < 0)                  this%ice3_a%data_3d = 0
+        if (associated(this%ice3_c%data_3d)                ) where(this%ice3_c%data_3d < 0)                  this%ice3_c%data_3d = 0
+
       endif
     end subroutine
 
@@ -2703,7 +2788,6 @@ contains
 
         ! make sure the dictionary is reset to point to the first variable
         call this%variables_to_force%reset_iterator()
-        if (this_image()==12)  call io_write("relax_filter_3d.nc", "this%relax_filter_3d", this%relax_filter_3d(:,:,:) )
 
         ! No iterate through the dictionary as long as there are more elements present
         do while (this%variables_to_force%has_more_elements())
@@ -2719,8 +2803,12 @@ contains
                 else
                     !Update forcing data to current time step
                     forcing_hi%data_2d = forcing_hi%data_2d + (forcing_hi%dqdt_2d * dt%seconds())
-                    var_to_update%data_2d = var_to_update%data_2d + (this%relax_filter_2d * dt%seconds()/3600.0) * &
-                        (forcing_hi%data_2d - var_to_update%data_2d)
+                    where(this%relax_filter_2d == 1.0)
+                        var_to_update%data_2d = forcing_hi%data_2d
+                    else where(this%relax_filter_2d < 1.0)
+                        var_to_update%data_2d = var_to_update%data_2d + (this%relax_filter_2d * dt%seconds()/3600.0) * &
+                            (forcing_hi%data_2d - var_to_update%data_2d)
+                    end where
                 endif 
 
             else if (var_to_update%three_d) then
@@ -2731,8 +2819,12 @@ contains
                 else
                     !Update forcing data to current time step
                     forcing_hi%data_3d = forcing_hi%data_3d + (forcing_hi%dqdt_3d * dt%seconds())
-                    var_to_update%data_3d = var_to_update%data_3d + (this%relax_filter_3d * dt%seconds()/3600.0) * &
-                        (forcing_hi%data_3d - var_to_update%data_3d)
+                    where(this%relax_filter_3d == 1.0)
+                        var_to_update%data_3d = forcing_hi%data_3d
+                    else where(this%relax_filter_3d < 1.0)
+                        var_to_update%data_3d = var_to_update%data_3d + (this%relax_filter_3d * dt%seconds()/3600.0) * &
+                            (forcing_hi%data_3d - var_to_update%data_3d)
+                    end where
                 endif
             endif
 
@@ -2931,7 +3023,6 @@ contains
                     var_to_interpolate%data_3d = forcing_hi%data_3d
                 endif
                 
-
                 if (var_is_pressure) pressure = forcing_hi
                 if (var_is_potential_temp) potential_temp = forcing_hi
             endif
@@ -2944,12 +3035,13 @@ contains
             call adjust_pressure_temp(pressure%dqdt_3d,potential_temp%dqdt_3d, forcing%geo%z, this%geo%z)
             this%pressure%dqdt_3d = pressure%dqdt_3d
             this%potential_temperature%meta_data%dqdt_3d = potential_temp%dqdt_3d
-
+            !this%w_real%dqdt_3d = 0
         else
             call adjust_pressure_temp(pressure%data_3d,potential_temp%data_3d, forcing%geo%z, this%geo%z)
             pressure%data_3d = pressure%data_3d
             this%pressure%data_3d = pressure%data_3d
             this%potential_temperature%data_3d = potential_temp%data_3d
+            !this%w_real%data_3d = 0
         endif
         
 
@@ -2979,7 +3071,7 @@ contains
                         dz = input_z(i,1,j)-output_z(i,k,j)
                         
                         !Assume lapse rate of -6.5ºC/1km
-                        potential_temp(i,k,j) = potential_temp(i,k,j) + 6.5*dz/1000.0
+                        !potential_temp(i,k,j) = potential_temp(i,k,j) + 6.5*dz/1000.0
                         
                         !estimate pressure difference 1200 Pa for each 100m difference for exner function
                         p_guess = pressure(i,k,j) + 1200*dz/100.0

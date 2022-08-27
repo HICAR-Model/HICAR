@@ -58,6 +58,16 @@ contains
         if (options%vars_to_advect(kVARS%rain_number_concentration)>0) call var_list%add_var('nr', domain%rain_number%meta_data)      
         if (options%vars_to_advect(kVARS%snow_number_concentration)>0) call var_list%add_var('ns', domain%snow_number%meta_data)      
         if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call var_list%add_var('ng', domain%graupel_number%meta_data)   
+        if (options%vars_to_advect(kVARS%ice1_a)>0) call var_list%add_var('ice1_a', domain%ice1_a%meta_data)   
+        if (options%vars_to_advect(kVARS%ice1_c)>0) call var_list%add_var('ice1_c', domain%ice1_c%meta_data)   
+        if (options%vars_to_advect(kVARS%ice2_mass)>0) call var_list%add_var('ice2_mass', domain%ice2_mass%meta_data)   
+        if (options%vars_to_advect(kVARS%ice2_number)>0) call var_list%add_var('ice2_number', domain%ice2_number%meta_data)   
+        if (options%vars_to_advect(kVARS%ice2_a)>0) call var_list%add_var('ice2_a', domain%ice2_a%meta_data)   
+        if (options%vars_to_advect(kVARS%ice2_c)>0) call var_list%add_var('ice2_c', domain%ice2_c%meta_data)   
+        if (options%vars_to_advect(kVARS%ice3_mass)>0) call var_list%add_var('ice3_mass', domain%ice3_mass%meta_data)   
+        if (options%vars_to_advect(kVARS%ice3_number)>0) call var_list%add_var('ice3_number', domain%ice3_number%meta_data)   
+        if (options%vars_to_advect(kVARS%ice3_a)>0) call var_list%add_var('ice3_a', domain%ice3_a%meta_data)   
+        if (options%vars_to_advect(kVARS%ice3_c)>0) call var_list%add_var('ice3_c', domain%ice3_c%meta_data)   
 
 
     end subroutine adv_init
@@ -144,7 +154,7 @@ contains
                     call adv4_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, &
                                        domain%jacobian,flux_corr=options%adv_options%flux_corr)
                     var_to_advect%data_3d = temp
-                             
+                    !call var_to_advect%exchange()
                              
                                              
                     !Initial advection-tendency calculations
@@ -186,9 +196,7 @@ contains
                 else if(options%physics%advection==kADV_MPDATA) then
                     call mpdata_advect3d(var_to_advect%data_3d, domain%jacobian, domain%advection_dz, domain%dx,dt,options)
                 else if (options%physics%advection==kADV_4TH) then
-                    call adv4_advect3d(var_to_advect%data_3d,var_to_advect%data_3d, domain%advection_dz, domain%jacobian)
-                    !Cheep flux correction -- to be replaced                    
-                    where(var_to_advect%data_3d < 0) var_to_advect%data_3d = 0
+                    call adv4_advect3d(var_to_advect%data_3d,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,flux_corr=options%adv_options%flux_corr)
                 endif
             endif
         enddo

@@ -51,16 +51,18 @@ contains
     !! Starts by setting w out of the ground=0 then works through layers
     !!
     !!------------------------------------------------------------
-    subroutine calc_iter_winds(domain,alpha_in,div_in,update_in)
+    subroutine calc_iter_winds(domain,alpha_in,div_in,adv_den,update_in)
         implicit none
         type(domain_t), intent(inout) :: domain
         real, intent(in), dimension(domain%grid%ims:domain%grid%ime, &
                                     domain%grid%kms:domain%grid%kme, &
                                     domain%grid%jms:domain%grid%jme) :: alpha_in, div_in
+        logical, intent(in) :: adv_den
         logical, optional, intent(in) :: update_in
-        
+
         PetscScalar,pointer :: lambda(:,:,:)
         logical             :: update
+
         integer k !, i_s, i_e, k_s, k_e, j_s, j_e
         
         PetscErrorCode ierr
@@ -189,7 +191,7 @@ contains
         call DMGlobalToLocalEnd(da,x,INSERT_VALUES,localX,ierr)
 
         call DMDAVecGetArrayF90(da,localX,lambda, ierr)
-        call calc_updated_winds(domain, lambda, update)
+        call calc_updated_winds(domain, lambda, update, adv_den)
         call DMDAVecRestoreArrayF90(da,localX,lambda, ierr)
 
         !Exchange u and v, since the outer points are not updated in above function
@@ -204,14 +206,16 @@ contains
         
     end subroutine calc_iter_winds
     
-    subroutine calc_updated_winds(domain,lambda,update) !u, v, w, jaco_u,jaco_v,jaco_w,u_dzdx,v_dzdy,lambda, ids, ide, jds, jde)
+    subroutine calc_updated_winds(domain,lambda,update,adv_den) !u, v, w, jaco_u,jaco_v,jaco_w,u_dzdx,v_dzdy,lambda, ids, ide, jds, jde)
         type(domain_t), intent(inout) :: domain
         !real, intent(inout), dimension(:,:,:)  :: u,v,w
         !real, intent(in), dimension(:,:,:)     :: jaco_u,jaco_v,jaco_w, u_dzdx, v_dzdy
         PetscScalar, intent(in), pointer       :: lambda(:,:,:)
         logical,     intent(in)                :: update
+        logical,     intent(in)                :: adv_den
 
-        real, allocatable, dimension(:,:,:)    :: u_dlambdz, v_dlambdz, u_temp, v_temp, lambda_too
+
+        real, allocatable, dimension(:,:,:)    :: u_dlambdz, v_dlambdz, u_temp, v_temp, lambda_too, rho, rho_u, rho_v
         integer k, i_start, i_end, j_start, j_end !i_s, i_e, k_s, k_e, j_s, j_e, ids, ide, jds, jde
                 
         !i_s = domain%its-1
@@ -220,6 +224,7 @@ contains
         !k_e = domain%kte  
         !j_s = domain%jts-1
         !j_e = domain%jte+1
+
 
         !i_s+hs, unless we are on global boundary, then i_s
         i_start = i_s+1
@@ -242,6 +247,36 @@ contains
 
         allocate(u_dlambdz(i_start:i_end,k_s:k_e,j_s:j_e))
         allocate(v_dlambdz(i_s:i_e,k_s:k_e,j_start:j_end))
+        
+        allocate(rho(domain%ims:domain%ime,k_s:k_e,domain%jms:domain%jme))
+        allocate(rho_u(i_start:i_end,k_s:k_e,j_s:j_e))
+        allocate(rho_v(i_s:i_e,k_s:k_e,j_start:j_end))
+
+        rho = 1.0
+        rho_u = 1.0
+        rho_v = 1.0
+        
+        if (adv_den) rho(domain%ims:domain%ime,:,domain%jms:domain%jme)=domain%density%data_3d(domain%ims:domain%ime,:,domain%jms:domain%jme)
+        
+        if (i_s==domain%grid%ids) then
+            rho_u(i_start+1:i_end,:,j_s:j_e) = 0.5*(rho(i_start+1:i_end,:,j_s:j_e) + rho(i_start:i_end-1,:,j_s:j_e))
+            rho_u(i_start,:,j_s:j_e) = rho(i_start,:,j_s:j_e)
+        else if (i_e==domain%grid%ide) then
+            rho_u(i_start:i_end-1,:,j_s:j_e) = 0.5*(rho(i_start:i_end-1,:,j_s:j_e) + rho(i_start-1:i_end-2,:,j_s:j_e))
+            rho_u(i_end,:,j_s:j_e) = rho(i_end-1,:,j_s:j_e)
+        else
+            rho_u(i_start:i_end,:,j_s:j_e) = 0.5*(rho(i_start:i_end,:,j_s:j_e) + rho(i_start-1:i_end-1,:,j_s:j_e))
+        endif
+        
+        if (j_s==domain%grid%jds) then
+            rho_v(i_s:i_e,:,j_start+1:j_end) = 0.5*(rho(i_s:i_e,:,j_start+1:j_end) + rho(i_s:i_e,:,j_start:j_end-1))
+            rho_v(i_s:i_e,:,j_start) = rho(i_s:i_e,:,j_start)
+        else if (j_e==domain%grid%jde) then
+            rho_v(i_s:i_e,:,j_start:j_end-1) = 0.5*(rho(i_s:i_e,:,j_start:j_end-1) + rho(i_s:i_e,:,j_start-1:j_end-2))
+            rho_v(i_s:i_e,:,j_end) = rho(i_s:i_e,:,j_end-1)
+        else
+            rho_v(i_s:i_e,:,j_start:j_end) = 0.5*(rho(i_s:i_e,:,j_start:j_end) + rho(i_s:i_e,:,j_start-1:j_end-1))
+        endif
         
         !stager lambda to u grid
         u_temp = (lambda(i_start:i_end,k_s-1:k_e+1,j_s:j_e) + lambda(i_start-1:i_end-1,k_s-1:k_e+1,j_s:j_e)) / 2 
@@ -272,22 +307,22 @@ contains
             domain%u%meta_data%dqdt_3d(i_start:i_end,:,j_s:j_e) = domain%u%meta_data%dqdt_3d(i_start:i_end,:,j_s:j_e) + &
                                                             0.5*((lambda(i_start:i_end,k_s:k_e,j_s:j_e) - &
                                                             lambda(i_start-1:i_end-1,k_s:k_e,j_s:j_e))/dx - &
-            (1/domain%jacobian_u(i_start:i_end,:,j_s:j_e))*domain%dzdx_u(i_start:i_end,:,j_s:j_e)*(u_dlambdz))
+            (1/domain%jacobian_u(i_start:i_end,:,j_s:j_e))*domain%dzdx_u(i_start:i_end,:,j_s:j_e)*(u_dlambdz))/rho_u(i_start:i_end,:,j_s:j_e)
             
             domain%v%meta_data%dqdt_3d(i_s:i_e,:,j_start:j_end) = domain%v%meta_data%dqdt_3d(i_s:i_e,:,j_start:j_end) + &
                                                             0.5*((lambda(i_s:i_e,k_s:k_e,j_start:j_end) - &
                                                             lambda(i_s:i_e,k_s:k_e,j_start-1:j_end-1))/dx - &
-            (1/domain%jacobian_v(i_s:i_e,:,j_start:j_end))*domain%dzdy_v(i_s:i_e,:,j_start:j_end)*(v_dlambdz))
+            (1/domain%jacobian_v(i_s:i_e,:,j_start:j_end))*domain%dzdy_v(i_s:i_e,:,j_start:j_end)*(v_dlambdz))/rho_v(i_s:i_e,:,j_start:j_end)
         else
             domain%u%data_3d(i_start:i_end,:,j_s:j_e) = domain%u%data_3d(i_start:i_end,:,j_s:j_e) + &
                                                             0.5*((lambda(i_start:i_end,k_s:k_e,j_s:j_e) - &
                                                             lambda(i_start-1:i_end-1,k_s:k_e,j_s:j_e))/dx - &
-            (1/domain%jacobian_u(i_start:i_end,:,j_s:j_e))*domain%dzdx_u(i_start:i_end,:,j_s:j_e)*(u_dlambdz))
+            (1/domain%jacobian_u(i_start:i_end,:,j_s:j_e))*domain%dzdx_u(i_start:i_end,:,j_s:j_e)*(u_dlambdz))/rho_u(i_start:i_end,:,j_s:j_e)
             
             domain%v%data_3d(i_s:i_e,:,j_start:j_end) = domain%v%data_3d(i_s:i_e,:,j_start:j_end) + &
                                                             0.5*((lambda(i_s:i_e,k_s:k_e,j_start:j_end) - &
                                                             lambda(i_s:i_e,k_s:k_e,j_start-1:j_end-1))/dx - &
-            (1/domain%jacobian_v(i_s:i_e,:,j_start:j_end))*domain%dzdy_v(i_s:i_e,:,j_start:j_end)*(v_dlambdz))
+            (1/domain%jacobian_v(i_s:i_e,:,j_start:j_end))*domain%dzdy_v(i_s:i_e,:,j_start:j_end)*(v_dlambdz))/rho_v(i_s:i_e,:,j_start:j_end)
         
         endif
 

@@ -367,6 +367,8 @@ contains
         type(options_t),    intent(in)  :: options
         type(domain_t),  intent(inout) :: domain
         real,intent(in)::dt
+        real, allocatable, dimension(:,:,:) :: rho_i
+
         
         ! if this if the first time we are called, we need to allocate the module level arrays
         ! Could/should be put in an init procedure
@@ -376,6 +378,8 @@ contains
             allocate(W_m     (ims:ime,  kms:kme,jms:jme  ))
             !allocate(lastqv_m(ims:ime,  kms:kme,jms:jme  ))
         endif
+        allocate(rho_i     (ims:ime,  kms:kme-1,jms:jme  ))
+
 
         ! if (options%physics%convection > 0) then
             ! print*, "Advection of convective winds not enabled in ICAR >=1.5 yet"
@@ -391,14 +395,16 @@ contains
              
             rho = 1
             if (options%parameters%advect_density) rho = domain%density%data_3d  
+            
+            rho_i(:,kms:kme-1,:) = ( rho(:,kms:kme-1,:)*domain%advection_dz(:,kms:kme-1,:) + rho(:,kms+1:kme,:)*domain%advection_dz(:,kms+1:kme,:) ) &
+                                    / (domain%advection_dz(:,kms:kme-1,:)+domain%advection_dz(:,kms+1:kme,:))
         
             U_m = domain%u%data_3d(ims+1:ime,:,:) * dt * (rho(ims+1:ime,:,:)+rho(ims:ime-1,:,:))*0.5 * &
                     domain%jacobian_u(ims+1:ime,:,:) / domain%dx
             V_m = domain%v%data_3d(:,:,jms+1:jme) * dt * (rho(:,:,jms+1:jme)+rho(:,:,jms:jme-1))*0.5 * &
                     domain%jacobian_v(:,:,jms+1:jme) / domain%dx
                     
-            W_m(:,kms:kme-1,:) = domain%w%data_3d(:,kms:kme-1,:) * dt * domain%jacobian_w(:,kms:kme-1,:) * &
-                    (rho(:,kms+1:kme,:)+rho(:,kms:kme-1,:)) * 0.5
+            W_m(:,kms:kme-1,:) = domain%w%data_3d(:,kms:kme-1,:) * dt * domain%jacobian_w(:,kms:kme-1,:) * rho_i
             W_m(:,kme,:) = domain%w%data_3d(:,kme,:) * dt * domain%jacobian_w(:,kme,:) * rho(:,kme,:)
 
     end subroutine adv4_compute_wind

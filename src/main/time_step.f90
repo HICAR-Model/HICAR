@@ -9,7 +9,7 @@
 !! ----------------------------------------------------------------------------
 module time_step
     use data_structures             ! *_type  types and kCONSTANTS
-    use icar_constants,             only : Rd
+    use icar_constants,             only : Rd, cp
     use microphysics,               only : mp
     use advection,                  only : advect
     use mod_atm_utilities,          only : exner_function
@@ -290,14 +290,14 @@ contains
         do while (domain%model_time < end_time)
 
             call update_dt(dt, options, domain, end_time)
-
             ! Make sure we don't over step the forcing or output period
             if ((domain%model_time + dt) > end_time) then
                 dt = end_time - domain%model_time
             endif
 
-            call domain%diagnostic_update(options)
-
+            ! ! apply/update boundary conditions including internal wind and pressure changes.
+            call domain%apply_forcing(forcing,dt)
+                
             ! if using advect_density winds need to be balanced at each update
             if (options%parameters%advect_density) call balance_uvw(domain,options)
 
@@ -324,6 +324,14 @@ contains
                 call convect(domain, options, real(dt%seconds()))!, halo=1)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" convect")
                 
+                call domain%halo_exchange()
+                 
+                call advect(domain, options, real(dt%seconds()))
+                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain", fix=.True.)
+                
+                
+                call domain%diagnostic_update(options)
+
                 call mp(domain, options, real(dt%seconds()), halo=domain%grid%halo_size)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp_halo", fix=.True.)
 
@@ -341,14 +349,6 @@ contains
                 call domain%halo_retrieve()
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_retrieve", fix=.True.)
 
-
-                call advect(domain, options, real(dt%seconds()))
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain", fix=.True.)
-
-
-                ! ! apply/update boundary conditions including internal wind and pressure changes.
-                call domain%apply_forcing(forcing,dt)
- 
                 !If we are in the last ~10 updates of a time step and a variable drops below 0, we have probably over-shot a value of 0. Force back to 0
                 if ((end_time%seconds() - domain%model_time%seconds()) < (dt%seconds()*10)) then
 
