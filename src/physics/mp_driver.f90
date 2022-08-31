@@ -784,7 +784,7 @@ contains
                              domain% w %data_3d,      &
                              domain% w_real %data_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian_w,domain%ims,domain%ime,domain%kms,domain%kme,\
+                             domain%jacobian_w,domain%ims,domain%ime,domain%kms,domain%kme,&
                              domain%jms,domain%jme,domain%its,domain%ite,domain%jts,domain%jte)
                              
                 call process_subdomain(domain, options, mp_dt,                 &
@@ -805,7 +805,7 @@ contains
                              domain% w %data_3d,      &
                              domain% w_real %data_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian_w,domain%ims,domain%ime,domain%kms,domain%kme,\
+                             domain%jacobian_w,domain%ims,domain%ime,domain%kms,domain%kme,&
                              domain%jms,domain%jme,domain%its,domain%ite,domain%jts,domain%jte)
                              
                 call process_halo(domain, options, mp_dt, halo, &
@@ -828,7 +828,7 @@ contains
                              domain% w %data_3d,      &
                              domain% w_real %data_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian_w,domain%ims,domain%ime,domain%kms,domain%kme,\
+                             domain%jacobian_w,domain%ims,domain%ime,domain%kms,domain%kme,&
                              domain%jms,domain%jme,domain%its,domain%ite,domain%jts,domain%jte)
                              
                 call process_subdomain(domain, options, mp_dt,  &
