@@ -213,7 +213,7 @@ contains
         !$omp do schedule(static)
         do j = jts,jte
 
-            call flux3(qfluxes,U_m(its-1:ite+2,:,j)*t_factor,&
+            call flux3(qold,U_m(its-1:ite+2,:,j)*t_factor,&
                             V_m(its-1:ite+1,:,j:j+1)*t_factor,&
                             W_m(its-1:ite+1,:,j)*t_factor,flux_x,flux_z,flux_y_1,flux_y_2,j)
 
@@ -233,10 +233,9 @@ contains
         
         ! !$omp do schedule(static)
         ! do j = jts,jte
-            qfluxes(its:ite,:,j) = qold(its:ite,:,j)
 
         ! perform horizontal advection, from difference terms
-            qfluxes(its:ite,:,j)  = qfluxes(its:ite,:,j)  - &
+            qfluxes(its:ite,:,j)  = qold(its:ite,:,j)  - &
                                    ((flux_x(its+1:ite+1,:) - flux_x(its:ite,:)) + &
                                    (flux_y_2(its:ite,:) - flux_y_1(its:ite,:))) &
                                    / (jaco(its:ite,:,j)*rho(its:ite,:,j))                      
