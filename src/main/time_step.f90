@@ -23,10 +23,11 @@ module time_step
     use options_interface,          only : options_t
     use debug_module,               only : domain_check
     use string,                     only : str
+    use timer_interface,            only : timer_t
 
     implicit none
     private
-    public :: step
+    public :: step, update_dt
 
 contains
 
@@ -208,53 +209,38 @@ contains
     !! @param end_time      the end of the current full time step (when step will return)
     !!
     !!------------------------------------------------------------
-    subroutine update_dt(dt, options, domain, end_time)
+    subroutine update_dt(dt, future_seconds, options, dx, u, v, w, density)
         implicit none
         type(time_delta_t), intent(inout) :: dt
+        double precision,   intent(inout) :: future_seconds
         type(options_t),    intent(in)    :: options
-        type(domain_t),     intent(in)    :: domain
-        type(Time_type),    intent(in)    :: end_time
-
-        double precision :: seconds
-
+        real,               intent(in)    :: dx
+        real,               intent(in), dimension(:,:,:) :: u, v, w, density
+        double precision                  :: seconds
         ! compute internal timestep dt to maintain stability
-        ! courant condition for 3D advection. Note that w is normalized by dx/dz
+        ! courant condition for 3D advection. 
+                
+        !First, set dt to whatever the dt for the current time step was calculated to be
+        call dt%set(seconds=min(future_seconds,120.0D0))
 
-        ! Note this needs to be performed when advect_density is enabled
-        ! if (options%parameters%advect_density) then
-            ! call dt%set(seconds=compute_dt(domain%dx, domain%ur, domain%vr, domain%wr, domain%rho, domain%dz_inter,&
-            !                 options%time_options%cfl_reduction_factor, cfl_strictness=options%time_options%cfl_strictness,                   &
-            !                 use_density=.True.))
-
-        ! else
-        ! compute the dt to meet the CFL criteria specified given dx, u, v, w, dz
-        associate(dx         => domain%dx,                              &
-                  u          => domain%u%data_3d(domain%its:domain%ite+1,:,domain%jts:domain%jte),                     &
-                  v          => domain%v%data_3d(domain%its:domain%ite,:,domain%jts:domain%jte+1),                     &
-                  w          => domain%w%data_3d(domain%its:domain%ite,:,domain%jts:domain%jte),                       &
-                  density    => domain%density%data_3d(domain%its:domain%ite,:,domain%jts:domain%jte),                 &
-                  dz         => options%parameters%dz_levels,           &
-                  reduction  => options%time_options%cfl_reduction_factor,&
-                  strictness => options%time_options%cfl_strictness       &
-            )
-
-            seconds = compute_dt(dx, u, v, w, density, dz, reduction, &
-                                 cfl_strictness=strictness, use_density=.false.)
-
-        end associate
-        ! endif
-
+        seconds = compute_dt(dx, u, v, w, density, options%parameters%dz_levels, options%time_options%cfl_reduction_factor, &
+                                 cfl_strictness=options%time_options%cfl_strictness, use_density=.false.)
         ! perform a reduction across all images to find the minimum time step required
-#ifndef __INTEL_COMPILER
-        call co_min(seconds)
-#endif
-#ifdef __INTEL_COMPILER
-        seconds = domain%dx / 100
-#endif
+!#ifndef __INTEL_COMPILER
+!        call CO_MIN(seconds)
+!#endif
+!#ifdef __INTEL_COMPILER
+!         seconds = dx / 100
+!#endif
+        call CO_MIN(seconds)
 
+        future_seconds = seconds
         ! set an upper bound on dt to keep microphysics and convection stable (?)
         ! store this back in the dt time_delta data structure
-        call dt%set(seconds=min(seconds,120.0D0))
+        
+        ! If we are faster than the next time step, then adjust to the slower of the two
+        if (dt%seconds() < future_seconds) call dt%set(seconds=min(future_seconds,120.0D0))
+        if (this_image()==1) write(*,*) 'time_step: ',dt%seconds()
 
     end subroutine update_dt
 
@@ -273,23 +259,23 @@ contains
     !! @param next_output   Next time to write an output file (in "model_time")
     !!
     !!------------------------------------------------------------
-    subroutine step(domain, forcing, end_time, options)
+    subroutine step(domain, forcing, end_time, dt_in, options, otherphys_timer, adv_timer,mp_timer)
         implicit none
         type(domain_t),     intent(inout)   :: domain
         type(boundary_t),   intent(in)      :: forcing
         type(Time_type),    intent(in)      :: end_time
+        type(time_delta_t), intent(in)      :: dt_in
         type(options_t),    intent(in)      :: options
-
+        type(timer_t),      intent(inout)   :: otherphys_timer, adv_timer,mp_timer
         real :: last_print_time
-        type(time_delta_t) :: dt, time_step_size
+        type(time_delta_t) :: time_step_size, dt
 
         last_print_time = 0.0
         time_step_size = end_time - domain%model_time
 
+        dt = dt_in
         ! now just loop over internal timesteps computing all physics in order (operator splitting...)
         do while (domain%model_time < end_time)
-
-            call update_dt(dt, options, domain, end_time)
             ! Make sure we don't over step the forcing or output period
             if ((domain%model_time + dt) > end_time) then
                 dt = end_time - domain%model_time
@@ -297,7 +283,7 @@ contains
 
             ! ! apply/update boundary conditions including internal wind and pressure changes.
             call domain%apply_forcing(forcing,dt)
-                
+
             ! if using advect_density winds need to be balanced at each update
             if (options%parameters%advect_density) call balance_uvw(domain,options)
 
@@ -305,12 +291,13 @@ contains
             if (options%parameters%interactive .and. (this_image()==1)) then
                 call print_progress(domain%model_time, end_time, time_step_size, dt, last_print_time)
             endif
-
             ! this if is to avoid round off errors causing an additional physics call that won't really do anything
-            if (dt%seconds() > 1e-3) then
+
+            if (real(dt%seconds()) > 1e-3) then
 
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" init", fix=.True.)
 
+                call otherphys_timer%start()
                 ! first process the halo section of the domain (currently hard coded at 1 should come from domain?)
                 call rad(domain, options, real(dt%seconds()))
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" rad(domain", fix=.True.)
@@ -323,13 +310,15 @@ contains
 
                 call convect(domain, options, real(dt%seconds()))!, halo=1)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" convect")
+                call otherphys_timer%stop()
+
+                !call domain%halo_exchange()
                 
-                call domain%halo_exchange()
-                 
-                call advect(domain, options, real(dt%seconds()))
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain", fix=.True.)
+                !Call, 'unify tendencies', where all physics tendencies are applied and forcing tendency is applied. Advection tendencies do not need to be calculated as long as
+                ! the input arrays to advect are the same as the start of the time step.
+                !After advection, apply tendencies to cells and call diagnostic update. Now MP can be called
                 
-                
+                call mp_timer%start() 
                 call domain%diagnostic_update(options)
 
                 call mp(domain, options, real(dt%seconds()), halo=domain%grid%halo_size)
@@ -344,10 +333,17 @@ contains
                 ! call convect(domain, options, real(dt%seconds()), subset=1)
 
                 call mp(domain, options, real(dt%seconds()), subset=domain%grid%halo_size)
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp(domain", fix=.True.)
 
+                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp(domain", fix=.True.)
                 call domain%halo_retrieve()
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_retrieve", fix=.True.)
+                call mp_timer%stop() 
+
+                call adv_timer%start()
+                call advect(domain, options, real(dt%seconds()))
+                call adv_timer%stop()
+
+                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain", fix=.True.)
 
                 !If we are in the last ~10 updates of a time step and a variable drops below 0, we have probably over-shot a value of 0. Force back to 0
                 if ((end_time%seconds() - domain%model_time%seconds()) < (dt%seconds()*10)) then
@@ -359,7 +355,6 @@ contains
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%apply_forcing", fix=.True.)
 
             endif
-
             ! step model_time forward
             domain%model_time = domain%model_time + dt
 

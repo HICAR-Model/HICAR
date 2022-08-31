@@ -30,6 +30,7 @@ module initialization
     use io_routines,          only : io_read, io_write
     use mod_atm_utilities,          only : init_atm_utilities
     use wind,                       only : update_winds
+    use wind_iterative,             only : init_iter_winds
 
     ! use io_routines,                only : io_read, &
     !                                        io_write3d,io_write3di, io_write
@@ -68,7 +69,7 @@ contains
         ! read in options file
         if (this_image()==1) write(*,*) "Initializing Options"
         call options%init()
-
+        
         if (this_image()==1) write(*,*) "Initializing Domain"
         call domain%init(options)
 
@@ -114,6 +115,8 @@ contains
 
 
         if (this_image()==1) write(*,*) "Updating initial winds"
+        if (options%physics%windtype==kITERATIVE_WINDS) call init_iter_winds()
+
         call update_winds(domain, options)
 
         ! initialize the atmospheric helper utilities
