@@ -53,7 +53,6 @@ contains
         allocate(V_m     (ims:ime,  kms:kme,jms+1:jme))
         allocate(W_m     (ims:ime,  kms:kme,jms:jme  ))
         allocate(rho     (ims:ime,  kms:kme,jms:jme  ))
-        
         !allocate(lastqv_m(ims:ime,  kms:kme,jms:jme  ))
 
         !     if (.not.allocated(U_4cu_u)) then
@@ -111,18 +110,17 @@ contains
 !
 !     end subroutine flux2
 
-    subroutine flux3(q,u,v,w,flux_x,flux_z,flux_y_1,flux_y_2,j)
+    subroutine flux3(q,u,v,w,flux_x,flux_z,flux_y)
         implicit none
         real, dimension(ims:ime,  kms:kme,jms:jme),    intent(in)          :: q
-        real, dimension(its-1:ite+1,  kms:kme), intent(in)     :: w
-        real, dimension(its-1:ite+2,  kms:kme),  intent(in)    :: u
-        real, dimension(its-1:ite+1,  kms:kme,j:j+1),  intent(in)    :: v
+        real, dimension(its-1:ite+1,  kms:kme,jts-1:jte+1), intent(in)     :: w
+        real, dimension(its-1:ite+2,  kms:kme,jts-1:jte+1),  intent(in)    :: u
+        real, dimension(its-1:ite+1,  kms:kme,jts-1:jte+2),  intent(in)    :: v
         
-        real, dimension(its-1:ite+2,kms:kme), intent(inout)    :: flux_x
-        real, dimension(its-1:ite+1,kms:kme), intent(inout)    :: flux_y_1
-        real, dimension(its-1:ite+1,kms:kme), intent(inout)    :: flux_y_2
-        real, dimension(its-1:ite+1,kms:kme+1), intent(inout)  :: flux_z
-        integer, intent(in) :: j
+        real, dimension(its-1:ite+2,kms:kme,jts-1:jte+1),intent(inout)      :: flux_x
+        real, dimension(its-1:ite+1,kms:kme,jts-1:jte+2),intent(inout)      :: flux_y
+        real, dimension(its-1:ite+1,kms:kme+1,jts-1:jte+1),intent(inout)    :: flux_z
+
         !Old code -- 4th order horz fluxes
         !flux_x = 7*(q(its-1:ite+2,:,jts-1:jte+1)+q(its-2:ite+1,:,jts-1:jte+1)) - &
         !                    (q(its:ite+3,:,jts-1:jte+1)+q(its-3:ite,:,jts-1:jte+1))
@@ -133,56 +131,46 @@ contains
         !flux_y = (v*flux_y)/12
         
         !Calculation of 6th order fluxes for later application of 5th order diffusive terms
-        flux_x = 37*(q(its-1:ite+2,:,j)+q(its-2:ite+1,:,j)) - &
-                            8*(q(its:ite+3,:,j)+q(its-3:ite,:,j)) + &
-                            (q(its+1:ite+4,:,j)+q(its-4:ite-1,:,j))
+        flux_x = 37*(q(its-1:ite+2,:,jts-1:jte+1)+q(its-2:ite+1,:,jts-1:jte+1)) - &
+                            8*(q(its:ite+3,:,jts-1:jte+1)+q(its-3:ite,:,jts-1:jte+1)) + &
+                            (q(its+1:ite+4,:,jts-1:jte+1)+q(its-4:ite-1,:,jts-1:jte+1))
         flux_x = (u*flux_x)/60
         !Application of 5th order diffusive terms
-        flux_x = flux_x - (abs(u)/60) * (10*(q(its-1:ite+2,:,j)-q(its-2:ite+1,:,j)) - &
-                            5*(q(its:ite+3,:,j)-q(its-3:ite,:,j)) + &
-                            (q(its+1:ite+4,:,j)-q(its-4:ite-1,:,j)))
+        flux_x = flux_x - (abs(u)/60) * (10*(q(its-1:ite+2,:,jts-1:jte+1)-q(its-2:ite+1,:,jts-1:jte+1)) - &
+                            5*(q(its:ite+3,:,jts-1:jte+1)-q(its-3:ite,:,jts-1:jte+1)) + &
+                            (q(its+1:ite+4,:,jts-1:jte+1)-q(its-4:ite-1,:,jts-1:jte+1)))
                 
         !Calculation of 6th order fluxes for later application of 5th order diffusive terms
-        flux_y_2 = 37*(q(its-1:ite+1,:,j+1)+q(its-1:ite+1,:,j)) - &
-                            8*(q(its-1:ite+1,:,j+2)+q(its-1:ite+1,:,j-1)) + &
-                            (q(its-1:ite+1,:,j+3)+q(its-1:ite+1,:,j-2))
-        flux_y_2 = (v(:,:,j+1)*flux_y_2)/60
+        flux_y = 37*(q(its-1:ite+1,:,jts-1:jte+2)+q(its-1:ite+1,:,jts-2:jte+1)) - &
+                            8*(q(its-1:ite+1,:,jts:jte+3)+q(its-1:ite+1,:,jts-3:jte)) + &
+                            (q(its-1:ite+1,:,jts+1:jte+4)+q(its-1:ite+1,:,jts-4:jte-1))
+        flux_y = (v*flux_y)/60
         !Application of 5th order diffusive terms
-        flux_y_2 = flux_y_2 - (abs(v(:,:,j+1))/60) * (10*(q(its-1:ite+1,:,j+1)-q(its-1:ite+1,:,j)) - &
-                            5*(q(its-1:ite+1,:,j+2)-q(its-1:ite+1,:,j-1)) + &
-                            (q(its-1:ite+1,:,j+3)-q(its-1:ite+1,:,j-2)))
-
-        !Calculation of 6th order fluxes for later application of 5th order diffusive terms
-        flux_y_1 = 37*(q(its-1:ite+1,:,j)+q(its-1:ite+1,:,j-1)) - &
-                            8*(q(its-1:ite+1,:,j+1)+q(its-1:ite+1,:,j-2)) + &
-                            (q(its-1:ite+1,:,j+2)+q(its-1:ite+1,:,j-3))
-        flux_y_1 = (v(:,:,j)*flux_y_1)/60
-        !Application of 5th order diffusive terms
-        flux_y_1 = flux_y_1 - (abs(v(:,:,j))/60) * (10*(q(its-1:ite+1,:,j)-q(its-1:ite+1,:,j-1)) - &
-                            5*(q(its-1:ite+1,:,j+1)-q(its-1:ite+1,:,j-2)) + &
-                            (q(its-1:ite+1,:,j+2)-q(its-1:ite+1,:,j-3)))
+        flux_y = flux_y - (abs(v)/60) * (10*(q(its-1:ite+1,:,jts-1:jte+2)-q(its-1:ite+1,:,jts-2:jte+1)) - &
+                            5*(q(its-1:ite+1,:,jts:jte+3)-q(its-1:ite+1,:,jts-3:jte)) + &
+                            (q(its-1:ite+1,:,jts+1:jte+4)-q(its-1:ite+1,:,jts-4:jte-1)))
 
         
         !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
-        flux_z(:,kms+2:kme-1) = 7*(q(its-1:ite+1,kms+2:kme-1,j)+q(its-1:ite+1,kms+1:kme-2,j)) - &
-                                    (q(its-1:ite+1,kms+3:kme,j)+q(its-1:ite+1,kms:kme-3,j))
-        flux_z(:,kms+2:kme-1) = (w(:,kms+1:kme-2)*flux_z(:,kms+2:kme-1))/12
+        flux_z(:,kms+2:kme-1,:) = 7*(q(its-1:ite+1,kms+2:kme-1,jts-1:jte+1)+q(its-1:ite+1,kms+1:kme-2,jts-1:jte+1)) - &
+                                    (q(its-1:ite+1,kms+3:kme,jts-1:jte+1)+q(its-1:ite+1,kms:kme-3,jts-1:jte+1))
+        flux_z(:,kms+2:kme-1,:) = (w(:,kms+1:kme-2,:)*flux_z(:,kms+2:kme-1,:))/12
         !Application of 3rd order diffusive terms
-        flux_z(:,kms+2:kme-1) = flux_z(:,kms+2:kme-1) - (abs(w(:,kms+1:kme-2))/12) * &
-                        (3 * (q(its-1:ite+1,kms+2:kme-1,j) - q(its-1:ite+1,kms+1:kme-2,j)) - &
-                            (q(its-1:ite+1,kms+3:kme,j)   - q(its-1:ite+1,kms:kme-3,j)))
+        flux_z(:,kms+2:kme-1,:) = flux_z(:,kms+2:kme-1,:) - (abs(w(:,kms+1:kme-2,:))/12) * &
+                        (3 * (q(its-1:ite+1,kms+2:kme-1,jts-1:jte+1) - q(its-1:ite+1,kms+1:kme-2,jts-1:jte+1)) - &
+                            (q(its-1:ite+1,kms+3:kme,jts-1:jte+1)   - q(its-1:ite+1,kms:kme-3,jts-1:jte+1)))
         
         
         !Do simple upwind for the cells who's stencil does not allow 4th-order
-        flux_z(:,kms+1) = ((w(:,kms) + ABS(w(:,kms))) * q(its-1:ite+1,kms,j) + &
-                             (w(:,kms) - ABS(w(:,kms))) * q(its-1:ite+1,kms+1,j))  / 2
-        flux_z(:,kme) = ((w(:,kme-1) + ABS(w(:,kme-1))) * q(its-1:ite+1,kme-1,j) + &
-                           (w(:,kme-1) - ABS(w(:,kme-1))) * q(its-1:ite+1,kme,j))  / 2
+        flux_z(:,kms+1,:) = ((w(:,kms,:) + ABS(w(:,kms,:))) * q(its-1:ite+1,kms,jts-1:jte+1) + &
+                             (w(:,kms,:) - ABS(w(:,kms,:))) * q(its-1:ite+1,kms+1,jts-1:jte+1))  / 2
+        flux_z(:,kme,:) = ((w(:,kme-1,:) + ABS(w(:,kme-1,:))) * q(its-1:ite+1,kme-1,jts-1:jte+1) + &
+                           (w(:,kme-1,:) - ABS(w(:,kme-1,:))) * q(its-1:ite+1,kme,jts-1:jte+1))  / 2
                                                           
 
         !Handle top and bottom boundaries for z here
-        flux_z(:,kms) = 0
-        flux_z(:,kme+1) = q(its-1:ite+1,kme,j) * w(:,kme)
+        flux_z(:,kms,:) = 0
+        flux_z(:,kme+1,:) = q(its-1:ite+1,kme,jts-1:jte+1) * w(:,kme,:)
 
                                          
     end subroutine flux3
@@ -197,56 +185,55 @@ contains
         real, optional,                              intent(in)      :: t_factor_in
         integer, optional,                           intent(in)      :: flux_corr
         ! interal parameters
-        real, dimension(its-1:ite+2,kms:kme)    :: flux_x
-        real, dimension(its-1:ite+1,kms:kme)    :: flux_y_1
-        real, dimension(its-1:ite+1,kms:kme)    :: flux_y_2
-        real, dimension(its-1:ite+1,kms:kme+1)  :: flux_z
+        real, dimension(its-1:ite+2,kms:kme,jts-1:jte+1)    :: flux_x
+        real, dimension(its-1:ite+1,kms:kme,jts-1:jte+2)    :: flux_y
+        real, dimension(its-1:ite+1,kms:kme+1,jts-1:jte+1)    :: flux_z
+        real                                          :: t_factor
         
-        real    :: t_factor
-        integer :: j
+        ! !$omp parallel shared(qin,q,u,v,w) firstprivate(nx,ny,nz) private(i,f1,f3,f4,f5)
+        ! !$omp do schedule(static)
+        !do i=jms,jme
+        !    q(:,:,i)=qin(:,:,i)
+        !enddo
+                
+        ! !$omp end do
+        ! !$omp barrier
+        ! !$omp do schedule(static)
+            ! by manually inlining the flux2 call we should remove extra array copies that the compiler doesn't remove.
+            ! equivalent flux2 calls are left in for reference (commented) to restore recall that f1,f3,f4... arrays should be 3D : n x m x 1
             
         !Initialize t_factor, which is used during RK time stepping to scale the time step
         t_factor = 1.0
         if (present(t_factor_in)) t_factor = t_factor_in
 
-        !$omp parallel shared(qfluxes,qold,U_m,V_m,W_m,rho,dz,jaco) firstprivate(its,ite,jts,jte,kms,kme,t_factor) private(flux_x,flux_z,flux_y_1,flux_y_2, j)
-        !$omp do schedule(static)
-        do j = jts,jte
-
-            call flux3(qold,U_m(its-1:ite+2,:,j)*t_factor,&
-                            V_m(its-1:ite+1,:,j:j+1)*t_factor,&
-                            W_m(its-1:ite+1,:,j)*t_factor,flux_x,flux_z,flux_y_1,flux_y_2,j)
-
-        ! enddo
-        ! !$omp end do
-        ! !$omp barrier
+        call flux3(qfluxes,U_m(its-1:ite+2,:,jts-1:jte+1)*t_factor,&
+                            V_m(its-1:ite+1,:,jts-1:jte+2)*t_factor,&
+                            W_m(its-1:ite+1,:,jts-1:jte+1)*t_factor,flux_x,flux_z,flux_y)
         
-        !if (present(flux_corr)) then
-        !    if (flux_corr == kFLUXCOR_WRF) then
+        if (present(flux_corr)) then
+            if (flux_corr == kFLUXCOR_WRF) then
                 !Calculate flux corrections as done by WRF (Wang et al., 2009)
-        !        call WRF_flux_corr(qold,U_m(its-1:ite+2,:,jts-1:jte+1),&
-        !                                V_m(its-1:ite+1,:,jts-1:jte+2),&
-        !                                W_m(its-1:ite+1,:,jts-1:jte+1),flux_x,flux_z,flux_y, &
-        !                        jaco(its-1:ite+1,:,jts-1:jte+1),dz(its-1:ite+1,:,jts-1:jte+1),rho(its-1:ite+1,:,jts-1:jte+1))
-        !    endif
-        !endif
-        
-        ! !$omp do schedule(static)
-        ! do j = jts,jte
+                call WRF_flux_corr(qold,U_m(its-1:ite+2,:,jts-1:jte+1),&
+                                        V_m(its-1:ite+1,:,jts-1:jte+2),&
+                                        W_m(its-1:ite+1,:,jts-1:jte+1),flux_x,flux_z,flux_y, &
+                                jaco(its-1:ite+1,:,jts-1:jte+1),dz(its-1:ite+1,:,jts-1:jte+1),rho(its-1:ite+1,:,jts-1:jte+1))
+            endif
+        endif
+        qfluxes = qold
 
         ! perform horizontal advection, from difference terms
-            qfluxes(its:ite,:,j)  = qold(its:ite,:,j)  - &
-                                   ((flux_x(its+1:ite+1,:) - flux_x(its:ite,:)) + &
-                                   (flux_y_2(its:ite,:) - flux_y_1(its:ite,:))) &
-                                   / (jaco(its:ite,:,j)*rho(its:ite,:,j))                      
+        qfluxes(its:ite,:,jts:jte)  = qfluxes(its:ite,:,jts:jte)  - &
+                                   ((flux_x(its+1:ite+1,:,jts:jte) - flux_x(its:ite,:,jts:jte)) + &
+                                   (flux_y(its:ite,:,jts+1:jte+1) - flux_y(its:ite,:,jts:jte))) &
+                                   / (jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))                      
                ! then vertical (order doesn't matter because fluxes f1-6 are calculated before applying them)
                ! add fluxes to middle layers
-            qfluxes(its:ite,:,j) = qfluxes(its:ite,:,j)  &
-                                   - (flux_z(its:ite,kms+1:kme+1) - flux_z(its:ite,kms:kme)) &
-                                   / (dz(its:ite,:,j)*jaco(its:ite,:,j)*rho(its:ite,:,j))
-        enddo
-        !$omp end do
-        !$omp end parallel
+        qfluxes(its:ite,:,jts:jte) = qfluxes(its:ite,:,jts:jte)  &
+                                   - (flux_z(its:ite,kms+1:kme+1,jts:jte) - flux_z(its:ite,kms:kme,jts:jte)) &
+                                   / (dz(its:ite,:,jts:jte)*jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))
+
+        ! !$omp end do
+        ! !$omp end parallel
     end subroutine adv4_advect3d
 
     ! subroutine setup_cu_winds(domain, options, dt)
@@ -380,7 +367,7 @@ contains
         type(options_t),    intent(in)  :: options
         type(domain_t),  intent(inout) :: domain
         real,intent(in)::dt
-        real, dimension(ims:ime, kms:kme-1, jms:jme) :: rho_i
+        real, allocatable, dimension(:,:,:) :: rho_i
 
         
         ! if this if the first time we are called, we need to allocate the module level arrays
@@ -391,6 +378,7 @@ contains
             allocate(W_m     (ims:ime,  kms:kme,jms:jme  ))
             !allocate(lastqv_m(ims:ime,  kms:kme,jms:jme  ))
         endif
+        allocate(rho_i     (ims:ime,  kms:kme-1,jms:jme  ))
 
 
         ! if (options%physics%convection > 0) then
@@ -457,9 +445,9 @@ contains
 
         ! lastqv_m=domain%qv
 
-        !if (options%parameters%debug) then
-        !    call test_divergence(domain%advection_dz)
-        !endif
+        if (options%parameters%debug) then
+            call test_divergence(domain%advection_dz)
+        endif
 
         !if (options%vars_to_advect(kVARS%water_vapor)>0)                  call adv4_advect3d(domain%water_vapor%data_3d,    domain%advection_dz, domain%jacobian)
         !if (options%vars_to_advect(kVARS%cloud_water)>0)                  call adv4_advect3d(domain%cloud_water_mass%data_3d, domain%advection_dz, domain%jacobian)
