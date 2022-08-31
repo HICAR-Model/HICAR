@@ -464,9 +464,9 @@ contains
         Sx_corr = min(max(Sx_corr,0.0),1.0)
     
         do k=kms,k_cor_top
-            Sx_U_corr(:,k,:) = 2*Sx_corr(:,k,:)*(x_norm*( (u(ims+1:ime+1,k,:)+u(ims:ime,k,:))/2 ) + \
+            Sx_U_corr(:,k,:) = 2*Sx_corr(:,k,:)*(x_norm*( (u(ims+1:ime+1,k,:)+u(ims:ime,k,:))/2 ) + &
                                  y_norm*( (v(:,k,jms+1:jme+1)+v(:,k,jms:jme))/2 ))*x_norm
-            Sx_V_corr(:,k,:) = 2*Sx_corr(:,k,:)*(x_norm*( (u(ims+1:ime+1,k,:)+u(ims:ime,k,:))/2 ) + \
+            Sx_V_corr(:,k,:) = 2*Sx_corr(:,k,:)*(x_norm*( (u(ims+1:ime+1,k,:)+u(ims:ime,k,:))/2 ) + &
                                  y_norm*( (v(:,k,jms+1:jme+1)+v(:,k,jms:jme))/2 ))*y_norm
         end do                        
         
