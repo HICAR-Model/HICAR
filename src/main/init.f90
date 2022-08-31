@@ -31,6 +31,7 @@ module initialization
     use mod_atm_utilities,          only : init_atm_utilities
     use wind,                       only : update_winds
     use wind_iterative,             only : init_iter_winds
+    use icar_constants,             only : kITERATIVE_WINDS
 
     ! use io_routines,                only : io_read, &
     !                                        io_write3d,io_write3di, io_write

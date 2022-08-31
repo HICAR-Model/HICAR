@@ -45,9 +45,9 @@ program icar
 
     type(output_t)  :: restart_dataset
     type(output_t)  :: output_dataset
-    type(timer_t)   :: initialization_timer, total_timer, input_timer, output_timer, physics_timer, wind_timer, advection_timer,mp_timer, all_phys_timer
+    type(timer_t)   :: initialization_timer, total_timer, input_timer, output_timer, physics_timer, wind_timer
     type(Time_type) :: next_output
-    type(time_delta_t) :: phys_dt, small_time_delta
+    type(time_delta_t) :: small_time_delta, phys_dt
 
     character(len=1024) :: file_name, restart_file_name
     character(len=49)   :: file_date_format = '(I4,"-",I0.2,"-",I0.2,"_",I0.2,"-",I0.2,"-",I0.2)'
@@ -149,7 +149,6 @@ program icar
             ! and that using a CFL criterion < 1.0 will cover this
             call update_dt(phys_dt, future_dt_seconds, options, domain%dx, &
                                         domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d, domain%density%data_3d)
-            !call phys_dt%set(seconds=7.0)
             ! Make the boundary condition dXdt values into units of [X]/s
             call domain%update_delta_fields(boundary%current_time - domain%model_time)
             call boundary%update_delta_fields(boundary%current_time - domain%model_time)
@@ -171,9 +170,9 @@ program icar
 
         ! this is the meat of the model physics, run all the physics for the current time step looping over internal timesteps
         if (.not.(options%wind%wind_only)) then
-            call all_phys_timer%start()
-            call step(domain, boundary, step_end(boundary%current_time, next_output), phys_dt, options,physics_timer,advection_timer,mp_timer)
-            call all_phys_timer%stop()
+            call physics_timer%start()
+            call step(domain, boundary, step_end(boundary%current_time, next_output), phys_dt, options)
+            call physics_timer%stop()
         else
             call domain%apply_forcing(boundary, options%output_options%output_dt)
             domain%model_time = next_output
@@ -238,10 +237,7 @@ program icar
         write(*,*) "init           : ", trim(initialization_timer%as_string())
         write(*,*) "input          : ", trim(input_timer%as_string())
         write(*,*) "output         : ", trim(output_timer%as_string())
-        write(*,*) "non-mp physics : ", trim(physics_timer%as_string())
-        write(*,*) "mp             : ", trim(mp_timer%as_string())
-        write(*,*) "all_phys       : ", trim(all_phys_timer%as_string())
-        write(*,*) "advect         : ", trim(advection_timer%as_string())
+        write(*,*) "physics        : ", trim(physics_timer%as_string())
         write(*,*) "winds          : ", trim(wind_timer%as_string())
     endif
 
