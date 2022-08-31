@@ -23,7 +23,7 @@ program icar
     use domain_interface,   only : domain_t
     use boundary_interface, only : boundary_t
     use output_interface,   only : output_t
-    use time_step,          only : step                               ! Advance the model forward in time
+    use time_step,          only : step, update_dt                               ! Advance the model forward in time
     use initialization,     only : init_model, init_physics
     use timer_interface,    only : timer_t
     use time_object,        only : Time_type
@@ -46,13 +46,13 @@ program icar
     type(output_t)  :: output_dataset
     type(timer_t)   :: initialization_timer, total_timer, input_timer, output_timer, physics_timer, wind_timer
     type(Time_type) :: next_output
-    type(time_delta_t) :: small_time_delta
+    type(time_delta_t) :: small_time_delta, phys_dt
 
     character(len=1024) :: file_name, restart_file_name
     character(len=49)   :: file_date_format = '(I4,"-",I0.2,"-",I0.2,"_",I0.2,"-",I0.2,"-",I0.2)'
     integer :: i, restart_counter
     integer :: output_vars(18)
-
+    double precision    :: future_dt_seconds
 
     call small_time_delta%set(1)
 
@@ -86,6 +86,10 @@ program icar
 
     ! physics drivers need to be initialized after restart data are potentially read in.
     call init_physics(options, domain)
+
+    future_dt_seconds = 0.0D0
+    !Now that we have winds initialized, calculate current time-step
+    call update_dt(phys_dt, future_dt_seconds, options, domain%dx, domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%density%data_3d)
 
     !-----------------------------------------
     !-----------------------------------------
@@ -137,6 +141,14 @@ program icar
             call update_winds(domain, options)
             call wind_timer%stop()
             
+            !Now that new winds have been calculated, get new time step in seconds, and see if they require adapting the time step
+            !Because we are right after updating the winds and we want the information on the winds at the future time step, use the dqdt members of the winds
+            ! Note that there will currently be some discrepancy between using the current density and whatever density will be at 
+            ! the next time step, but we assume that it is negligable
+            ! and that using a CFL criterion < 1.0 will cover this
+            call update_dt(phys_dt, future_dt_seconds, options, domain%dx, &
+                                        domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d, domain%density%data_3d)
+            
             ! Make the boundary condition dXdt values into units of [X]/s
             call domain%update_delta_fields(boundary%current_time - domain%model_time)
             call boundary%update_delta_fields(boundary%current_time - domain%model_time)
@@ -159,7 +171,7 @@ program icar
         ! this is the meat of the model physics, run all the physics for the current time step looping over internal timesteps
         if (.not.(options%wind%wind_only)) then
             call physics_timer%start()
-            call step(domain, boundary, step_end(boundary%current_time, next_output), options)
+            call step(domain, boundary, step_end(boundary%current_time, next_output), phys_dt, options)
             call physics_timer%stop()
         else
             call domain%apply_forcing(boundary, options%output_options%output_dt)

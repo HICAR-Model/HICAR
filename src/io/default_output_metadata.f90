@@ -413,6 +413,117 @@ contains
                                attribute_t("coordinates",   "lat lon")]
         end associate
         !>------------------------------------------------------------
+        !!  planar-nucleated a^2c mixing ratio
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice1_a))
+            var%name        = "ice1_a"
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "planar-nucleated a^2c mixing ratio"), &
+                               attribute_t("units",         "m^3 kg^-1"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  planar-nucleated c^2a mixing ratio
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice1_c))
+            var%name        = "ice1_c"
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "planar-nucleated c^2a mixing ratio"), &
+                               attribute_t("units",         "m^3 kg^-1"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  columnar-nucleated mixing ratio
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice2_mass))
+            var%name        = "ice2_mass"
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "columnar-nucleated mixing ratio"), &
+                               attribute_t("units",         "kg kg^-1"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  columnar-nucleated number mixing ratio
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice2_number))
+            var%name        = "ice2_number"
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "columnar-nucleated number mixing ratio"), &
+                               attribute_t("units",         "kg^-1"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  columnar-nucleated a^2c mixing ratio
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice2_a))
+            var%name        = "ice2_a"
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "columnar-nucleated a^2c mixing ratio"), &
+                               attribute_t("units",         "m^3 kg^-1"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  columnar-nucleated c^2a mixing ratio
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice2_c))
+            var%name        = "ice2_c"
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "columnar-nucleated c^2a mixing ratio"), &
+                               attribute_t("units",         "m^3 kg^-1"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  aggregate mixing ratio
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice3_mass))
+            var%name        = "ice3_mass"
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "aggregate mixing ratio"), &
+                               attribute_t("units",         "kg kg^-1"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  aggregate number mixing ratio
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice3_number))
+            var%name        = "ice3_number"
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "aggregate number mixing ratio"), &
+                               attribute_t("units",         "kg^-1"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  aggregate a^2c mixing ratio
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice3_a))
+            var%name        = "ice3_a"
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "aggregate a^2c mixing ratio"), &
+                               attribute_t("units",         "m^3 kg^-1"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  aggregate c^2a mixing ratio
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice3_c))
+            var%name        = "ice3_c"
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "aggregate c^2a mixing ratio"), &
+                               attribute_t("units",         "m^3 kg^-1"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
+        !>------------------------------------------------------------
         !!  Precipitation rate at the surface (requires tracking past precipitation amounts)
         !!------------------------------------------------------------
         ! associate(var=>var_meta(kVARS%precip_rate))
