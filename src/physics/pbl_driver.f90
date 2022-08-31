@@ -108,29 +108,7 @@ contains
                             ! domain% qv_pbl_tendency     %data_3d)
         endif
         if (options%physics%boundarylayer==kPBL_DIAGNOSTIC) then
-            call diagnostic_pbl(domain% potential_temperature %data_3d,     &
-                            domain% water_vapor           %data_3d,     &
-                            domain% cloud_water_mass      %data_3d,     &
-                            domain% cloud_ice_mass        %data_3d,     &
-                            domain% rain_mass             %data_3d,     &
-                            domain% snow_mass             %data_3d,     &
-                            domain% cloud_ice_number      %data_3d,     &
-                            domain% rain_number           %data_3d,     &
-                            domain% snow_number           %data_3d,     &
-                            domain% latent_heat           %data_2d,     &
-                            domain% sensible_heat         %data_2d,     &
-                            domain% u_mass                %data_3d,     &
-                            domain% v_mass                %data_3d,     &
-                            domain% exner                 %data_3d,     &
-                            domain% density               %data_3d,     &
-                            domain% z                     %data_3d,     &
-                            domain% advection_dz                  ,     &
-                            domain% dz_mass               %data_3d,     &
-                            domain% jacobian                      ,     &
-                            domain% jacobian_w                    ,     &
-                            domain% terrain               %data_2d,     &
-                            its, ite, jts, jte, kts, kte,               &
-                            dt_in)
+            call diagnostic_pbl(domain,dt_in)
                             ! domain% qv_pbl_tendency     %data_3d)
         endif
         if (options%physics%boundarylayer==kPBL_YSU) then
