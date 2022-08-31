@@ -114,70 +114,10 @@ contains
        gnu(icat) = 4.0  
     enddo
     
-      !.. Read in gamma function lookup table for speedy code
-    if(.not.allocated(gamma_tab_o)) then
-       allocate(gamma_tab_o(505001))
-
-       open(40, FILE='mp_support/ishmael-gamma-tab.bin',form='UNFORMATTED',access='stream')
-       do i1 = 1,505001
-          if (this_image()==1) write(*,*) i1
-          read(40) gamma_tab_o(i1)
-       enddo
-       close(40)
-       print*, 'Jensen_ISHMAEL lookup table 3 of 3'
-    endif
-  !.. Read in ice-cloud water collection lookup table
-    if(.not.allocated(itab_o)) then 
-       allocate(itab_o(51,51,51,11,2))
-
-       open(20, FILE='mp_support/ishmael-qi-qc.bin',form='UNFORMATTED',access='stream',convert='BIG_ENDIAN')
-       do i1 = 1,51
-          do i2 = 1,51
-             do i3 = 1,51
-                do i4 = 1,11
-                   read(20) itab_o(i1,i2,i3,i4,1), &
-                        itab_o(i1,i2,i3,i4,2)
-                enddo
-             enddo
-          enddo
-       enddo
-       close(20)
-       print*, 'Jensen_ISHMAEL lookup table 1 of 3'
-    endif
-
-  !.. Read in ice-rain collection lookup table
-    if(.not.allocated(itabr_o)) then
-       allocate(itabr_o(51,51,51,11,6))
-
-       open(30, FILE='mp_support/ishmael-qi-qr.bin',form='UNFORMATTED',access='stream',convert='BIG_ENDIAN')
-       do i1 = 1,51
-          do i2 = 1,51
-             do i3 = 1,51
-                do i4 = 1,11
-                   read(30) scratch_i, itabr_o(i1,i2,i3,i4,1), &
-                        itabr_o(i1,i2,i3,i4,2), &
-                        itabr_o(i1,i2,i3,i4,3), &
-                        itabr_o(i1,i2,i3,i4,4), &
-                        itabr_o(i1,i2,i3,i4,5), &
-                        itabr_o(i1,i2,i3,i4,6), scratch_i
-                enddo
-              enddo
-          enddo
-       enddo
-       close(30)
-       print*, 'Jensen_ISHMAEL lookup table 2 of 3'
-    endif
-
-
-
   
-    !call io_read1d("mp_support/ishmael_gamma_tab.nc", "gamma", gamma_tab_o)
-    !call io_read5d("mp_support/ishmael_qi_qr.nc", "qi_qr", itabr_o)
-    !call io_read5d("mp_support/ishmael_qi_qc.nc", "qi_qc", itab_o)
-
-    call io_write5d("mp_support/ishmael_qi_qr_out.nc", "qi_qr", itabr_o)
-    call io_write5d("mp_support/ishmael_qi_qc_out.nc", "qi_qc", itab_o)
-
+    call io_read1d("mp_support/ishmael_gamma_tab.nc", "gamma", gamma_tab_o)
+    call io_read5d("mp_support/ishmael_qi_qr.nc", "qi_qr", itabr_o)
+    call io_read5d("mp_support/ishmael_qi_qc.nc", "qi_qc", itab_o)
 
   !.. Read in inhernent growth ratio data (-1C to -60C)
   !.. This currently assumes columns below -20C (plates are used later in the code)
@@ -213,7 +153,7 @@ contains
     
   !.. Call to build the aggregation lookup table (JYH)
     call mkcoltb(ndn,ncat,coltab,coltabn,ipair,gnu,tablo,tabhi,cfmas,pwmas,cfvt,pwvt)
-    print*, 'Jensen_ISHMAEL aggregation lookup table built'
+    if (this_image()==1) write(*,*) 'Jensen_ISHMAEL aggregation lookup table built'
 
   !.. Check that tables are allocated (Thanks to JYH and Shaofeng)
     if(.not.allocated(itab)) allocate(itab(51,51,51,11,2))
@@ -424,7 +364,7 @@ contains
              QR(i,k,j)     =         QR1D(k)
              NR(i,k,j)     =         NR1D(k) 
              DIAG_EFFC3D(i,k,j)  =   max((min(EFFC1D(k),50.e-6)),2.51e-6)
-             DIAG_EFFI3D(i,k,j)  =   max((min(EFFI1D(k),999.e-6)),5.e-6)
+             DIAG_EFFI3D(i,k,j)  =   max((min(EFFI1D(k),120.e-6)),5.e-6)
              DIAG_DBZ3D(i,k,j)   =   max(dbz1d(k),-35.)
   !.. Planar-nucleated
              QI1(i,k,j)    =    QI1D(ICE1,k) 

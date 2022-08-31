@@ -31,7 +31,7 @@ module wind_iterative
     
     implicit none
     private
-    public::calc_iter_winds
+    public:: init_iter_winds, calc_iter_winds, finalize_iter_winds
     real, parameter::deg2rad=0.017453293 !2*pi/360
     real, parameter :: rad2deg=57.2957779371
     real, allocatable, dimension(:,:,:) :: A_coef, B_coef, C_coef, D_coef, E_coef, F_coef, G_coef, H_coef, I_coef, &
@@ -96,6 +96,7 @@ contains
 
         hs = domain%grid%halo_size
         if (.not.(allocated(dzdx))) then
+            !call MPI_INIT(ierr)
             allocate(dzdx(i_s:i_e,k_s:k_e,j_s:j_e))
             allocate(dzdy(i_s:i_e,k_s:k_e,j_s:j_e))
             allocate(jaco(i_s:i_e,k_s:k_e,j_s:j_e))
@@ -125,9 +126,7 @@ contains
             if (domain%grid%yimg == 1) xl(domain%grid%ximg) = domain%grid%nx-hs*2
             if (domain%grid%ximg == 1) yl(domain%grid%yimg) = domain%grid%ny-hs*2
         
-            !Wait for all images to contribute their dimension
-            sync all
-            
+            !Wait for all images to contribute their dimension            
             call CO_MAX(xl)
             call CO_MAX(yl)
             
@@ -153,18 +152,10 @@ contains
         else
             call update_coefs(domain)
         endif
-        
-        call PetscInitialize(PETSC_NULL_CHARACTER, ierr)
-        if (ierr .ne. 0) then
-            print*,'Unable to initialize PETSc'
-            stop
-        endif 
-        if(this_image()==1) write(*,*) 'Initialized PETSc'
-        
+                                
         call KSPCreate(PETSC_COMM_WORLD,ksp,ierr)
         conv_tol = 1e-4
 
-        
         !call KSPSetTolerances(ksp,conv_tol,PETSC_DEFAULT_REAL,PETSC_DEFAULT_REAL,PETSC_DEFAULT_INTEGER,ierr)
         call KSPSetType(ksp,KSPBCGS,ierr);
         call DMDACreate3d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DMDA_STENCIL_BOX, &
@@ -201,9 +192,7 @@ contains
         call VecDestroy(localX,ierr)
         call DMDestroy(da,ierr)
         call KSPDestroy(ksp,ierr)
-        
-        call PetscFinalize(ierr)
-        
+                
     end subroutine calc_iter_winds
     
     subroutine calc_updated_winds(domain,lambda,update,adv_den) !u, v, w, jaco_u,jaco_v,jaco_w,u_dzdx,v_dzdy,lambda, ids, ide, jds, jde)
@@ -781,5 +770,28 @@ contains
                     
     end subroutine
 
+
+    subroutine finalize_iter_winds()
+        implicit none
+
+        PetscErrorCode ierr
+
+        sync all
+        call PetscFinalize(ierr)
+    end subroutine
+
+    subroutine init_iter_winds()
+        implicit none
+
+        PetscErrorCode ierr
+        sync all
+
+        call PetscInitialize(PETSC_NULL_CHARACTER, ierr)
+        if (ierr .ne. 0) then
+            print*,'Unable to initialize PETSc'
+            stop
+        endif 
+        if(this_image()==1) write(*,*) 'Initialized PETSc'
+    end subroutine
 
 end module wind_iterative
