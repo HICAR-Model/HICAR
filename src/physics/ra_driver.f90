@@ -115,8 +115,7 @@ contains
         ! List the variables that are required to be allocated for the simple radiation code
         call options%alloc_vars( &
                      [kVARS%pressure,    kVARS%potential_temperature,   kVARS%exner,        kVARS%cloud_fraction,   &
-                      kVARS%water_vapor, kVARS%cloud_water,             kVARS%rain_in_air,  kVARS%snow_in_air,      &
-                      kVARS%shortwave,   kVARS%longwave,                kVARS%cloud_ice,    kVARS%graupel_in_air])
+                      kVARS%shortwave,   kVARS%longwave,  kVARS%graupel_in_air])
 
         ! List the variables that are required to be advected for the simple radiation code
         call options%advect_vars( &
@@ -140,10 +139,9 @@ contains
         ! List the variables that are required to be allocated for the simple radiation code
         call options%alloc_vars( &
                      [kVARS%pressure,     kVARS%pressure_interface,    kVARS%potential_temperature,   kVARS%exner,            &
-                      kVARS%water_vapor,  kVARS%cloud_water,           kVARS%rain_in_air,             kVARS%snow_in_air,      &
-                      kVARS%shortwave,    kVARS%longwave,              kVARS%cloud_ice,               kVARS%graupel_in_air,   &
+                      kVARS%shortwave,    kVARS%longwave,                                                                     &
                       kVARS%re_cloud,     kVARS%re_ice,                kVARS%re_snow,                 kVARS%out_longwave_rad, &
-                      kVARS%land_mask,    kVARS%snow_water_equivalent,  &
+                      kVARS%land_mask,    kVARS%snow_water_equivalent,                                                        &
                       kVARS%dz_interface, kVARS%skin_temperature,      kVARS%temperature,             kVARS%density,          &
                       kVARS%longwave_cloud_forcing,                    kVARS%land_emissivity,         kVARS%temperature_interface,  &
                       kVARS%cosine_zenith_angle,                       kVARS%shortwave_cloud_forcing, kVARS%tend_swrad,           &
