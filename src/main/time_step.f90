@@ -312,13 +312,15 @@ contains
     !! @param next_output   Next time to write an output file (in "model_time")
     !!
     !!------------------------------------------------------------
-    subroutine step(domain, forcing, end_time, dt_in, options)
+    subroutine step(domain, forcing, end_time, dt_in, options, mp_timer, adv_timer, exch_timer)
         implicit none
         type(domain_t),     intent(inout)   :: domain
         type(boundary_t),   intent(in)      :: forcing
         type(Time_type),    intent(in)      :: end_time
         type(time_delta_t), intent(in)      :: dt_in
         type(options_t),    intent(in)      :: options
+        type(timer_t),      intent(inout)   :: mp_timer, adv_timer, exch_timer
+
         real :: last_print_time
         type(time_delta_t) :: time_step_size, dt
 
@@ -369,16 +371,21 @@ contains
                 ! the input arrays to advect are the same as the start of the time step.
                 !After advection, apply tendencies to cells and call diagnostic update. Now MP can be called
                 
+                call exch_timer%start()
                 call domain%halo_exchange()
-                
+                call exch_timer%stop()
+
+                call adv_timer%start()
                 call advect(domain, options, real(dt%seconds()))
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain", fix=.True.)
+                call adv_timer%stop()
 
                 call domain%diagnostic_update(options)
-
+                
+                call mp_timer%start()
                 call mp(domain, options, real(dt%seconds()))!, halo=domain%grid%halo_size)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp_halo", fix=.True.)
-
+                call mp_timer%stop()
                 !call domain%halo_send()
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_send", fix=.True.)
 
