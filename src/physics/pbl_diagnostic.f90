@@ -149,28 +149,28 @@ contains
 
         ! First water vapor
         call diffuse_variable(domain%water_vapor%data_3d, domain%density%data_3d, rho_stag, domain%dz_mass%data_3d, &
-                        dz_mass_i, domain%jacobian, domain%jacobian_w, bot_flux_in=qv_flux)
+                        dz_mass_i, domain%jacobian, domain%jacobian_w, domain%dx, bot_flux_in=qv_flux)
         ! ditto for potential temperature
         call diffuse_variable(domain%potential_temperature%data_3d, domain%density%data_3d, rho_stag, domain%dz_mass%data_3d, &
-                        dz_mass_i, domain%jacobian, domain%jacobian_w, bot_flux_in=th_flux)
+                        dz_mass_i, domain%jacobian, domain%jacobian_w, domain%dx, bot_flux_in=th_flux)
         ! and cloud water
         if (associated(domain%cloud_water_mass%data_3d)) call diffuse_variable(domain%cloud_water_mass%data_3d, domain%density%data_3d, &
-                        rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w)
+                        rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w, domain%dx)
         ! and cloud ice
         if (associated(domain%cloud_ice_mass%data_3d)) call diffuse_variable(domain%cloud_ice_mass%data_3d, domain%density%data_3d, &
-                        rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w)
+                        rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w, domain%dx)
         ! and snow
         if (associated(domain%snow_mass%data_3d)) call diffuse_variable(domain%snow_mass%data_3d, domain%density%data_3d, &
-                        rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w)
+                        rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w, domain%dx)
         ! and rain
         if (associated(domain%rain_mass%data_3d)) call diffuse_variable(domain%rain_mass%data_3d, domain%density%data_3d, &
-                        rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w)
+                        rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w, domain%dx)
         ! and ice2
         if (associated(domain%ice2_mass%data_3d)) call diffuse_variable(domain%ice2_mass%data_3d, domain%density%data_3d, &
-                        rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w)
+                        rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w, domain%dx)
         ! and ice3
         if (associated(domain%ice3_mass%data_3d)) call diffuse_variable(domain%ice3_mass%data_3d, domain%density%data_3d, &
-                        rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w)
+                        rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w, domain%dx)
 
 
         !call io_write("shear_m.nc", "shear_m", shear_m(:,:,:) )
@@ -182,11 +182,12 @@ contains
         !call io_write("Kq_m.nc", "Kq_m", Kq_m(:,:,:) )
     end subroutine diagnostic_pbl
 
-    subroutine diffuse_variable(q, rho, rho_stag, dz, dz_mass_i, jaco, jaco_w, bot_flux_in)
+    subroutine diffuse_variable(q, rho, rho_stag, dz, dz_mass_i, jaco, jaco_w, dx, bot_flux_in)
         real,   intent(inout),  dimension(ims:ime,kms:kme,jms:jme) :: q
         real,   intent(in),     dimension(ims:ime,kms:kme,jms:jme) :: jaco, rho, dz, jaco_w
         real,   intent(in),     dimension(ims:ime,kms:kme-1,jms:jme) :: dz_mass_i
         real,   intent(in),     dimension(ims:ime,kms:kme,jms:jme) :: rho_stag
+        real,   intent(in)                                         :: dx
         real,   intent(in),  optional, dimension(ims:ime,jms:jme) :: bot_flux_in
 
         real, dimension(its:ite,kts:kte+1,jts:jte) :: fluxes
@@ -219,6 +220,12 @@ contains
         enddo
         !$omp end do
         !$omp end parallel
+
+        !Hack diffusion
+        !q(its:ite,:,jts:jte)  = q(its:ite,:,jts:jte)  + &
+        !                           Kq_m(its:ite, :, jts:jte)*((q(its+1:ite+1,:,jts:jte) - 2*q(its:ite,:,jts:jte) + q(its-1:ite-1,:,jts:jte)) + &
+        !                           (q(its:ite,:,jts+1:jte+1) - 2*q(its:ite,:,jts:jte) + q(its:ite,:,jts-1:jte-1))) &
+        !                           / (4*dx)                      
 
     end subroutine diffuse_variable
 

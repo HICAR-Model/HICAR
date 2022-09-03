@@ -15,6 +15,7 @@ module adv_4th
     private
     real,dimension(:,:,:),allocatable :: U_m, V_m, W_m, rho
     integer :: ims, ime, jms, jme, kms, kme, its, ite, jts, jte
+    real    :: dx
 
     ! For use advecting a (convective?) wind field
     ! real,dimension(:,:,:),allocatable :: U_4cu_u, V_4cu_u, W_4cu_u
@@ -234,6 +235,13 @@ contains
 
         ! !$omp end do
         ! !$omp end parallel
+        
+        !qfluxes(its:ite,:,jts:jte)  = qfluxes(its:ite,:,jts:jte)  + &
+        !                           20*((qold(its+1:ite+1,:,jts:jte) - 2*qold(its:ite,:,jts:jte) + qold(its-1:ite-1,:,jts:jte)) + &
+        !                           (qold(its:ite,:,jts+1:jte+1) - 2*qold(its:ite,:,jts:jte) + qold(its:ite,:,jts-1:jte-1))) &
+        !                           / (4*dx)                      
+
+        
     end subroutine adv4_advect3d
 
     ! subroutine setup_cu_winds(domain, options, dt)
@@ -392,7 +400,7 @@ contains
              ! Divide only U and V by dx. This minimizes the number of operations per advection step. W cannot be divided by dz,
              ! since non-uniform dz spacing does not allow for the same spacing to be assumed on either side of a k+1/2 interface,
              ! as is required for the adv4 scheme.
-             
+            dx = domain%dx
             rho = 1
             if (options%parameters%advect_density) rho = domain%density%data_3d  
             
