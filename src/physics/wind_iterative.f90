@@ -153,6 +153,8 @@ contains
             call update_coefs(domain)
         endif
                                 
+        call init_iter_winds()
+                                
         call KSPCreate(PETSC_COMM_WORLD,ksp,ierr)
         conv_tol = 1e-4
 
@@ -192,6 +194,8 @@ contains
         call VecDestroy(localX,ierr)
         call DMDestroy(da,ierr)
         call KSPDestroy(ksp,ierr)
+        
+        call finalize_iter_winds()
                 
     end subroutine calc_iter_winds
     
@@ -776,7 +780,6 @@ contains
 
         PetscErrorCode ierr
 
-        sync all
         call PetscFinalize(ierr)
     end subroutine
 
@@ -784,7 +787,6 @@ contains
         implicit none
 
         PetscErrorCode ierr
-        sync all
 
         call PetscInitialize(PETSC_NULL_CHARACTER, ierr)
         if (ierr .ne. 0) then

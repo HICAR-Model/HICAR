@@ -369,11 +369,17 @@ contains
                 ! the input arrays to advect are the same as the start of the time step.
                 !After advection, apply tendencies to cells and call diagnostic update. Now MP can be called
                 
+                call domain%halo_exchange()
+                
+                call advect(domain, options, real(dt%seconds()))
+                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain", fix=.True.)
 
-                call mp(domain, options, real(dt%seconds()), halo=domain%grid%halo_size)
+                call domain%diagnostic_update(options)
+
+                call mp(domain, options, real(dt%seconds()))!, halo=domain%grid%halo_size)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp_halo", fix=.True.)
 
-                call domain%halo_send()
+                !call domain%halo_send()
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_send", fix=.True.)
 
                 ! call rad(domain, options, real(dt%seconds()), subset=1)
@@ -381,15 +387,12 @@ contains
                 ! call pbl(domain, options, real(dt%seconds()))!, subset=1)
                 ! call convect(domain, options, real(dt%seconds()), subset=1)
 
-                call mp(domain, options, real(dt%seconds()), subset=domain%grid%halo_size)
+                !call mp(domain, options, real(dt%seconds()), subset=domain%grid%halo_size)
 
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp(domain", fix=.True.)
-                call domain%halo_retrieve()
+                !call domain%halo_retrieve()
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_retrieve", fix=.True.)
 
-                call advect(domain, options, real(dt%seconds()))
-
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain", fix=.True.)
 
                 !If we are in the last ~10 updates of a time step and a variable drops below 0, we have probably over-shot a value of 0. Force back to 0
                 if ((end_time%seconds() - domain%model_time%seconds()) < (dt%seconds()*10)) then
@@ -404,7 +407,6 @@ contains
             ! step model_time forward
             domain%model_time = domain%model_time + dt
             
-            call domain%diagnostic_update(options)
         enddo
 
     end subroutine step
