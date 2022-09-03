@@ -555,6 +555,7 @@ SUBROUTINE MP_MORR_TWO_MOMENT(ITIMESTEP,                       &
                 RHO, PII, P, DT_IN, DZ, W,          &
                 RAINNC, RAINNCV, SR,                    &
                 SNOWNC,SNOWNCV,GRAUPELNC,GRAUPELNCV,    & ! hm added 7/13/13
+                EFFC, EFFI, EFFS,                       & ! particle radiuses for radiation
                 refl_10cm, diagflag, do_radar_ref,      & ! GT added for reflectivity calcs
                 qrcuten, qscuten, qicuten & ! mu           & ! hm added
 !               ,F_QNDROP, qndrop                        & ! hm added, wrf-chem
@@ -639,7 +640,7 @@ SUBROUTINE MP_MORR_TWO_MOMENT(ITIMESTEP,                       &
 ! Temporary changed from INOUT to IN
 
    REAL, DIMENSION(ims:ime, kms:kme, jms:jme), INTENT(INOUT):: &
-                          qv, qc, qr, qi, qs, qg, ni, ns, nr, TH, NG
+                          qv, qc, qr, qi, qs, qg, ni, ns, nr, TH, NG, EFFC, EFFI, EFFS
 !jdf                      qndrop ! hm added, wrf-chem
    ! REAL, DIMENSION(ims:ime, kms:kme, jms:jme), optional,INTENT(INOUT):: qndrop
 !jdf  REAL, DIMENSION(ims:ime, kms:kme, jms:jme),INTENT(INOUT):: CSED3D, &
@@ -666,10 +667,7 @@ SUBROUTINE MP_MORR_TWO_MOMENT(ITIMESTEP,                       &
    ! LOCAL VARIABLES
 
    REAL, DIMENSION(its:ite, kts:kte, jts:jte)::                     &
-                      effi, effs, effr, EFFG
-
-   REAL, DIMENSION(its:ite, kts:kte, jts:jte)::                     &
-                      T, WVAR, EFFC
+                      T, WVAR, EFFR, EFFG
 
    REAL, DIMENSION(kts:kte) ::                                                                &
                             QC_TEND1D, QI_TEND1D, QNI_TEND1D, QR_TEND1D,                      &
@@ -776,7 +774,6 @@ SUBROUTINE MP_MORR_TWO_MOMENT(ITIMESTEP,                       &
           QR1D(k)       = QR(i,k,j)
 
           NI1D(k)       = NI(i,k,j)
-
           NS1D(k)       = NS(i,k,j)
           NR1D(k)       = NR(i,k,j)
 ! HM ADD GRAUPEL
@@ -785,6 +782,10 @@ SUBROUTINE MP_MORR_TWO_MOMENT(ITIMESTEP,                       &
           QG_TEND1D(K)  = 0.
           NG_TEND1D(K)  = 0.
 
+          EFFC1D(k)     = EFFC(i,k,j)
+          EFFS1D(k)     = EFFS(i,k,j)
+          EFFI1D(k)     = EFFI(i,k,j)
+          
           T1D(k)        = T(i,k,j)
           QV1D(k)       = QV(i,k,j)
           P1D(k)        = P(i,k,j)
