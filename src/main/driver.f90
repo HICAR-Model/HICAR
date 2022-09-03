@@ -45,7 +45,7 @@ program icar
 
     type(output_t)  :: restart_dataset
     type(output_t)  :: output_dataset
-    type(timer_t)   :: initialization_timer, total_timer, input_timer, output_timer, physics_timer, wind_timer
+    type(timer_t)   :: initialization_timer, total_timer, input_timer, output_timer, physics_timer, wind_timer, mp_timer, adv_timer, exch_timer
     type(Time_type) :: next_output
     type(time_delta_t) :: small_time_delta, phys_dt
 
@@ -171,7 +171,7 @@ program icar
         ! this is the meat of the model physics, run all the physics for the current time step looping over internal timesteps
         if (.not.(options%wind%wind_only)) then
             call physics_timer%start()
-            call step(domain, boundary, step_end(boundary%current_time, next_output), phys_dt, options)
+            call step(domain, boundary, step_end(boundary%current_time, next_output), phys_dt, options, mp_timer, adv_timer, exch_timer)
             call physics_timer%stop()
         else
             call domain%apply_forcing(boundary, options%output_options%output_dt)
@@ -238,6 +238,9 @@ program icar
         write(*,*) "input          : ", trim(input_timer%as_string())
         write(*,*) "output         : ", trim(output_timer%as_string())
         write(*,*) "physics        : ", trim(physics_timer%as_string())
+        write(*,*) "microphysics   : ", trim(mp_timer%as_string())
+        write(*,*) "advection      : ", trim(adv_timer%as_string())
+        write(*,*) "halo-exchange  : ", trim(exch_timer%as_string())
         write(*,*) "winds          : ", trim(wind_timer%as_string())
     endif
 

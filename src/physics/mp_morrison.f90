@@ -89,7 +89,7 @@ MODULE MODULE_MP_MORR_TWO_MOMENT
    ! USE module_mp_radar
 
 ! USE WRF PHYSICS CONSTANTS taken from ICAR data_structures module
-  use mod_wrf_constants, ONLY: CP=>wrf_cp, G=>wrf_gravity, R => r_d, RV => r_v, EP_2, epsilon
+  use mod_wrf_constants, ONLY: CP=>wrf_cp, G=>wrf_gravity, R => r_d, RV => r_v, EP_2
 !  USE module_state_description
 
    IMPLICIT NONE
@@ -555,7 +555,6 @@ SUBROUTINE MP_MORR_TWO_MOMENT(ITIMESTEP,                       &
                 RHO, PII, P, DT_IN, DZ, W,          &
                 RAINNC, RAINNCV, SR,                    &
                 SNOWNC,SNOWNCV,GRAUPELNC,GRAUPELNCV,    & ! hm added 7/13/13
-                EFFC, EFFI, EFFS,                       & ! particle radiuses for radiation
                 refl_10cm, diagflag, do_radar_ref,      & ! GT added for reflectivity calcs
                 qrcuten, qscuten, qicuten & ! mu           & ! hm added
 !               ,F_QNDROP, qndrop                        & ! hm added, wrf-chem
@@ -640,7 +639,7 @@ SUBROUTINE MP_MORR_TWO_MOMENT(ITIMESTEP,                       &
 ! Temporary changed from INOUT to IN
 
    REAL, DIMENSION(ims:ime, kms:kme, jms:jme), INTENT(INOUT):: &
-                          qv, qc, qr, qi, qs, qg, ni, ns, nr, TH, NG, EFFC, EFFI, EFFS
+                          qv, qc, qr, qi, qs, qg, ni, ns, nr, TH, NG
 !jdf                      qndrop ! hm added, wrf-chem
    ! REAL, DIMENSION(ims:ime, kms:kme, jms:jme), optional,INTENT(INOUT):: qndrop
 !jdf  REAL, DIMENSION(ims:ime, kms:kme, jms:jme),INTENT(INOUT):: CSED3D, &
@@ -667,13 +666,16 @@ SUBROUTINE MP_MORR_TWO_MOMENT(ITIMESTEP,                       &
    ! LOCAL VARIABLES
 
    REAL, DIMENSION(its:ite, kts:kte, jts:jte)::                     &
-                      T, WVAR, EFFR, EFFG
+                      effi, effs, effr, EFFG
+
+   REAL, DIMENSION(its:ite, kts:kte, jts:jte)::                     &
+                      T, WVAR, EFFC
 
    REAL, DIMENSION(kts:kte) ::                                                                &
                             QC_TEND1D, QI_TEND1D, QNI_TEND1D, QR_TEND1D,                      &
                             NI_TEND1D, NS_TEND1D, NR_TEND1D,                                  &
                             QC1D, QI1D, QR1D,NI1D, NS1D, NR1D, QS1D,                          &
-                            T_TEND1D,QV_TEND1D, T1D, QV1D, P1D, W1D, WVAR1D, RHO1D,        &
+                            T_TEND1D,QV_TEND1D, T1D, QV1D, P1D, W1D, WVAR1D,         &
                             EFFC1D, EFFI1D, EFFS1D, EFFR1D,DZ1D,   &
    ! HM ADD GRAUPEL
                             QG_TEND1D, NG_TEND1D, QG1D, NG1D, EFFG1D, &
@@ -789,12 +791,6 @@ SUBROUTINE MP_MORR_TWO_MOMENT(ITIMESTEP,                       &
           DZ1D(k)       = DZ(i,k,j)
           W1D(k)        = W(i,k,j)
           WVAR1D(k)     = WVAR(i,k,j)
-          RHO1D(k)      = RHO(i,k,j)
-          
-          EFFC1D(k)     = EFFC(i,k,j)
-          EFFS1D(k)     = EFFS(i,k,j)
-          EFFI1D(k)     = EFFI(i,k,j)
-          
 ! add cumulus tendencies, decouple from mu
           qrcu1d(k)     = qrcuten(i,k,j) ! /mu(i,j) ! not coupled with mu in ICAR
           qscu1d(k)     = qscuten(i,k,j) ! /mu(i,j) ! not coupled with mu in ICAR
@@ -819,7 +815,7 @@ SUBROUTINE MP_MORR_TWO_MOMENT(ITIMESTEP,                       &
       call MORR_TWO_MOMENT_MICRO(QC_TEND1D, QI_TEND1D, QNI_TEND1D, QR_TEND1D,            &
        NI_TEND1D, NS_TEND1D, NR_TEND1D,                                                  &
        QC1D, QI1D, QS1D, QR1D,NI1D, NS1D, NR1D,                                          &
-       T_TEND1D,QV_TEND1D, T1D, QV1D, P1D, DZ1D, W1D, WVAR1D,RHO1D,                   &
+       T_TEND1D,QV_TEND1D, T1D, QV1D, P1D, DZ1D, W1D, WVAR1D,                   &
        PRECPRT1D,SNOWRT1D,                                                               &
        SNOWPRT1D,GRPLPRT1D,                 & ! hm added 7/13/13
        EFFC1D,EFFI1D,EFFS1D,EFFR1D,DT,                                                   &
@@ -882,15 +878,17 @@ SUBROUTINE MP_MORR_TWO_MOMENT(ITIMESTEP,                       &
         !   IF ( PRESENT( PRECG ) ) PRECG(I,K,J) = GSED(K)
 ! EFFECTIVE RADIUS FOR RADIATION CODE (currently not coupled)
 ! HM, ADD LIMIT TO PREVENT BLOWING UP OPTICAL PROPERTIES, 8/18/07
-! DR, Taking limits from Thompson aerosol scheme, converting output to m instead of microns
-
           EFFC(I,K,J)     = MIN(EFFC(I,K,J),50.)*1.E-6
           EFFC(I,K,J)     = MAX(EFFC(I,K,J),2.5)*1.E-6
           EFFI(I,K,J)     = MIN(EFFI(I,K,J),125.)*1.E-6
           EFFI(I,K,J)     = MAX(EFFI(I,K,J),5.)*1.E-6
           EFFS(I,K,J)     = MIN(EFFS(I,K,J),1000.)*1.E-6
           EFFS(I,K,J)     = MAX(EFFS(I,K,J),10.)*1.E-6
-          
+!          EFFCS(I,K,J)     = MIN(EFFC(I,K,J),50.)
+!          EFFCS(I,K,J)     = MAX(EFFCS(I,K,J),1.)
+!          EFFIS(I,K,J)     = MIN(EFFI(I,K,J),130.)
+!          EFFIS(I,K,J)     = MAX(EFFIS(I,K,J),13.)
+
 ! #if ( WRF_CHEM == 1)
 !            IF ( PRESENT( rainprod ) ) rainprod(i,k,j) = rainprod1d(k)
 !            IF ( PRESENT( evapprod ) ) evapprod(i,k,j) = evapprod1d(k)
@@ -932,7 +930,7 @@ END SUBROUTINE MP_MORR_TWO_MOMENT
 !CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
       SUBROUTINE MORR_TWO_MOMENT_MICRO(QC3DTEN,QI3DTEN,QNI3DTEN,QR3DTEN,         &
        NI3DTEN,NS3DTEN,NR3DTEN,QC3D,QI3D,QNI3D,QR3D,NI3D,NS3D,NR3D,              &
-       T3DTEN,QV3DTEN,T3D,QV3D,PRES,DZQ,W3D,WVAR,RHO,PRECRT,SNOWRT,            &
+       T3DTEN,QV3DTEN,T3D,QV3D,PRES,DZQ,W3D,WVAR,PRECRT,SNOWRT,            &
        SNOWPRT,GRPLPRT,                & ! hm added 7/13/13
        EFFC,EFFI,EFFS,EFFR,DT,                                                   &
                                             IMS,IME, JMS,JME, KMS,KME,           &
@@ -999,8 +997,6 @@ END SUBROUTINE MP_MORR_TWO_MOMENT
       REAL, DIMENSION(KTS:KTE) ::  DZQ                ! DIFFERENCE IN HEIGHT ACROSS LEVEL (m)
       REAL, DIMENSION(KTS:KTE) ::  W3D                ! GRID-SCALE VERTICAL VELOCITY (M/S)
       REAL, DIMENSION(KTS:KTE) ::  WVAR               ! SUB-GRID VERTICAL VELOCITY (M/S)
-      REAL, DIMENSION(KTS:KTE) ::  RHO                ! AIR DENSITY
-
 ! below for wrf-chem
       REAL, DIMENSION(KTS:KTE) ::  nc3d
       REAL, DIMENSION(KTS:KTE) ::  nc3dten
@@ -1150,6 +1146,7 @@ END SUBROUTINE MP_MORR_TWO_MOMENT
      REAL, DIMENSION(KTS:KTE) ::   MU    ! VISCOCITY OF AIR
      REAL, DIMENSION(KTS:KTE) ::   SC    ! SCHMIDT NUMBER
      REAL, DIMENSION(KTS:KTE) ::   XLF   ! LATENT HEAT OF FREEZING
+     REAL, DIMENSION(KTS:KTE) ::   RHO   ! AIR DENSITY
      REAL, DIMENSION(KTS:KTE) ::   AB    ! CORRECTION TO CONDENSATION RATE DUE TO LATENT HEATING
      REAL, DIMENSION(KTS:KTE) ::   ABI    ! CORRECTION TO DEPOSITION RATE DUE TO LATENT HEATING
 
@@ -1192,7 +1189,7 @@ END SUBROUTINE MP_MORR_TWO_MOMENT
 
 ! DUMMY VARIABLES
 
-     REAL DUM,DUM1,DUM2,DUMT,DUMQV,DUMQSS,DUMQSI,DUMQSV,DUMS,DUMT_TEND,DUMQV_TEND,DUMQC_TEND,DUMQI_TEND
+     REAL DUM,DUM1,DUM2,DUMT,DUMQV,DUMQSS,DUMQSI,DUMS
 
 ! PROGNOSTIC SUPERSATURATION
 
@@ -1213,10 +1210,7 @@ END SUBROUTINE MP_MORR_TWO_MOMENT
 
 ! COUNTING/INDEX VARIABLES
 
-     INTEGER K,NSTEP,N,LOOPS,LOOP ! ,I
-     
-! DT stepping variable for integration of saturation adjustment scheme
-     REAL DT_STEP
+     INTEGER K,NSTEP,N ! ,I
 
 ! LTRUE IS ONLY USED TO SPEED UP THE CODE !!
 ! LTRUE, SWITCH = 0, NO HYDROMETEORS IN COLUMN,
@@ -1325,7 +1319,7 @@ END SUBROUTINE MP_MORR_TWO_MOMENT
 
 ! AIR DENSITY
 
-            !RHO(K) = PRES(K)/(R*T3D(K)*(1+0.6*QV3D(K)))
+            RHO(K) = PRES(K)/(R*T3D(K))
 
 ! ADD NUMBER CONCENTRATION DUE TO CUMULUS TENDENCY
 ! ASSUME N0 ASSOCIATED WITH CUMULUS PARAM RAIN IS 10^7 M^-4
@@ -2052,47 +2046,26 @@ END SUBROUTINE MP_MORR_TWO_MOMENT
 ! NOW CALCULATE SATURATION ADJUSTMENT TO CONDENSE EXTRA VAPOR ABOVE
 ! WATER SATURATION
 
-! dr, add smaller time stepping for saturation adjustment to avoid under/overshooting
-      LOOPS = max(nint(DT/2.),1)
-      DT_STEP = DT/LOOPS
-      IF(DT.le.DT_STEP) DT_STEP = DT
-      
-      DUMT_TEND = DT_STEP*T3DTEN(K)
-      DUMQV_TEND = DT_STEP*QV3DTEN(K)
-      DUMQC_TEND = DT_STEP*QC3DTEN(K)
-
-      DUMT = T3D(K)
-      DUMQV = QV3D(K)
-      DUMQC = QC3D(K)
-
-      DO LOOP = 1,LOOPS
-        DUMT = DUMT+DUMT_TEND
-        DUMQV = DUMQV+DUMQV_TEND
-        DUMQC = DUMQC+DUMQC_TEND
-
+      DUMT = T3D(K)+DT*T3DTEN(K)
+      DUMQV = QV3D(K)+DT*QV3DTEN(K)
 ! hm, add fix for low pressure, 5/12/10
-        dum=min(0.99*pres(k),POLYSVP(DUMT,0))
-        DUMQSS = EP_2*dum/(PRES(K)-dum)
-        DUMQC = MAX(DUMQC,0.)
+      dum=min(0.99*pres(k),POLYSVP(DUMT,0))
+      DUMQSS = EP_2*dum/(PRES(K)-dum)
+      DUMQC = QC3D(K)+DT*QC3DTEN(K)
+      DUMQC = MAX(DUMQC,0.)
 
 ! SATURATION ADJUSTMENT FOR LIQUID
 
-        DUMS = DUMQV-DUMQSS
-        PCC(K) = DUMS/(1.+XXLV(K)**2*DUMQSS/(CPM(K)*RV*DUMT**2))/DT
-        IF (PCC(K)*DT_STEP+DUMQC.LT.0.) THEN
-             PCC(K) = -DUMQC/DT_STEP
-        END IF
-        
-        DUMT = DUMT+PCC(K)*DT_STEP*XXLV(K)/CPM(K)
-        DUMQV = DUMQV-PCC(K)*DT_STEP
-        DUMQC = DUMQC+PCC(K)*DT_STEP
-        
-      END DO
-      
-! To regain adjustment tendency, subtract 3D array, full tendency (for full DT), and add back tendency
-      T3DTEN(K) = (DUMT-T3D(K)-T3DTEN(K)*(DT))/DT + T3DTEN(K)
-      QV3DTEN(K) = (DUMQV-QV3D(K)-QV3DTEN(K)*(DT))/DT + QV3DTEN(K)
-      QC3DTEN(K) = (DUMQC-QC3D(K)-QC3DTEN(K)*(DT))/DT + QC3DTEN(K)
+      DUMS = DUMQV-DUMQSS
+      PCC(K) = DUMS/(1.+XXLV(K)**2*DUMQSS/(CPM(K)*RV*DUMT**2))/DT
+      IF (PCC(K)*DT+DUMQC.LT.0.) THEN
+           PCC(K) = -DUMQC/DT
+      END IF
+
+      QV3DTEN(K) = QV3DTEN(K)-PCC(K)
+      T3DTEN(K) = T3DTEN(K)+PCC(K)*XXLV(K)/CPM(K)
+      QC3DTEN(K) = QC3DTEN(K)+PCC(K)
+
 ! #if (WRF_CHEM == 1)
 !          evapprod(k) = - PRE(K) - EVPMS(K) - EVPMG(K)
 !          rainprod(k) = PRA(K) + PRC(K) + tqimelt(K)
@@ -3267,116 +3240,26 @@ END SUBROUTINE MP_MORR_TWO_MOMENT
 !CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 ! NOW CALCULATE SATURATION ADJUSTMENT TO CONDENSE EXTRA VAPOR ABOVE
 ! WATER SATURATION
-      LOOPS = max(nint(DT/2.),1)
-      DT_STEP = DT/LOOPS
-      IF(DT.le.DT_STEP) DT_STEP = DT
-      
-      DUMT_TEND = DT_STEP*T3DTEN(K)
-      DUMQV_TEND = DT_STEP*QV3DTEN(K)
-      DUMQC_TEND = DT_STEP*QC3DTEN(K)
 
-      DUMT = T3D(K)
-      DUMQV = QV3D(K)
-      DUMQC = QC3D(K)
-
-      DO LOOP = 1,LOOPS
-        DUMT = DUMT+DUMT_TEND
-        DUMQV = DUMQV+DUMQV_TEND
-        DUMQC = DUMQC+DUMQC_TEND
-
+      DUMT = T3D(K)+DT*T3DTEN(K)
+      DUMQV = QV3D(K)+DT*QV3DTEN(K)
 ! hm, add fix for low pressure, 5/12/10
-        dum=min(0.99*pres(k),POLYSVP(DUMT,0))
-        DUMQSS = EP_2*dum/(PRES(K)-dum)
-        DUMQC = MAX(DUMQC,0.)
+      dum=min(0.99*pres(k),POLYSVP(DUMT,0))
+      DUMQSS = EP_2*dum/(PRES(K)-dum)
+      DUMQC = QC3D(K)+DT*QC3DTEN(K)
+      DUMQC = MAX(DUMQC,0.)
 
 ! SATURATION ADJUSTMENT FOR LIQUID
 
-        DUMS = DUMQV-DUMQSS
-        PCC(K) = DUMS/(1.+XXLV(K)**2*DUMQSS/(CPM(K)*RV*DUMT**2))/DT
-        IF (PCC(K)*DT_STEP+DUMQC.LT.0.) THEN
-             PCC(K) = -DUMQC/DT_STEP
-        END IF
-        
-        DUMT = DUMT+PCC(K)*DT_STEP*XXLV(K)/CPM(K)
-        DUMQV = DUMQV-PCC(K)*DT_STEP
-        DUMQC = DUMQC+PCC(K)*DT_STEP
-        
-      END DO
-      
-! To regain adjustment tendency, subtract 3D array, full tendency (for full DT), and add back tendency
-      T3DTEN(K) = (DUMT-T3D(K)-T3DTEN(K)*(DT))/DT + T3DTEN(K)
-      QV3DTEN(K) = (DUMQV-QV3D(K)-QV3DTEN(K)*(DT))/DT + QV3DTEN(K)
-      QC3DTEN(K) = (DUMQC-QC3D(K)-QC3DTEN(K)*(DT))/DT + QC3DTEN(K)
+      DUMS = DUMQV-DUMQSS
+      PCC(K) = DUMS/(1.+XXLV(K)**2*DUMQSS/(CPM(K)*RV*DUMT**2))/DT
+      IF (PCC(K)*DT+DUMQC.LT.0.) THEN
+           PCC(K) = -DUMQC/DT
+      END IF
 
-
-! dr, add smaller time stepping for saturation adjustment to avoid under/overshooting
-!      LOOPS = max(nint(DT/2.),1)
-!      DT_STEP = DT/LOOPS
-!      IF(DT.le.DT_STEP) DT_STEP = DT
-!      
-!      DUMT_TEND = DT_STEP*T3DTEN(K)
-!      DUMQV_TEND = DT_STEP*QV3DTEN(K)
-!      DUMQC_TEND = DT_STEP*QC3DTEN(K)
-!      DUMQI_TEND = DT_STEP*QI3DTEN(K)
-
-!      DUMT = T3D(K)
-!      DUMQV = QV3D(K)
-!      DUMQC = QC3D(K)
-!      DUMQI = QI3D(K)
-
-!      DO LOOP = 1,LOOPS
-!        DUMT = DUMT+DUMT_TEND
-!        DUMQV = DUMQV+DUMQV_TEND
-!        DUMQC = DUMQC+DUMQC_TEND
-!        DUMQI = DUMQI+DUMQI_TEND
-        
-!        DUMQC = MAX(DUMQC,0.)
-!        DUMQI = MAX(DUMQI,0.)
-
-! Partitioning of cloud vs ice formation
-!        RATIO = (DUMT-233.15)/(40.)
-!        RATIO = max(min(RATIO,1.0),0.0)
-
-
-! hm, add fix for low pressure, 5/12/10
-!        dum=min(0.99*pres(k),POLYSVP(DUMT,0))
-!        DUMQSV = EP_2*dum/(PRES(K)-dum)
-        
-!        dum=min(0.99*pres(k),POLYSVP(DUMT,1))
-!        DUMQSI = EP_2*dum/(PRES(K)-dum)
-        
-!        IF (DUMQC+DUMQI==0) THEN
-!            DUMQSS = ((DUMQC+epsilon)*DUMQSV+(DUMQI+epsilon)*DUMQSI)/((DUMQC+epsilon)+(DUMQI+epsilon))
-!        ELSE
-!            DUMQSS = RATIO*DUMQSV+(1-RATIO)*DUMQSI
-!        END IF
-        
-!        DUMS = DUMQV-DUMQSS
-        
-! SATURATION ADJUSTMENT FOR LIQUID
-
-!        PCC(K) = RATIO*DUMS/(1.+XXLV(K)**2*DUMQSS/(CPM(K)*RV*DUMT**2))/DT
-!        PRD(K) = (1-RATIO)*DUMS/(1.+XXLS(K)**2*DUMQSS/(CPM(K)*RV*DUMT**2))/DT
-        
-!        IF (PCC(K)*DT_STEP+DUMQC.LT.0.) THEN
-!             PCC(K) = -DUMQC/DT_STEP
-!        END IF
-        
-!        IF (PRD(K)*DT_STEP+DUMQI.LT.0.) THEN
-!             PRD(K) = -DUMQI/DT_STEP
-!        END IF
-!        DUMT = DUMT+PCC(K)*DT_STEP*XXLV(K)/CPM(K)+PRD(K)*DT_STEP*XXLS(K)/CPM(K)
-!        DUMQV = DUMQV-PCC(K)*DT_STEP-PRD(K)*DT_STEP
-!        DUMQC = DUMQC+PCC(K)*DT_STEP
-!        DUMQI = DUMQI+PRD(K)*DT_STEP
-
-!      END DO
-      
-! To regain adjustment tendency, subtract 3D array, full tendency (for full DT), and add back tendency
-!      T3DTEN(K) = (DUMT-T3D(K)-T3DTEN(K)*(DT))/DT + T3DTEN(K)
-!      QV3DTEN(K) = (DUMQV-QV3D(K)-QV3DTEN(K)*(DT))/DT + QV3DTEN(K)
-!      QC3DTEN(K) = (DUMQC-QC3D(K)-QC3DTEN(K)*(DT))/DT + QC3DTEN(K)
-!      QI3DTEN(K) = (DUMQI-QI3D(K)-QI3DTEN(K)*(DT))/DT + QI3DTEN(K)
+      QV3DTEN(K) = QV3DTEN(K)-PCC(K)
+      T3DTEN(K) = T3DTEN(K)+PCC(K)*XXLV(K)/CPM(K)
+      QC3DTEN(K) = QC3DTEN(K)+PCC(K)
 
 !.......................................................................
 ! ACTIVATION OF CLOUD DROPLETS
