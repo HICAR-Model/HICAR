@@ -116,7 +116,7 @@ contains
 
 
         if (this_image()==1) write(*,*) "Updating initial winds"
-        if (options%physics%windtype==kITERATIVE_WINDS) call init_iter_winds()
+        ! if (options%physics%windtype==kITERATIVE_WINDS) call init_iter_winds()
 
         call update_winds(domain, options)
 

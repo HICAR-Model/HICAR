@@ -30,7 +30,7 @@ program icar
     use time_delta_object,  only : time_delta_t
     use wind,               only : update_winds
     use restart_interface,  only : restart_model
-    use icar_constants,     only : kVARS
+    use icar_constants,     only : kVARS, kITERATIVE_WINDS
     use wind_iterative,     only : finalize_iter_winds
 
     use land_surface,               only : lsm_init
@@ -219,7 +219,7 @@ program icar
 
     end do
     
-    if (options%physics%windtype==kITERATIVE_WINDS) call finalize_iter_winds() 
+    !if (options%physics%windtype==kITERATIVE_WINDS) call finalize_iter_winds() 
     
     !
     !-----------------------------------------
