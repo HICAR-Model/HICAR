@@ -205,10 +205,11 @@ module options_types
         ! variable names from init/BC/wind/... files
         character (len=MAXVARLENGTH) :: landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar, &
                                         hgt_hi,lat_hi,lon_hi,ulat_hi,ulon_hi,vlat_hi,vlon_hi, &
-                                        pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qsvar,qgvar,&
-                                        qncvar,qnivar,qnrvar,qnsvar,qngvar,hgtvar, &
+                                        pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qsvar,qgvar,i2mvar,i3mvar,&
+                                        qncvar,qnivar,qnrvar,qnsvar,qngvar,i2nvar,i3nvar,&
+                                        i1avar,i1cvar,i2avar,i2cvar,i3avar,i3cvar,hgtvar, &
                                         pslvar, psvar, snowh_var, &
-                                        shvar,lhvar,pblhvar,zvar,zbvar,&
+                                        shvar,lhvar,pblhvar,zvar,zbvar, &
                                         soiltype_var, soil_t_var,soil_vwc_var,swe_var,soil_deept_var, &
                                         vegtype_var,vegfrac_var, vegfracmax_var, lai_var, canwat_var, &
                                         linear_mask_var, nsq_calibration_var, &
