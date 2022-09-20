@@ -90,21 +90,19 @@ program icar
 
     future_dt_seconds = 0.0D0
     !Now that we have winds initialized, calculate current time-step
-    call update_dt(phys_dt, future_dt_seconds, options, domain%dx, domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%density%data_3d)
+    call update_dt(phys_dt, future_dt_seconds, options, domain, update=.False.)
 
     !-----------------------------------------
     !-----------------------------------------
     !  Time Loop
     !
     !   note that a timestep here is a forcing input timestep O(1-3hr), not a physics timestep O(20-100s)
-    write(file_name, '(A,I6.6,"_",A,".nc")')      &
+    write(file_name, '(A,A,".nc")')      &
             trim(options%output_options%output_file), &
-            this_image(),                         &
             trim(domain%model_time%as_string(file_date_format))
 
-    write(restart_file_name, '(A,I6.6,"_",A,".nc")')      &
+    write(restart_file_name, '(A,A,".nc")')      &
             trim(options%output_options%restart_file), &
-            this_image(),                         &
             trim(domain%model_time%as_string(file_date_format))
 
 
@@ -130,12 +128,13 @@ program icar
         !  Read input data if necessary
         !
         ! -----------------------------------------------------
-        call input_timer%start()
         if (boundary%current_time <= (domain%model_time + small_time_delta) ) then
             if (this_image()==1) write(*,*) ""
             if (this_image()==1) write(*,*) " ----------------------------------------------------------------------"
             if (this_image()==1) write(*,*) "Updating Boundary conditions"
+            call input_timer%start()
             call boundary%update_forcing(options)
+            call input_timer%stop()
             call domain%interpolate_forcing(boundary, update=.True.)
             call domain%diagnostic_update(options)
             call wind_timer%start()
@@ -147,13 +146,11 @@ program icar
             ! Note that there will currently be some discrepancy between using the current density and whatever density will be at 
             ! the next time step, but we assume that it is negligable
             ! and that using a CFL criterion < 1.0 will cover this
-            call update_dt(phys_dt, future_dt_seconds, options, domain%dx, &
-                                        domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d, domain%density%data_3d)
+            call update_dt(phys_dt, future_dt_seconds, options, domain, update=.True.)
             ! Make the boundary condition dXdt values into units of [X]/s
             call domain%update_delta_fields(boundary%current_time - domain%model_time)
             call boundary%update_delta_fields(boundary%current_time - domain%model_time)
         endif
-        call input_timer%stop()
 
 
 
@@ -191,9 +188,8 @@ program icar
             if (this_image()==1) write(*,*) "Writing output file"
             ! if (i>24) then
             if (i>options%parameters%frames_per_outfile) then
-                write(file_name, '(A,I6.6,"_",A,".nc")')    &
+                write(file_name, '(A,A,".nc")')    &
                     trim(options%output_options%output_file),   &
-                    this_image(),                           &
                     trim(domain%model_time%as_string(file_date_format))
                 i = 1
             endif
@@ -203,9 +199,8 @@ program icar
             if (restart_counter == options%output_options%restart_count) then
                 restart_counter = 0
 
-                write(restart_file_name, '(A,I6.6,"_",A,".nc")')      &
+                write(restart_file_name, '(A,A,".nc")')      &
                         trim(options%output_options%restart_file), &
-                        this_image(),                         &
                         trim(domain%model_time%as_string(file_date_format))
 
                 call restart_dataset%save_file(trim(restart_file_name), 1, next_output)
@@ -219,7 +214,7 @@ program icar
 
     end do
     
-    !if (options%physics%windtype==kITERATIVE_WINDS) call finalize_iter_winds() 
+    if (options%physics%windtype==kITERATIVE_WINDS) call finalize_iter_winds() 
     
     !
     !-----------------------------------------
