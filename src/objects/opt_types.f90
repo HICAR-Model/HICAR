@@ -121,6 +121,9 @@ module options_types
         logical :: flux_corrected_transport ! use Flux Corrected Transport (FCT) to maintain stability and prevent any wild oscllations
         integer :: mpdata_order             ! accuracy order for MP_DATA advection scheme.
         integer :: flux_corr                ! Designates which flux-correction scheme to use
+        integer :: h_order                  ! Designates which order the horizontal advection should be
+        integer :: v_order                  ! Designates which order the vertical advection should be
+
     end type adv_options_type
 
 

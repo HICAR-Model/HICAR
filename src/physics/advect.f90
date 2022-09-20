@@ -1,29 +1,32 @@
 !> ----------------------------------------------------------------------------
-!!  A simple upwind advection scheme
+!!  Standard advection scheme with variable order
 !!
 !!  @author
 !!  Ethan Gutmann (gutmann@ucar.edu)
+!!  Dylan Reynolds (dylan.reynolds@slf.ch)
 !!
 !! ----------------------------------------------------------------------------
-module adv_upwind
+module adv_std
     use data_structures
+    use icar_constants
     use options_interface, only: options_t
     use domain_interface,  only: domain_t
-
+    use adv_fluxcorr,      only: WRF_flux_corr
     implicit none
     private
     real,dimension(:,:,:),allocatable :: U_m, V_m, W_m, rho
-    integer :: ims, ime, jms, jme, kms, kme, its, ite, jts, jte
+    integer :: ims, ime, jms, jme, kms, kme, its, ite, jts, jte, i_s, i_e, j_s, j_e, horder, vorder
+    real    :: dx
 
     ! For use advecting a (convective?) wind field
     ! real,dimension(:,:,:),allocatable :: U_4cu_u, V_4cu_u, W_4cu_u
     ! real,dimension(:,:,:),allocatable :: U_4cu_v, V_4cu_v, W_4cu_v
 
-    public :: upwind, upwind_init, upwind_var_request, upwind_advect3d, upwind_compute_wind
+    public :: adv_std_init, adv_std_var_request, adv_std_advect3d, adv_std_compute_wind
 
 contains
 
-    subroutine upwind_init(domain,options)
+    subroutine adv_std_init(domain,options)
         implicit none
         type(domain_t), intent(in) :: domain
         type(options_t),intent(in) :: options
@@ -40,6 +43,23 @@ contains
         jts = domain%jts
         jte = domain%jte
         
+        !set order of advection
+        horder = options%adv_options%h_order
+        vorder = options%adv_options%v_order
+        
+        !Define bounds of advection computation. If using monotonic flux-limiter, it is necesarry to increase
+        !advection bounds by 1. The necesarry extension of the halo is handeled in domain_object
+        i_s = its
+        i_e = ite
+        j_s = jts
+        j_e = jte
+        
+        if (options%adv_options%flux_corr==kFLUXCOR_MONO) then
+            i_s = its - 1
+            i_e = ite + 1
+            j_s = jts - 1
+            j_e = jte + 1
+        endif
         
         ! if module level arrays are already allocated for some reason, deallocate them first
         if (allocated(U_m)) deallocate(U_m)
@@ -48,10 +68,10 @@ contains
         !if (allocated(lastqv_m)) deallocate(lastqv_m)
 
         ! allocate the module level arrays
-        allocate(U_m     (its:ite+1,kms:kme,jts:jte  ))
-        allocate(V_m     (its:ite,  kms:kme,jts:jte+1))
-        allocate(W_m     (its:ite,  kms:kme,jts:jte  ))
-        allocate(rho(its:ite,  kms:kme,jts:jte  ))
+        allocate(U_m     (ims+1:ime,kms:kme,jms:jme  ))
+        allocate(V_m     (ims:ime,  kms:kme,jms+1:jme))
+        allocate(W_m     (ims:ime,  kms:kme,jms:jme  ))
+        allocate(rho     (ims:ime,  kms:kme,jms:jme  ))
         !allocate(lastqv_m(ims:ime,  kms:kme,jms:jme  ))
 
         !     if (.not.allocated(U_4cu_u)) then
@@ -71,18 +91,19 @@ contains
         !     endif
     end subroutine
 
-    subroutine upwind_var_request(options)
+    subroutine adv_std_var_request(options)
         implicit none
         type(options_t), intent(inout) :: options
-        ! List the variables that are required to be allocated for upwind advection
+
+        ! List the variables that are required to be allocated for adv4 advection
         call options%alloc_vars( &
                         [kVARS%u,    kVARS%v,   kVARS%w,     kVARS%dz_interface, kVARS%water_vapor])
 
-        ! List the variables that are required for restarts with upwind advection
+        call options%advect_vars([kVARS%water_vapor, kVARS%potential_temperature])
+
+        ! List the variables that are required for restarts with adv4 advection
         call options%restart_vars( &
                         [kVARS%u,    kVARS%v,   kVARS%w,     kVARS%dz_interface, kVARS%water_vapor])
-                        
-        call options%advect_vars([kVARS%water_vapor, kVARS%potential_temperature])
 
     end subroutine
 
@@ -112,30 +133,124 @@ contains
 
     subroutine flux3(q,u,v,w,flux_x,flux_z,flux_y)
         implicit none
-        real, dimension(ims:ime,  kms:kme,jms:jme),    intent(in) :: q
-        real, dimension(its:ite,  kms:kme,jts:jte),    intent(in) :: w
-        real, dimension(its:ite+1,  kms:kme,jts:jte),  intent(in) :: u
-        real, dimension(its:ite,  kms:kme,jts:jte+1),  intent(in) :: v
+        real, dimension(ims:ime,  kms:kme,jms:jme),    intent(in)          :: q
+        real, dimension(i_s:i_e,  kms:kme,j_s:j_e), intent(in)     :: w
+        real, dimension(i_s:i_e+1,kms:kme,j_s:j_e),  intent(in)    :: u
+        real, dimension(i_s:i_e,  kms:kme,j_s:j_e+1),intent(in)    :: v
         
-        real, dimension(its:ite+1,kms:kme,jts:jte),intent(inout)          :: flux_x
-        real, dimension(its:ite,kms:kme,jts:jte+1),intent(inout)          :: flux_y
-        real, dimension(its:ite,kms:kme+1,jts:jte),intent(inout)  :: flux_z
+        real, dimension(i_s:i_e+1,kms:kme,j_s:j_e),intent(inout)      :: flux_x
+        real, dimension(i_s:i_e,  kms:kme,j_s:j_e+1),intent(inout)    :: flux_y
+        real, dimension(i_s:i_e,  kms:kme+1,j_s:j_e),intent(inout)    :: flux_z
+        
+        
+        if (horder==1) then
+            flux_x= ((u + ABS(u)) * q(i_s-1:i_e,:,j_s:j_e) + (u - ABS(u)) * q(i_s:i_e+1,:,j_s:j_e))  / 2
+            flux_y= ((v + ABS(v)) * q(i_s:i_e,:,j_s-1:j_e) + (v - ABS(v)) * q(i_s:i_e,:,j_s:j_e+1))  / 2
+        else if (horder==3) then
+            !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
+            flux_x = 7*(q(i_s:i_e+1,:,j_s:j_e)+q(i_s-1:i_e,:,j_s:j_e)) - &
+                                (q(i_s+1:i_e+2,:,j_s:j_e)+q(i_s-2:i_e-1,:,j_s:j_e))
+            flux_x = (u*flux_x)/12
+            !Application of 3rd order diffusive terms
+            flux_x = flux_x - (abs(u)/12) * (3*(q(i_s:i_e+1,:,j_s:j_e)-q(i_s-1:i_e,:,j_s:j_e)) - &
+                                (q(i_s+1:i_e+2,:,j_s:j_e)-q(i_s-2:i_e-1,:,j_s:j_e)))
+                            
+            !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
+            flux_y = 7*(q(i_s:i_e,:,j_s:j_e+1)+q(i_s:i_e,:,j_s-1:j_e)) - &
+                                (q(i_s:i_e,:,j_s+1:j_e+2)+q(i_s:i_e,:,j_s-2:j_e-1))
+            flux_y = (v*flux_y)/12
+            !Application of 3rd order diffusive terms
+            flux_y = flux_y - (abs(v)/12) * (3*(q(i_s:i_e,:,j_s:j_e+1)-q(i_s:i_e,:,j_s-1:j_e)) - &
+                            (q(i_s:i_e,:,j_s+1:j_e+2)-q(i_s:i_e,:,j_s-2:j_e-1)))
 
-        flux_x= ((u + ABS(u)) * q(its-1:ite,:,jts:jte)  + (u - ABS(u)) * q(its:ite+1,:,jts:jte))  / 2
+        else if (horder==5) then
+            !Calculation of 6th order fluxes for later application of 5th order diffusive terms
+            flux_x = 37*(q(i_s:i_e+1,:,j_s:j_e)+q(i_s-1:i_e,:,j_s:j_e)) - &
+                            8*(q(i_s+1:i_e+2,:,j_s:j_e)+q(i_s-2:i_e-1,:,j_s:j_e)) + &
+                            (q(i_s+2:i_e+3,:,j_s:j_e)+q(i_s-3:i_e-2,:,j_s:j_e))
+            flux_x = (u*flux_x)/60
+            !Application of 5th order diffusive terms
+            flux_x = flux_x - (abs(u)/60) * (10*(q(i_s:i_e+1,:,j_s:j_e)-q(i_s-1:i_e,:,j_s:j_e)) - &
+                            5*(q(i_s+1:i_e+2,:,j_s:j_e)-q(i_s-2:i_e-1,:,j_s:j_e)) + &
+                            (q(i_s+2:i_e+3,:,j_s:j_e)-q(i_s-3:i_e-2,:,j_s:j_e)))
+                
+            !Calculation of 6th order fluxes for later application of 5th order diffusive terms
+            flux_y = 37*(q(i_s:i_e,:,j_s:j_e+1)+q(i_s:i_e,:,j_s-1:j_e)) - &
+                            8*(q(i_s:i_e,:,j_s+1:j_e+2)+q(i_s:i_e,:,j_s-2:j_e-1)) + &
+                            (q(i_s:i_e,:,j_s+2:j_e+3)+q(i_s:i_e,:,j_s-3:j_e-2))
+            flux_y = (v*flux_y)/60
+            !Application of 5th order diffusive terms
+            flux_y = flux_y - (abs(v)/60) * (10*(q(i_s:i_e,:,j_s:j_e+1)-q(i_s:i_e,:,j_s-1:j_e)) - &
+                            5*(q(i_s:i_e,:,j_s+1:j_e+2)-q(i_s:i_e,:,j_s-2:j_e-1)) + &
+                            (q(i_s:i_e,:,j_s+2:j_e+3)-q(i_s:i_e,:,j_s-3:j_e-2)))
+        endif
+        
+        if (vorder==1) then
+            flux_z(:,kms+1:kme,:) = ((w(:,kms:kme-1,:) + ABS(w(:,kms:kme-1,:))) * q(i_s:i_e,kms:kme-1,j_s:j_e) + &
+                                     (w(:,kms:kme-1,:) - ABS(w(:,kms:kme-1,:))) * q(i_s:i_e,kms+1:kme,j_s:j_e))  / 2
+        else if (vorder==3) then
+            !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
+            flux_z(:,kms+2:kme-1,:) = 7*(q(i_s:i_e,kms+2:kme-1,j_s:j_e)+q(i_s:i_e,kms+1:kme-2,j_s:j_e)) - &
+                                    (q(i_s:i_e,kms+3:kme,j_s:j_e)+q(i_s:i_e,kms:kme-3,j_s:j_e))
+            flux_z(:,kms+2:kme-1,:) = (w(:,kms+1:kme-2,:)*flux_z(:,kms+2:kme-1,:))/12
+            !Application of 3rd order diffusive terms
+            flux_z(:,kms+2:kme-1,:) = flux_z(:,kms+2:kme-1,:) - (abs(w(:,kms+1:kme-2,:))/12) * &
+                        (3 * (q(i_s:i_e,kms+2:kme-1,j_s:j_e) - q(i_s:i_e,kms+1:kme-2,j_s:j_e)) - &
+                            (q(i_s:i_e,kms+3:kme,j_s:j_e)   - q(i_s:i_e,kms:kme-3,j_s:j_e)))
+                            
+            !Do simple upwind for the cells who's stencil does not allow higher-order
+            flux_z(:,kms+1,:) = ((w(:,kms,:) + ABS(w(:,kms,:))) * q(i_s:i_e,kms,j_s:j_e) + &
+                                 (w(:,kms,:) - ABS(w(:,kms,:))) * q(i_s:i_e,kms+1,j_s:j_e))  / 2
+            flux_z(:,kme,:) = ((w(:,kme-1,:) + ABS(w(:,kme-1,:))) * q(i_s:i_e,kme-1,j_s:j_e) + &
+                               (w(:,kme-1,:) - ABS(w(:,kme-1,:))) * q(i_s:i_e,kme,j_s:j_e))  / 2
 
-        flux_y= ((v + ABS(v)) * q(its:ite,:,jts-1:jte) +  (v - ABS(v)) * q(its:ite,:,jts:jte+1))  / 2
+        else if (vorder==5) then
+            !Calculation of 6th order fluxes for later application of 5th order diffusive terms
+            flux_z(:,kms+3:kme-2,:) = 37*(q(i_s:i_e,kms+3:kme-2,j_s:j_e)+q(i_s:i_e,kms+2:kme-3,j_s:j_e)) - &
+                                       8*(q(i_s:i_e,kms+4:kme-1,j_s:j_e)+q(i_s:i_e,kms+1:kme-4,j_s:j_e)) + &
+                                         (q(i_s:i_e,kms+5:kme,j_s:j_e)+  q(i_s:i_e,kms:kme-5,j_s:j_e))
+            flux_z(:,kms+3:kme-2,:) = (w(:,kms+2:kme-3,:)*flux_z(:,kms+3:kme-2,:))/60
+            !Application of 5th order diffusive terms
+            flux_z(:,kms+3:kme-2,:) = flux_z(:,kms+3:kme-2,:) - (abs(w(:,kms+2:kme-3,:))/60) * &
+                        (10 * (q(i_s:i_e,kms+3:kme-2,j_s:j_e) - q(i_s:i_e,kms+2:kme-3,j_s:j_e)) - &
+                            5*(q(i_s:i_e,kms+4:kme-1,j_s:j_e) - q(i_s:i_e,kms+1:kme-4,j_s:j_e)) + &
+                              (q(i_s:i_e,kms+5:kme,j_s:j_e)   - q(i_s:i_e,kms:kme-5,j_s:j_e)))
+                              
+            flux_z(:,kms+2,:) = 7*(q(i_s:i_e,kms+2,j_s:j_e)+q(i_s:i_e,kms+1,j_s:j_e)) - &
+                                    (q(i_s:i_e,kms+3,j_s:j_e)+q(i_s:i_e,kms,j_s:j_e))
+            flux_z(:,kms+2,:) = (w(:,kms+1,:)*flux_z(:,kms+2,:))/12
+            !Application of 3rd order diffusive terms
+            flux_z(:,kms+2,:) = flux_z(:,kms+2,:) - (abs(w(:,kms+1,:))/12) * &
+                        (3 * (q(i_s:i_e,kms+2,j_s:j_e) - q(i_s:i_e,kms+1,j_s:j_e)) - &
+                            (q(i_s:i_e,kms+3,j_s:j_e)   - q(i_s:i_e,kms,j_s:j_e)))
 
-        flux_z(:,kms+1:kme,:) = ((w(:,kms:kme-1,:) + ABS(w(:,kms:kme-1,:))) * q(its:ite,kms:kme-1,jts:jte) + &
-                                 (w(:,kms:kme-1,:) - ABS(w(:,kms:kme-1,:))) * q(its:ite,kms+1:kme,jts:jte))  / 2
-                                         
+            flux_z(:,kme-1,:) = 7*(q(i_s:i_e,kme-1,j_s:j_e)+q(i_s:i_e,kme-2,j_s:j_e)) - &
+                                    (q(i_s:i_e,kme,j_s:j_e)+q(i_s:i_e,kme-3,j_s:j_e))
+            flux_z(:,kme-1,:) = (w(:,kme-2,:)*flux_z(:,kme-1,:))/12
+            !Application of 3rd order diffusive terms
+            flux_z(:,kme-1,:) = flux_z(:,kme-1,:) - (abs(w(:,kme-2,:))/12) * &
+                        (3 * (q(i_s:i_e,kme-1,j_s:j_e) - q(i_s:i_e,kme-2,j_s:j_e)) - &
+                            (q(i_s:i_e,kme,j_s:j_e)   - q(i_s:i_e,kme-3,j_s:j_e)))
+                            
+
+            !Do simple upwind for the cells who's stencil does not allow higher-order
+            flux_z(:,kms+1,:) = ((w(:,kms,:) + ABS(w(:,kms,:))) * q(i_s:i_e,kms,j_s:j_e) + &
+                                 (w(:,kms,:) - ABS(w(:,kms,:))) * q(i_s:i_e,kms+1,j_s:j_e))  / 2
+            flux_z(:,kme,:) = ((w(:,kme-1,:) + ABS(w(:,kme-1,:))) * q(i_s:i_e,kme-1,j_s:j_e) + &
+                               (w(:,kme-1,:) - ABS(w(:,kme-1,:))) * q(i_s:i_e,kme,j_s:j_e))  / 2
+
+        endif
+        
+                                                          
+
         !Handle top and bottom boundaries for z here
         flux_z(:,kms,:) = 0
-        flux_z(:,kme+1,:) = q(its:ite,kme,jts:jte) * w(:,kme,:)
+        flux_z(:,kme+1,:) = q(i_s:i_e,kme,j_s:j_e) * w(:,kme,:)
 
                                          
     end subroutine flux3
 
-    subroutine upwind_advect3d(qfluxes,qold,dz,jaco,t_factor_in)
+    subroutine adv_std_advect3d(qfluxes,qold,dz,jaco,t_factor_in,flux_corr)
 
         implicit none
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(inout)   :: qfluxes
@@ -143,11 +258,12 @@ contains
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: dz
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: jaco
         real, optional,                              intent(in)      :: t_factor_in
+        integer, optional,                           intent(in)      :: flux_corr
         ! interal parameters
-        real, dimension(its:ite+1,kms:kme,jts:jte)    :: flux_x
-        real, dimension(its:ite,kms:kme,jts:jte+1)    :: flux_y
-        real, dimension(its:ite,kms:kme+1,jts:jte)  :: flux_z
-        real                                          :: t_factor
+        real, dimension(i_s:i_e+1,kms:kme,j_s:j_e)   :: flux_x
+        real, dimension(i_s:i_e,  kms:kme,j_s:j_e+1) :: flux_y
+        real, dimension(i_s:i_e,  kms:kme+1,j_s:j_e) :: flux_z
+        real    :: t_factor
         
         ! !$omp parallel shared(qin,q,u,v,w) firstprivate(nx,ny,nz) private(i,f1,f3,f4,f5)
         ! !$omp do schedule(static)
@@ -164,25 +280,44 @@ contains
         !Initialize t_factor, which is used during RK time stepping to scale the time step
         t_factor = 1.0
         if (present(t_factor_in)) t_factor = t_factor_in
+        
 
-        call flux3(qfluxes,U_m*t_factor,V_m*t_factor,W_m*t_factor,flux_x,flux_z,flux_y)
-
+        call flux3(qfluxes,U_m(i_s:i_e+1,:,j_s:j_e)*t_factor,&
+                            V_m(i_s:i_e,:,j_s:j_e+1)*t_factor,&
+                            W_m(i_s:i_e,:,j_s:j_e)*t_factor,flux_x,flux_z,flux_y)
+        
+        if (present(flux_corr)) then
+            if (flux_corr == kFLUXCOR_MONO) then
+                !Calculate flux corrections as done by WRF (Wang et al., 2009)
+                call WRF_flux_corr(qold,U_m(i_s:i_e+1,:,j_s:j_e),&
+                                        V_m(i_s:i_e,:,j_s:j_e+1),&
+                                        W_m(i_s:i_e,:,j_s:j_e),flux_x,flux_z,flux_y, &
+                                jaco(i_s:i_e,:,j_s:j_e),dz(i_s:i_e,:,j_s:j_e),rho(i_s:i_e,:,j_s:j_e))
+            endif
+        endif
         qfluxes = qold
 
         ! perform horizontal advection, from difference terms
         qfluxes(its:ite,:,jts:jte)  = qfluxes(its:ite,:,jts:jte)  - &
-                                   ((flux_x(its+1:ite+1,:,:) - flux_x(its:ite,:,:)) + &
-                                   (flux_y(:,:,jts+1:jte+1) - flux_y(:,:,jts:jte))) &
-                                   / (jaco(its:ite,:,jts:jte)*rho)                      
+                                   ((flux_x(its+1:ite+1,:,jts:jte) - flux_x(its:ite,:,jts:jte)) + &
+                                   (flux_y(its:ite,:,jts+1:jte+1) - flux_y(its:ite,:,jts:jte))) &
+                                   / (jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))                      
                ! then vertical (order doesn't matter because fluxes f1-6 are calculated before applying them)
                ! add fluxes to middle layers
         qfluxes(its:ite,:,jts:jte) = qfluxes(its:ite,:,jts:jte)  &
-                                   - (flux_z(:,kms+1:kme+1,:) - flux_z(:,kms:kme,:)) &
-                                   / (dz(its:ite,:,jts:jte)*jaco(its:ite,:,jts:jte)*rho)
+                                   - (flux_z(its:ite,kms+1:kme+1,jts:jte) - flux_z(its:ite,kms:kme,jts:jte)) &
+                                   / (dz(its:ite,:,jts:jte)*jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))
 
         ! !$omp end do
         ! !$omp end parallel
-    end subroutine upwind_advect3d
+        
+        !qfluxes(its:ite,:,jts:jte)  = qfluxes(its:ite,:,jts:jte)  + &
+        !                           20*((qold(its+1:ite+1,:,jts:jte) - 2*qold(its:ite,:,jts:jte) + qold(its-1:ite-1,:,jts:jte)) + &
+        !                           (qold(its:ite,:,jts+1:jte+1) - 2*qold(its:ite,:,jts:jte) + qold(its:ite,:,jts-1:jte-1))) &
+        !                           / (4*dx)                      
+
+        
+    end subroutine adv_std_advect3d
 
     ! subroutine setup_cu_winds(domain, options, dt)
     !     implicit none
@@ -309,23 +444,25 @@ contains
 
     end subroutine test_divergence
 
-    subroutine upwind_compute_wind(domain, options, dt)
+    subroutine adv_std_compute_wind(domain, options, dt)
         implicit none
 
         type(options_t),    intent(in)  :: options
         type(domain_t),  intent(inout) :: domain
         real,intent(in)::dt
-        
-        real, dimension(ims:ime, kms:kme, jms:jme) :: rho_temp
+        real, allocatable, dimension(:,:,:) :: rho_i
 
+        
         ! if this if the first time we are called, we need to allocate the module level arrays
         ! Could/should be put in an init procedure
         if (.not.allocated(U_m)) then
-            allocate(U_m     (its:ite+1,kms:kme,jts:jte  ))
-            allocate(V_m     (its:ite,  kms:kme,jts:jte+1))
-            allocate(W_m     (its:ite,  kms:kme,jts:jte  ))
+            allocate(U_m     (ims+1:ime,kms:kme,jms:jme  ))
+            allocate(V_m     (ims:ime,  kms:kme,jms+1:jme))
+            allocate(W_m     (ims:ime,  kms:kme,jms:jme  ))
             !allocate(lastqv_m(ims:ime,  kms:kme,jms:jme  ))
         endif
+        allocate(rho_i     (ims:ime,  kms:kme-1,jms:jme  ))
+
 
         ! if (options%physics%convection > 0) then
             ! print*, "Advection of convective winds not enabled in ICAR >=1.5 yet"
@@ -337,27 +474,23 @@ contains
         ! else
              ! Divide only U and V by dx. This minimizes the number of operations per advection step. W cannot be divided by dz,
              ! since non-uniform dz spacing does not allow for the same spacing to be assumed on either side of a k+1/2 interface,
-             ! as is required for the upwind scheme.
-             
-            rho_temp = 1
-            if (options%parameters%advect_density) rho_temp = domain%density%data_3d  
+             ! as is required for the adv4 scheme.
+            dx = domain%dx
+            rho = 1
+            if (options%parameters%advect_density) rho = domain%density%data_3d  
+            
+            rho_i(:,kms:kme-1,:) = ( rho(:,kms:kme-1,:)*domain%advection_dz(:,kms:kme-1,:) + rho(:,kms+1:kme,:)*domain%advection_dz(:,kms+1:kme,:) ) &
+                                    / (domain%advection_dz(:,kms:kme-1,:)+domain%advection_dz(:,kms+1:kme,:))
         
-            U_m = domain%u%data_3d(its:ite+1,:,jts:jte) * dt * &
-                     (rho_temp(its:ite+1,:,jts:jte)+rho_temp(its-1:ite,:,jts:jte))*0.5 * &
-                    domain%jacobian_u(its:ite+1,:,jts:jte) / domain%dx
-            V_m = domain%v%data_3d(its:ite,:,jts:jte+1) * dt * &
-                     (rho_temp(its:ite,:,jts:jte+1)+rho_temp(its:ite,:,jts-1:jte))*0.5 * &
-                    domain%jacobian_v(its:ite,:,jts:jte+1) / domain%dx
+            U_m = domain%u%data_3d(ims+1:ime,:,:) * dt * (rho(ims+1:ime,:,:)+rho(ims:ime-1,:,:))*0.5 * &
+                    domain%jacobian_u(ims+1:ime,:,:) / domain%dx
+            V_m = domain%v%data_3d(:,:,jms+1:jme) * dt * (rho(:,:,jms+1:jme)+rho(:,:,jms:jme-1))*0.5 * &
+                    domain%jacobian_v(:,:,jms+1:jme) / domain%dx
                     
-            W_m(:,kms:kme-1,:) = domain%w%data_3d(its:ite,kms:kme-1,jts:jte) * dt * &
-                    domain%jacobian_w(its:ite,kms:kme-1,jts:jte) * &
-                    (rho_temp(its:ite,kms+1:kme,jts:jte)+rho_temp(its:ite,kms:kme-1,jts:jte)) * 0.5
-            W_m(:,kme,:) = domain%w%data_3d(its:ite,kme,jts:jte) * dt * &
-                    domain%jacobian_w(its:ite,kme,jts:jte) * rho_temp(its:ite,kme,jts:jte)
+            W_m(:,kms:kme-1,:) = domain%w%data_3d(:,kms:kme-1,:) * dt * domain%jacobian_w(:,kms:kme-1,:) * rho_i
+            W_m(:,kme,:) = domain%w%data_3d(:,kme,:) * dt * domain%jacobian_w(:,kme,:) * rho(:,kme,:)
 
-            rho = rho_temp(its:ite,kms:kme,jts:jte)
-
-    end subroutine upwind_compute_wind
+    end subroutine adv_std_compute_wind
 
     subroutine setup_advection_dz(domain, options)
         implicit none
@@ -378,45 +511,4 @@ contains
     end subroutine setup_advection_dz
 
 
-    ! primary entry point, advect all scalars in domain
-    subroutine upwind(domain,options,dt)
-        implicit none
-        type(domain_t),  intent(inout) :: domain
-        type(options_t), intent(in)    :: options
-        real,            intent(in)    :: dt
-        
-        real    :: dx
-        integer :: i
-
-        call setup_advection_dz(domain, options)
-
-        ! calculate U,V,W normalized for dt/dx (dx**2 for density advection so we can skip a /dx in the actual advection code)
-        call upwind_compute_wind(domain, options, dt)
-
-        ! lastqv_m=domain%qv
-
-        if (options%parameters%debug) then
-            call test_divergence(domain%advection_dz)
-        endif
-
-        !if (options%vars_to_advect(kVARS%water_vapor)>0)                  call upwind_advect3d(domain%water_vapor%data_3d,    domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%cloud_water)>0)                  call upwind_advect3d(domain%cloud_water_mass%data_3d, domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%rain_in_air)>0)                  call upwind_advect3d(domain%rain_mass%data_3d,      domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%snow_in_air)>0)                  call upwind_advect3d(domain%snow_mass%data_3d,      domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%potential_temperature)>0)        call upwind_advect3d(domain%potential_temperature%data_3d, domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%cloud_ice)>0)                    call upwind_advect3d(domain%cloud_ice_mass%data_3d, domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%graupel_in_air)>0)               call upwind_advect3d(domain%graupel_mass%data_3d,   domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%ice_number_concentration)>0)     call upwind_advect3d(domain%cloud_ice_number%data_3d, domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%rain_number_concentration)>0)    call upwind_advect3d(domain%rain_number%data_3d,    domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%snow_number_concentration)>0)    call upwind_advect3d(domain%snow_number%data_3d,    domain%advection_dz, domain%jacobian)
-        !if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call upwind_advect3d(domain%graupel_number%data_3d, domain%advection_dz, domain%jacobian)
-
-        ! if (options%physics%convection > 0) then
-        !     call advect_cu_winds(domain, options, dt)
-        ! endif
-
-        ! used in some physics routines
-        ! domain%tend%qv_adv = (domain%qv - lastqv_m) / dt
-    end subroutine upwind
-
-end module adv_upwind
+end module adv_std

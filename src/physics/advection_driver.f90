@@ -8,8 +8,7 @@
 module advection
     use data_structures
     use icar_constants
-    use adv_upwind,                 only : upwind, upwind_init, upwind_var_request, upwind_advect3d, upwind_compute_wind
-    use adv_4th,                    only : adv4, adv4_init, adv4_var_request, adv4_advect3d, adv4_compute_wind
+    use adv_std,                    only : adv_std_init, adv_std_var_request, adv_std_advect3d, adv_std_compute_wind
     use adv_mpdata,                 only : mpdata, mpdata_init, mpdata_advect3d, mpdata_compute_wind
     use adv_fluxcorr,               only : init_fluxcorr
     ! use debug_module,               only : domain_fix
@@ -20,56 +19,28 @@ module advection
 
     implicit none
     private
-    type(var_dict_t) :: var_list
-
 
     public :: advect, adv_init, adv_var_request
 contains
 
     subroutine adv_init(domain,options)
         implicit none
-        type(domain_t), intent(in) :: domain
+        type(domain_t), intent(inout) :: domain
         type(options_t),intent(in) :: options
 
         if (this_image()==1) write(*,*) ""
         if (this_image()==1) write(*,*) "Initializing Advection"
-        if (options%physics%advection==kADV_UPWIND) then
-            if (this_image()==1) write(*,*) "    Upwind"
-            call upwind_init(domain,options)
+        if (options%physics%advection==kADV_STD) then
+            if (this_image()==1) write(*,*) "    Standard"
+            call adv_std_init(domain,options)
         else if(options%physics%advection==kADV_MPDATA) then
             if (this_image()==1) write(*,*) "    MP-DATA"
             call mpdata_init(domain,options)
-        else if(options%physics%advection==kADV_4TH) then
-            if (this_image()==1) write(*,*) "    4th-order Centered Difference"
-            call adv4_init(domain,options)
         endif
         
         if (options%adv_options%flux_corr > 0) call init_fluxcorr(domain)
-        
-        if (options%vars_to_advect(kVARS%water_vapor)>0) call var_list%add_var('qv', domain%water_vapor%meta_data)
-        
-        if (options%vars_to_advect(kVARS%potential_temperature)>0) call var_list%add_var('theta', domain%potential_temperature%meta_data) 
-        if (options%vars_to_advect(kVARS%cloud_water)>0) call var_list%add_var('qc', domain%cloud_water_mass%meta_data)                  
-        if (options%vars_to_advect(kVARS%rain_in_air)>0) call var_list%add_var('qr', domain%rain_mass%meta_data)                    
-        if (options%vars_to_advect(kVARS%snow_in_air)>0) call var_list%add_var('qs', domain%snow_mass%meta_data)                    
-        if (options%vars_to_advect(kVARS%cloud_ice)>0) call var_list%add_var('qi', domain%cloud_ice_mass%meta_data)                      
-        if (options%vars_to_advect(kVARS%graupel_in_air)>0) call var_list%add_var('qg', domain%graupel_mass%meta_data)                 
-        if (options%vars_to_advect(kVARS%ice_number_concentration)>0)  call var_list%add_var('ni', domain%cloud_ice_number%meta_data)       
-        if (options%vars_to_advect(kVARS%rain_number_concentration)>0) call var_list%add_var('nr', domain%rain_number%meta_data)      
-        if (options%vars_to_advect(kVARS%snow_number_concentration)>0) call var_list%add_var('ns', domain%snow_number%meta_data)      
-        if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call var_list%add_var('ng', domain%graupel_number%meta_data)   
-        if (options%vars_to_advect(kVARS%ice1_a)>0) call var_list%add_var('ice1_a', domain%ice1_a%meta_data)   
-        if (options%vars_to_advect(kVARS%ice1_c)>0) call var_list%add_var('ice1_c', domain%ice1_c%meta_data)   
-        if (options%vars_to_advect(kVARS%ice2_mass)>0) call var_list%add_var('ice2_mass', domain%ice2_mass%meta_data)   
-        if (options%vars_to_advect(kVARS%ice2_number)>0) call var_list%add_var('ice2_number', domain%ice2_number%meta_data)   
-        if (options%vars_to_advect(kVARS%ice2_a)>0) call var_list%add_var('ice2_a', domain%ice2_a%meta_data)   
-        if (options%vars_to_advect(kVARS%ice2_c)>0) call var_list%add_var('ice2_c', domain%ice2_c%meta_data)   
-        if (options%vars_to_advect(kVARS%ice3_mass)>0) call var_list%add_var('ice3_mass', domain%ice3_mass%meta_data)   
-        if (options%vars_to_advect(kVARS%ice3_number)>0) call var_list%add_var('ice3_number', domain%ice3_number%meta_data)   
-        if (options%vars_to_advect(kVARS%ice3_a)>0) call var_list%add_var('ice3_a', domain%ice3_a%meta_data)   
-        if (options%vars_to_advect(kVARS%ice3_c)>0) call var_list%add_var('ice3_c', domain%ice3_c%meta_data)   
 
-
+        
     end subroutine adv_init
 
     subroutine adv_var_request(options)
@@ -79,9 +50,9 @@ contains
         !if (options%physics%advection==kADV_UPWIND) then
         !    call upwind_var_request(options)
         if (options%physics%advection==kADV_MPDATA) then
-            call upwind_var_request(options)
+            call adv_std_var_request(options)
         else
-            call upwind_var_request(options)
+            call adv_std_var_request(options)
         endif
     end subroutine
     
@@ -93,7 +64,6 @@ contains
 
         type(variable_t) :: var_to_advect
         real, allocatable :: temp(:,:,:)
-        
 
         ! integer :: nx, nz, ny
         !
@@ -109,96 +79,48 @@ contains
         !Allocate storage variable for temp-quantities
         if (options%time_options%RK3) allocate(temp(domain%ims:domain%ime,domain%kms:domain%kme,domain%jms:domain%jme))
 
-        if (options%physics%advection==kADV_UPWIND) then
-            call upwind_compute_wind(domain,options,dt)
+        if (options%physics%advection==kADV_STD) then
+            call adv_std_compute_wind(domain,options,dt)
         else if(options%physics%advection==kADV_MPDATA) then
             call mpdata_compute_wind(domain,options,dt)
-        else if(options%physics%advection==kADV_4TH) then
-            call adv4_compute_wind(domain,options,dt)
         endif
-
+        
 
         !Loop through all vars to advect
                 
         ! make sure the dictionary is reset to point to the first variable
-        call var_list%reset_iterator()
-
+        call domain%adv_vars%reset_iterator()
         ! Now iterate through the dictionary as long as there are more elements present
-        do while (var_list%has_more_elements())
+        do while (domain%adv_vars%has_more_elements())
             ! get the next variable
-            var_to_advect = var_list%next()
+            var_to_advect = domain%adv_vars%next()
+
             if (options%time_options%RK3) then
             
-                if (options%physics%advection==kADV_UPWIND) then
+                if (options%physics%advection==kADV_STD) then
                 
                     !Initial advection-tendency calculations
                     temp = var_to_advect%data_3d
-                    call upwind_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,t_factor_in=0.333)
-                    call upwind_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,t_factor_in=0.5)
+                    call adv_std_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,t_factor_in=0.333)
+                    call adv_std_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,t_factor_in=0.5)
                                             
                     !final advection call with tendency-fluxes
-                    call upwind_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, domain%jacobian)
+                    call adv_std_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,flux_corr=options%adv_options%flux_corr)
                                             
-                    var_to_advect%data_3d = temp
-                    
-                else if (options%physics%advection==kADV_4TH) then
-                
-                    !Initial advection-tendency calculations
-                    temp = var_to_advect%data_3d
-                    call adv4_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,t_factor_in=0.333)
-                    !call var_to_advect%exchange()
-                    call adv4_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,t_factor_in=0.5)
-                    !call var_to_advect%exchange()
-
-                    !final advection call with tendency-fluxes
-                    call adv4_advect3d(temp,var_to_advect%data_3d, domain%advection_dz, &
-                                       domain%jacobian,flux_corr=options%adv_options%flux_corr)
-                    var_to_advect%data_3d = temp
-                    !call var_to_advect%exchange()
-                             
-                                             
-                    !Initial advection-tendency calculations
-                    !temp = var_to_advect
-                    !call upwind_advect3d(temp%meta_data%data_3d,var_to_advect%meta_data%data_3d, domain%advection_dz, &
-                    !                   domain%jacobian,t_factor_in=0.333)
-                    !call upwind_advect3d(temp%meta_data%data_3d,var_to_advect%meta_data%data_3d, domain%advection_dz, &
-                    !                   domain%jacobian,t_factor_in=0.5)
-                                            
-                    !final advection call with tendency-fluxes
-                    !call upwind_advect3d(temp%meta_data%data_3d,var_to_advect%meta_data%data_3d, domain%advection_dz, &
-                    !                    domain%jacobian)
-                                            
-                    !var_to_advect = temp
-                    
-                !else if (options%physics%advection==kADV_4TH) then
-                
-                    !Initial advection-tendency calculations
-                    !temp = var_to_advect
-                    !call adv4_advect3d(temp%meta_data%data_3d,var_to_advect%meta_data%data_3d, domain%advection_dz, &
-                    !                   domain%jacobian,t_factor_in=0.333)
-                    !call temp%exchange()
-                    !call adv4_advect3d(temp%meta_data%data_3d,var_to_advect%meta_data%data_3d, domain%advection_dz, &
-                    !                   domain%jacobian,t_factor_in=0.5)
-                    !call temp%exchange()
-
-                    !final advection call with tendency-fluxes
-                    !call adv4_advect3d(temp%meta_data%data_3d,var_to_advect%meta_data%data_3d, domain%advection_dz, &
-                    !                   domain%jacobian,flux_corr=options%adv_options%flux_corr)
-                    !var_to_advect = temp
-                    
+                    var_to_advect%data_3d = temp                             
+                                                                 
                 else if(options%physics%advection==kADV_MPDATA) then
                 
                     ! Not yet implemented (is it compatable w/ RK3?)
                 endif
             else
-                if (options%physics%advection==kADV_UPWIND) then
-                    call upwind_advect3d(var_to_advect%data_3d,var_to_advect%data_3d, domain%advection_dz, domain%jacobian)
+                if (options%physics%advection==kADV_STD) then
+                    call adv_std_advect3d(var_to_advect%data_3d,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,flux_corr=options%adv_options%flux_corr)
                 else if(options%physics%advection==kADV_MPDATA) then
                     call mpdata_advect3d(var_to_advect%data_3d, domain%jacobian, domain%advection_dz, domain%dx,dt,options)
-                else if (options%physics%advection==kADV_4TH) then
-                    call adv4_advect3d(var_to_advect%data_3d,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,flux_corr=options%adv_options%flux_corr)
                 endif
             endif
+
         enddo
 
     end subroutine advect
