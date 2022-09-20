@@ -10,7 +10,7 @@
 submodule(domain_interface) domain_implementation
     use assertions_mod,       only : assert, assertions
     use mod_atm_utilities,    only : exner_function, update_pressure
-    use icar_constants,       only : Rd, karman, kVARS, kLC_LAND, gravity
+    use icar_constants
     use string,               only : str
     use co_util,              only : broadcast
     use io_routines,          only : io_write, io_read
@@ -41,7 +41,7 @@ contains
         this%dx = options%parameters%dx
 
         call this%var_request(options)
-
+        
         call read_domain_shape(this, options)
 
         call create_variables(this, options)
@@ -52,9 +52,50 @@ contains
 
         call setup_meta_data(this, options)
         
+        call set_adv_vars(this, options)
+        
         call init_relax_filters(this)
 
     end subroutine
+    
+    module subroutine set_adv_vars(this, options)
+        class(domain_t), intent(inout) :: this
+        type(options_t), intent(in)    :: options
+
+
+        if (options%vars_to_advect(kVARS%water_vapor)>0) call this%adv_vars%add_var('qv', this%water_vapor%meta_data)
+        
+        if (options%vars_to_advect(kVARS%potential_temperature)>0) call this%adv_vars%add_var('theta', this%potential_temperature%meta_data) 
+        if (options%vars_to_advect(kVARS%cloud_water)>0) call this%adv_vars%add_var('qc', this%cloud_water_mass%meta_data)                  
+        if (options%vars_to_advect(kVARS%rain_in_air)>0) call this%adv_vars%add_var('qr', this%rain_mass%meta_data)                    
+        if (options%vars_to_advect(kVARS%snow_in_air)>0) call this%adv_vars%add_var('qs', this%snow_mass%meta_data)                    
+        if (options%vars_to_advect(kVARS%cloud_ice)>0) call this%adv_vars%add_var('qi', this%cloud_ice_mass%meta_data)                      
+        if (options%vars_to_advect(kVARS%graupel_in_air)>0) call this%adv_vars%add_var('qg', this%graupel_mass%meta_data)                 
+        if (options%vars_to_advect(kVARS%ice_number_concentration)>0)  call this%adv_vars%add_var('ni', this%cloud_ice_number%meta_data)       
+        if (options%vars_to_advect(kVARS%rain_number_concentration)>0) call this%adv_vars%add_var('nr', this%rain_number%meta_data)      
+        if (options%vars_to_advect(kVARS%snow_number_concentration)>0) call this%adv_vars%add_var('ns', this%snow_number%meta_data)      
+        if (options%vars_to_advect(kVARS%graupel_number_concentration)>0) call this%adv_vars%add_var('ng', this%graupel_number%meta_data)   
+        if (options%vars_to_advect(kVARS%ice1_a)>0) call this%adv_vars%add_var('ice1_a', this%ice1_a%meta_data)   
+        if (options%vars_to_advect(kVARS%ice1_c)>0) call this%adv_vars%add_var('ice1_c', this%ice1_c%meta_data)   
+        if (options%vars_to_advect(kVARS%ice2_mass)>0) call this%adv_vars%add_var('ice2_mass', this%ice2_mass%meta_data)   
+        if (options%vars_to_advect(kVARS%ice2_number)>0) call this%adv_vars%add_var('ice2_number', this%ice2_number%meta_data)   
+        if (options%vars_to_advect(kVARS%ice2_a)>0) call this%adv_vars%add_var('ice2_a', this%ice2_a%meta_data)   
+        if (options%vars_to_advect(kVARS%ice2_c)>0) call this%adv_vars%add_var('ice2_c', this%ice2_c%meta_data)   
+        if (options%vars_to_advect(kVARS%ice3_mass)>0) call this%adv_vars%add_var('ice3_mass', this%ice3_mass%meta_data)   
+        if (options%vars_to_advect(kVARS%ice3_number)>0) call this%adv_vars%add_var('ice3_number', this%ice3_number%meta_data)   
+        if (options%vars_to_advect(kVARS%ice3_a)>0) call this%adv_vars%add_var('ice3_a', this%ice3_a%meta_data)   
+        if (options%vars_to_advect(kVARS%ice3_c)>0) call this%adv_vars%add_var('ice3_c', this%ice3_c%meta_data)   
+
+        allocate(this%north_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
+                            this%kms:this%kme,1:this%grid%halo_size)[*])
+        allocate(this%south_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
+                            this%kms:this%kme,1:this%grid%halo_size)[*])
+        allocate(this%east_in(this%adv_vars%n_vars,1:this%grid%halo_size,&
+                            this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
+        allocate(this%west_in(this%adv_vars%n_vars,1:this%grid%halo_size,&
+                            this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
+
+    end subroutine set_adv_vars
 
 
     !> -------------------------------
@@ -310,6 +351,75 @@ contains
       call this%halo_send()
 
       call this%halo_retrieve()
+    end subroutine
+
+    !> -------------------------------
+    !! Send and get the halos from all exchangable objects to/from their neighbors
+    !!
+    !! -------------------------------
+    module subroutine halo_exchange_big(this)
+        class(domain_t), intent(inout) :: this
+        type(variable_t) :: var_to_advect
+
+        real, allocatable :: temp_north(:,:,:,:)
+        real, allocatable :: temp_south(:,:,:,:)
+        real, allocatable :: temp_east(:,:,:,:)
+        real, allocatable :: temp_west(:,:,:,:)
+        
+        integer :: n
+
+        allocate(temp_north(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
+                            this%kms:this%kme,1:this%grid%halo_size))
+        allocate(temp_south(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
+                            this%kms:this%kme,1:this%grid%halo_size))
+        allocate(temp_east(this%adv_vars%n_vars,1:this%grid%halo_size,&
+                            this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2)))
+        allocate(temp_west(this%adv_vars%n_vars,1:this%grid%halo_size,&
+                            this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2)))
+
+        call this%adv_vars%reset_iterator()
+        n = 1
+        ! Now iterate through the dictionary as long as there are more elements present
+        do while (this%adv_vars%has_more_elements())
+            ! get the next variable
+            var_to_advect = this%adv_vars%next()
+            if (.not.(this%north_boundary)) temp_north(n,1:(this%ite-this%its+1),:,:) = &
+                    var_to_advect%data_3d(this%its:this%ite,:,(this%jte-this%grid%halo_size+1):this%jte)
+            if (.not.(this%south_boundary)) temp_south(n,1:(this%ite-this%its+1),:,:) = &
+                    var_to_advect%data_3d(this%its:this%ite,:,this%jts:(this%jts+this%grid%halo_size-1))
+            if (.not.(this%east_boundary)) temp_east(n,:,:,1:(this%jte-this%jts+1)) = &
+                    var_to_advect%data_3d((this%ite-this%grid%halo_size+1):this%ite,:,this%jts:this%jte)
+            if (.not.(this%west_boundary)) temp_west(n,:,:,1:(this%jte-this%jts+1)) = &
+                    var_to_advect%data_3d(this%its:(this%its+this%grid%halo_size)-1,:,this%jts:this%jte)
+            
+            n = n+1
+        enddo
+
+        if (.not.(this%south_boundary)) this%north_in(:,:,:,:)[this%south_neighbor] = temp_south(:,:,:,:)
+        if (.not.(this%north_boundary)) this%south_in(:,:,:,:)[this%north_neighbor] = temp_north(:,:,:,:)
+        if (.not.(this%west_boundary)) this%east_in(:,:,:,:)[this%west_neighbor] = temp_west(:,:,:,:)
+        if (.not.(this%east_boundary)) this%west_in(:,:,:,:)[this%east_neighbor] = temp_east(:,:,:,:)
+        
+        sync images( this%neighbors )
+
+        call this%adv_vars%reset_iterator()
+        n = 1
+        ! Now iterate through the dictionary as long as there are more elements present
+        do while (this%adv_vars%has_more_elements())
+            ! get the next variable
+            var_to_advect = this%adv_vars%next()
+            
+            if (.not.(this%north_boundary)) var_to_advect%data_3d(this%its:this%ite,:,(this%jte+1):this%jme) = &
+                    this%north_in(n,1:(this%ite-this%its+1),:,:)
+            if (.not.(this%south_boundary)) var_to_advect%data_3d(this%its:this%ite,:,this%jms:(this%jts-1)) = &
+                    this%south_in(n,1:(this%ite-this%its+1),:,:)
+            if (.not.(this%east_boundary)) var_to_advect%data_3d((this%ite+1):this%ime,:,this%jts:this%jte) = &
+                    this%east_in(n,:,:,1:(this%jte-this%jts+1))
+            if (.not.(this%west_boundary)) var_to_advect%data_3d(this%ims:(this%its-1),:,this%jts:this%jte) = &
+                    this%west_in(n,:,:,1:(this%jte-this%jts+1))
+            n = n+1
+        enddo
+
     end subroutine
 
 
@@ -2331,7 +2441,7 @@ contains
         type(options_t), intent(in)     :: options
 
         real, allocatable :: temporary_data(:,:)
-        integer :: nx_global, ny_global, nz_global, nsmooth
+        integer :: nx_global, ny_global, nz_global, nsmooth, n_neighbors, current, adv_order
 
         nsmooth = max(1, int(options%parameters%smooth_wind_distance / options%parameters%dx))
         if (options%parameters%smooth_wind_distance == 0.0) nsmooth = 0
@@ -2346,20 +2456,30 @@ contains
         nx_global = size(temporary_data,1)
         ny_global = size(temporary_data,2)
         nz_global = options%parameters%nz
+        
+        adv_order = max(options%adv_options%h_order,options%adv_options%v_order)
+        
+        !If we are using the monotonic flux limiter, it is necesarry to calculate the fluxes one location deep into the
+        !halo. Thus, we need one extra cell in each halo direction to support the finite difference stencil
+        !This is achieved here by artificially inflating the adv_order which is passed to the grid setup
+        if (options%adv_options%flux_corr==kFLUXCOR_MONO) adv_order = adv_order+2
+        
+        !If using MPDATA, we need a halo of size 2 to support the difference stencil
+        if (options%physics%advection==kADV_MPDATA) adv_order = 4
 
-        call this%grid%set_grid_dimensions(   nx_global, ny_global, nz_global,adv=options%physics%advection)
+        call this%grid%set_grid_dimensions(   nx_global, ny_global, nz_global,adv_order=adv_order)
 
-        call this%u_grid%set_grid_dimensions( nx_global, ny_global, nz_global,adv=options%physics%advection, nx_extra = 1)
-        call this%v_grid%set_grid_dimensions( nx_global, ny_global, nz_global,adv=options%physics%advection, ny_extra = 1)
+        call this%u_grid%set_grid_dimensions( nx_global, ny_global, nz_global,adv_order=adv_order, nx_extra = 1)
+        call this%v_grid%set_grid_dimensions( nx_global, ny_global, nz_global,adv_order=adv_order, ny_extra = 1)
 
         ! for 2D mass variables
-        call this%grid2d%set_grid_dimensions( nx_global, ny_global, 0,adv=options%physics%advection)
+        call this%grid2d%set_grid_dimensions( nx_global, ny_global, 0,adv_order=adv_order)
 
         ! setup a 2D lat/lon grid extended by nsmooth grid cells so that smoothing can take place "across" images
         ! This just sets up the fields to interpolate u and v to so that the input data are handled on an extended
         ! grid.  They are then subset to the u_grid and v_grids above before actual use.
-        call this%u_grid2d%set_grid_dimensions(     nx_global, ny_global, 0,adv=options%physics%advection, nx_extra = 1)
-        call this%u_grid2d_ext%set_grid_dimensions( nx_global, ny_global, 0,adv=options%physics%advection, nx_extra = 1)
+        call this%u_grid2d%set_grid_dimensions(     nx_global, ny_global, 0,adv_order=adv_order, nx_extra = 1)
+        call this%u_grid2d_ext%set_grid_dimensions( nx_global, ny_global, 0,adv_order=adv_order, nx_extra = 1)
         ! extend by nsmooth, but bound to the domain grid
         this%u_grid2d_ext%ims = max(this%u_grid2d%ims - nsmooth, this%u_grid2d%ids)
         this%u_grid2d_ext%ime = min(this%u_grid2d%ime + nsmooth, this%u_grid2d%ide)
@@ -2367,8 +2487,8 @@ contains
         this%u_grid2d_ext%jme = min(this%u_grid2d%jme + nsmooth, this%u_grid2d%jde)
 
         ! handle the v-grid too
-        call this%v_grid2d%set_grid_dimensions(     nx_global, ny_global, 0,adv=options%physics%advection, ny_extra = 1)
-        call this%v_grid2d_ext%set_grid_dimensions( nx_global, ny_global, 0,adv=options%physics%advection, ny_extra = 1)
+        call this%v_grid2d%set_grid_dimensions(     nx_global, ny_global, 0,adv_order=adv_order, ny_extra = 1)
+        call this%v_grid2d_ext%set_grid_dimensions( nx_global, ny_global, 0,adv_order=adv_order, ny_extra = 1)
         ! extend by nsmooth, but bound to the domain grid
         this%v_grid2d_ext%ims = max(this%v_grid2d%ims - nsmooth, this%v_grid2d%ids)
         this%v_grid2d_ext%ime = min(this%v_grid2d%ime + nsmooth, this%v_grid2d%ide)
@@ -2376,13 +2496,13 @@ contains
         this%v_grid2d_ext%jme = min(this%v_grid2d%jme + nsmooth, this%v_grid2d%jde)
 
 
-        call this%grid_soil%set_grid_dimensions(     nx_global, ny_global, 4,adv=options%physics%advection)
-        call this%grid_snow%set_grid_dimensions(     nx_global, ny_global, 3,adv=options%physics%advection)
-        call this%grid_snowsoil%set_grid_dimensions( nx_global, ny_global, 7,adv=options%physics%advection)
-        call this%grid_soilcomp%set_grid_dimensions( nx_global, ny_global, 8,adv=options%physics%advection)
-        call this%grid_gecros%set_grid_dimensions(  nx_global, ny_global, 60,adv=options%physics%advection)
-        call this%grid_croptype%set_grid_dimensions(  nx_global, ny_global, 5,adv=options%physics%advection)
-        call this%grid_monthly%set_grid_dimensions( nx_global, ny_global, 12,adv=options%physics%advection)
+        call this%grid_soil%set_grid_dimensions(     nx_global, ny_global, 4,adv_order=adv_order)
+        call this%grid_snow%set_grid_dimensions(     nx_global, ny_global, 3,adv_order=adv_order)
+        call this%grid_snowsoil%set_grid_dimensions( nx_global, ny_global, 7,adv_order=adv_order)
+        call this%grid_soilcomp%set_grid_dimensions( nx_global, ny_global, 8,adv_order=adv_order)
+        call this%grid_gecros%set_grid_dimensions(  nx_global, ny_global, 60,adv_order=adv_order)
+        call this%grid_croptype%set_grid_dimensions(  nx_global, ny_global, 5,adv_order=adv_order)
+        call this%grid_monthly%set_grid_dimensions( nx_global, ny_global, 12,adv_order=adv_order)
 
 
         deallocate(temporary_data)
@@ -2399,6 +2519,42 @@ contains
         this%kme = this%grid%kme; this%kte = this%grid%kte; this%kde = this%grid%kde
         this%jms = this%grid%jms; this%jts = this%grid%jts; this%jds = this%grid%jds
         this%jme = this%grid%jme; this%jte = this%grid%jte; this%jde = this%grid%jde
+        
+
+        if (.not.(this%south_boundary)) this%south_neighbor = this_image() - this%grid%ximages
+        if (.not.(this%north_boundary)) this%north_neighbor = this_image() + this%grid%ximages
+        if (.not.(this%east_boundary)) this%east_neighbor  = this_image() + 1
+        if (.not.(this%west_boundary)) this%west_neighbor  = this_image() - 1
+
+        n_neighbors = merge(0,1,this%south_boundary)  &
+                     +merge(0,1,this%north_boundary)  &
+                     +merge(0,1,this%east_boundary)   &
+                     +merge(0,1,this%west_boundary)
+        n_neighbors = max(1, n_neighbors)
+
+        allocate(this%neighbors(n_neighbors))
+
+        current = 1
+        if (.not. this%south_boundary) then
+            this%neighbors(current) = this%south_neighbor
+            current = current+1
+        endif
+        if (.not. this%north_boundary) then
+            this%neighbors(current) = this%north_neighbor
+            current = current+1
+        endif
+        if (.not. this%east_boundary) then
+            this%neighbors(current) = this%east_neighbor
+            current = current+1
+        endif
+        if (.not. this%west_boundary) then
+            this%neighbors(current) = this%west_neighbor
+            current = current+1
+        endif
+        ! if current = 1 then all of the boundaries were set, just store ourself as our "neighbor"
+        if (current == 1) then
+            this%neighbors(current) = this_image()
+        endif
 
     end subroutine
 
@@ -2588,10 +2744,7 @@ contains
             call vLUT(this%geo_agl,   forcing%geo_agl)
             call vLUT(this%geo_u, forcing%geo_u)
             call vLUT(this%geo_v, forcing%geo_v)
-            
-            call io_write("eo_vLUT.nc","data",forcing%geo%vert_lut%w)
-            call io_write("eo_u_vLUT.nc","data",forcing%geo_u%vert_lut%w)
-            
+                        
             
             !if (options%parameters%use_agl_height) then
             !    do k=size(forcing%z,  2),1,-1
@@ -3485,7 +3638,6 @@ contains
 
         allocate(this%forcing_terrain_v( this%v_grid2d_ext% ims : this%v_grid2d_ext% ime,   &
                                          this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
-
 
         ! set up Geo Lookup tables for interpolation:
         forc_u_from_mass%lat = forcing%geo%lat

@@ -27,6 +27,14 @@ module exchangeable_interface
     !x-extra and y-extra to support exchanges on staggered grids
     integer :: xe
     integer :: ye
+    
+    integer :: its
+    integer :: ite
+    integer :: jts
+    integer :: jte
+    integer :: kts
+    integer :: kte
+
 
   contains
     private
