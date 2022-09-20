@@ -405,10 +405,6 @@ contains
             call pick_Sx(Sx(:,:,k,:), Sx_curr(:,k,:), u(:,k,:), v(:,k,:))
         end do
         
-        if (this_image()==1) then
-            call io_write("Sx_curr.nc", "Sx_curr", Sx_curr) 
-        end if
-
         !Initialize Sx and TPI corr
         Sx_corr = 0
         TPI_corr = 0
@@ -458,7 +454,6 @@ contains
                 end do
             end do
         end do
-        call io_write("thresh_ang.nc", "thresh_ang", thresh_ang) 
         !Dummy bounding of corrections, for safety
         TPI_corr  = min(max(TPI_corr,-0.5),0.0)
         Sx_corr = min(max(Sx_corr,0.0),1.0)

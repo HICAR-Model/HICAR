@@ -87,7 +87,7 @@ contains
         logical, optional, intent(in) :: update_in
         
         real, allocatable, dimension(:,:,:) :: divergence
-        integer :: ims, ime, jms, jme, kms, kme, its, ite, jts, jte, k
+        integer :: ims, ime, jms, jme, kms, kme, i_s, i_e, j_s, j_e, k
         logical :: update
         
         
@@ -105,22 +105,16 @@ contains
         jms = domain%jms
         jme = domain%jme
         
-        its = domain%its
-        ite = domain%ite
-        jts = domain%jts
-        jte = domain%jte
+        i_s = domain%its-1
+        i_e = domain%ite+1
+        j_s = domain%jts-1
+        j_e = domain%jte+1
         
-        !i_s+hs, unless we are on global boundary, then i_s
-        if (domain%ims==domain%ids) its = domain%ids
-        
-        !i_e, unless we are on global boundary, then i_e+1
-        if (domain%ime==domain%ide) ite = domain%ide
-        
-        !j_s+hs, unless we are on global boundary, then j_s
-        if (domain%jms==domain%jds) jts = domain%jds
-        
-        !j_e, unless we are on global boundary, then j_e+1
-        if (domain%jme==domain%jde) jte = domain%jde
+        !Safety checks
+        if (i_s<domain%ids) i_s = domain%ids
+        if (i_e>domain%ide) i_e = domain%ide
+        if (j_s<domain%jds) j_s = domain%jds
+        if (j_e>domain%jde) j_e = domain%jde
 
         
         update = .False.
@@ -131,16 +125,17 @@ contains
         if (update) then
             call calc_divergence(divergence,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
                                  jaco_u,jaco_v,jaco_w,dz,dx,rho,options,horz_only=.True.)
-            call calc_w(domain%w%meta_data%dqdt_3d,divergence,dz,jaco_w,rho,options%parameters%advect_density)
+            call calc_w(domain%w%meta_data%dqdt_3d,divergence,dz,jaco_w,rho,ims,ime,kms,kme,jms,jme,i_s,i_e,j_s,j_e,&
+                        options%parameters%advect_density)
         else
             call calc_divergence(divergence,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
                                  jaco_u,jaco_v,jaco_w,dz,dx,rho,options,horz_only=.True.)
-            call calc_w(domain%w%data_3d,divergence,dz,jaco_w,rho,options%parameters%advect_density)
+            call calc_w(domain%w%data_3d,divergence,dz,jaco_w,rho,ims,ime,kms,kme,jms,jme,i_s,i_e,j_s,j_e,options%parameters%advect_density)
         endif
             
         end associate
 
-        call domain%w%exchange(update)
+        !call domain%w%exchange(update)
         
             !------------------------------------------------------------
             ! Now do the same for the convective wind field if needed
@@ -163,45 +158,41 @@ contains
         
     end subroutine balance_uvw
 
-    subroutine calc_w(w,div,dz,jaco_w,rho,adv_den)
-        real,    intent(inout) :: w(:,:,:)
-        real,    intent(in)    :: div(:,:,:), dz(:,:,:), jaco_w(:,:,:), rho(:,:,:)
+    subroutine calc_w(w,div,dz,jaco_w,rho,ims,ime,kms,kme,jms,jme,i_s,i_e,j_s,j_e,adv_den)
+        real,    intent(inout)                                   :: w(ims:ime,kms:kme,jms:jme)
+        real,    dimension(ims:ime,kms:kme,jms:jme), intent(in)  :: div, dz, jaco_w, rho
         logical, intent(in)    :: adv_den
+        integer, intent(in)    :: ims, ime, kms, kme, jms, jme, i_s, i_e, j_s, j_e
         
         real, allocatable, dimension(:,:,:) :: rho_i
-        integer ims, ime, kms, kme, jms, jme, k
+        integer k
 
-        ims = lbound(div,1)
-        ime = ubound(div,1)
-        kms = lbound(div,2)
-        kme = ubound(div,2)
-        jms = lbound(div,3)
-        jme = ubound(div,3)
-        
         allocate(rho_i(ims:ime,kms:kme-1,jms:jme))
         
         rho_i(:,kms:kme-1,:) = ( rho(:,kms:kme-1,:)*dz(:,kms:kme-1,:) + rho(:,kms+1:kme,:)*dz(:,kms+1:kme,:) ) / (dz(:,kms:kme-1,:)+dz(:,kms+1:kme,:))
         
+        w = 0
+        
         do k = kms,kme
             if (adv_den) then
                 if (k==kms) then
-                    w(:,k,:) = 0 - div(:,k,:) * dz(:,k,:) &
-                                                / (jaco_w(:,k,:) * rho_i(:,k,:) )
+                    w(i_s:i_e,k,j_s:j_e) = 0 - div(i_s:i_e,k,j_s:j_e) * dz(i_s:i_e,k,j_s:j_e) &
+                                                / (jaco_w(i_s:i_e,k,j_s:j_e) * rho_i(i_s:i_e,k,j_s:j_e) )
                 elseif (k==kme) then
-                    w(:,k,:) = ((w(:,k-1,:) * rho_i(:,k-1,:) &
-                                                * jaco_w(:,k-1,:)) - div(:,k,:) * dz(:,k,:)) &
-                                                / (jaco_w(:,k,:) * rho(:,k,:))
+                    w(i_s:i_e,k,j_s:j_e) = ((w(i_s:i_e,k-1,j_s:j_e) * rho_i(i_s:i_e,k-1,j_s:j_e) &
+                                                * jaco_w(i_s:i_e,k-1,j_s:j_e)) - div(i_s:i_e,k,j_s:j_e) * &
+                                                dz(i_s:i_e,k,j_s:j_e)) / (jaco_w(i_s:i_e,k,j_s:j_e) * rho(i_s:i_e,k,j_s:j_e))
                 else
-                    w(:,k,:) = ( (w(:,k-1,:) * rho_i(:,k-1,:) * &
-                                jaco_w(:,k-1,:)) - div(:,k,:) * dz(:,k,:)) / &
-                                (jaco_w(:,k,:) *  rho_i(:,k,:) )
+                    w(i_s:i_e,k,j_s:j_e) = ( (w(i_s:i_e,k-1,j_s:j_e) * rho_i(i_s:i_e,k-1,j_s:j_e) * &
+                                jaco_w(i_s:i_e,k-1,j_s:j_e)) - div(i_s:i_e,k,j_s:j_e) * dz(i_s:i_e,k,j_s:j_e)) / &
+                                (jaco_w(i_s:i_e,k,j_s:j_e) *  rho_i(i_s:i_e,k,j_s:j_e) )
                 endif
             else
                 if (k==kms) then
-                    w(:,k,:) = (0 - div(:,k,:) * dz(:,k,:)) / (jaco_w(:,k,:) )
+                    w(i_s:i_e,k,j_s:j_e) = (0 - div(i_s:i_e,k,j_s:j_e) * dz(i_s:i_e,k,j_s:j_e)) / (jaco_w(i_s:i_e,k,j_s:j_e) )
                 else 
-                    w(:,k,:) = (w(:,k-1,:) * jaco_w(:,k-1,:) - &
-                                                div(:,k,:) * dz(:,k,:))/ (jaco_w(:,k,:) )
+                    w(i_s:i_e,k,j_s:j_e) = (w(i_s:i_e,k-1,j_s:j_e) * jaco_w(i_s:i_e,k-1,j_s:j_e) - &
+                                                div(i_s:i_e,k,j_s:j_e) * dz(i_s:i_e,k,j_s:j_e))/ (jaco_w(i_s:i_e,k,j_s:j_e) )
                 end if
             end if
         end do
