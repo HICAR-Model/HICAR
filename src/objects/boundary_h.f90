@@ -1,4 +1,7 @@
 module boundary_interface
+
+    use mpi
+    use netcdf
     use icar_constants
     use options_interface,        only : options_t
     use variable_dict_interface,  only : var_dict_t
@@ -26,6 +29,13 @@ module boundary_interface
         !   manage file pointer and position in file for boundary conditions
         integer :: curfile
         integer :: curstep
+        integer :: its
+        integer :: ite
+        integer :: kts
+        integer :: kte
+        integer :: jts
+        integer :: jte
+
 
         type(Time_type)                   :: current_time   ! the date/time of the forcing data in memory
         type(time_delta_t)                :: forcing_dt     ! the time step in between two forcing steps
@@ -63,10 +73,12 @@ module boundary_interface
     interface
 
     ! Set default component values
-    module subroutine init(this, options, domain_vars)
+    module subroutine init(this, options, domain_lat, domain_lon, domain_vars)
         implicit none
         class(boundary_t), intent(inout) :: this
         type(options_t),   intent(inout) :: options
+        real, dimension(:,:), intent(in) :: domain_lat
+        real, dimension(:,:), intent(in) :: domain_lon
         type(var_dict_t),  intent(inout) :: domain_vars
 
     end subroutine
@@ -95,7 +107,7 @@ module boundary_interface
     end subroutine
 
     module subroutine init_local(this, options, file_list, var_list, dim_list, start_time, &
-                                 lat_var, lon_var, z_var, time_var, p_var, ps_var, domain_vars)
+                                 lat_var, lon_var, z_var, time_var, p_var, ps_var, domain_lat, domain_lon, domain_vars)
         implicit none
         class(boundary_t),               intent(inout)  :: this
         type(options_t),                 intent(inout)  :: options
@@ -109,7 +121,9 @@ module boundary_interface
         character(len=kMAX_NAME_LENGTH), intent(in)     :: time_var
         character(len=kMAX_NAME_LENGTH), intent(in)     :: p_var
         character(len=kMAX_NAME_LENGTH), intent(in)     :: ps_var
-        type(var_dict_t),                intent(inout)  :: domain_vars
+        real, dimension(:,:), intent(in)                :: domain_lat
+        real, dimension(:,:), intent(in)                :: domain_lon
+        type(var_dict_t),     intent(inout)             :: domain_vars
     end subroutine
 
     module subroutine update_forcing(this, options)

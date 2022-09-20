@@ -198,7 +198,7 @@ endif
 
 # Cray fortran
 ifeq ($(COMPILER), cray)
-	COMP= -h omp vector2 -O2 -c -eI
+	COMP= -h omp vector2 -O3 -c -hfp2 -eI
 	LINK= -fopenmp
 	PREPROC= -eZ
 	MODOUTPUT= -J $(BUILD) -em
@@ -232,7 +232,7 @@ ifeq ($(MODE), debug)
 		LINK=
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-O2 -h noomp -c -g
+		COMP=-O3 -h noomp -c -g
 		LINK=-h noomp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
@@ -249,8 +249,8 @@ ifeq ($(MODE), debugompslow)
 		LINK= -fopenmp -lgomp
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-c -g -m 0 -h develop -R bcsp -M 399
-		LINK=
+		COMP=-c -g -m 0 -hfp3 -h omp develop -R bcsp -M 399
+		LINK=-fopenmp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
 	endif
@@ -411,7 +411,6 @@ OBJS=	\
 		$(BUILD)advection_driver.o	\
 		$(BUILD)advect.o			\
 		$(BUILD)adv_mpdata.o                        \
-		$(BUILD)advect_4th.o                        \
 		$(BUILD)lsm_driver.o		\
 		$(BUILD)lsm_noahdrv.o		\
 		$(BUILD)lsm_noahlsm.o		\
@@ -678,7 +677,7 @@ $(BUILD)exchangeable_obj.o: $(OBJECTS)exchangeable_obj.f90 $(BUILD)exchangeable_
 
 $(BUILD)exchangeable_h.o: $(OBJECTS)exchangeable_h.f90 $(BUILD)grid_h.o $(BUILD)variable_h.o $(BUILD)assertions.o
 
-$(BUILD)default_output_metadata.o: $(IO)default_output_metadata.f90 $(BUILD)icar_constants.o $(BUILD)variable_h.o $(BUILD)meta_data_h.o
+$(BUILD)default_output_metadata.o: $(IO)default_output_metadata.f90 $(BUILD)icar_constants.o $(BUILD)variable_h.o $(BUILD)exchangeable_h.o $(BUILD)meta_data_h.o
 
 $(BUILD)restart_h.o: $(IO)restart_h.f90 $(BUILD)domain_h.o $(BUILD)output_h.o $(BUILD)options_h.o
 
@@ -686,18 +685,17 @@ $(BUILD)restart.o: $(IO)restart.f90 $(BUILD)restart_h.o $(BUILD)time_h.o $(BUILD
 
 $(BUILD)output_h.o: $(IO)output_h.f90 $(BUILD)icar_constants.o $(BUILD)variable_h.o $(BUILD)grid_h.o $(BUILD)meta_data_h.o $(BUILD)domain_h.o
 
-$(BUILD)output_obj.o: $(IO)output_obj.f90 $(BUILD)output_h.o $(BUILD)default_output_metadata.o $(BUILD)time_h.o
+$(BUILD)output_obj.o: $(IO)output_obj.f90 $(BUILD)output_h.o $(BUILD)default_output_metadata.o $(BUILD)time_h.o $(BUILD)debug_utils.o
 
 
 $(BUILD)boundary_h.o: $(OBJECTS)boundary_h.f90 $(BUILD)options_h.o				\
 					$(BUILD)grid_h.o $(BUILD)meta_data_h.o $(BUILD)time_h.o 	\
-					$(BUILD)data_structures.o $(BUILD)time_delta_obj.o			\
-					$(BUILD)variable_dict_h.o
+					$(BUILD)data_structures.o $(BUILD)time_delta_obj.o
 
 $(BUILD)boundary_obj.o: $(OBJECTS)boundary_obj.f90 $(BUILD)boundary_h.o					\
 					$(BUILD)string.o $(BUILD)atm_utilities.o $(BUILD)time_io.o			\
 					$(BUILD)io_routines.o $(BUILD)co_utilities.o $(BUILD)geo_reader.o	\
-					$(BUILD)vinterp.o $(BUILD)array_utilities.o $(BUILD)icar_constants.o
+					$(BUILD)vinterp.o $(BUILD)array_utilities.o $(BUILD)icar_constants.o $(BUILD)debug_utils.o
 
 
 $(BUILD)domain_h.o: $(OBJECTS)domain_h.f90 $(BUILD)options_h.o $(BUILD)exchangeable_h.o \
@@ -864,12 +862,11 @@ $(BUILD)pbl_ysu.o: $(PHYS)pbl_ysu.f90
 #	Advection related code
 ###################################################################
 $(BUILD)advection_driver.o:$(PHYS)advection_driver.f90 $(BUILD)data_structures.o $(BUILD)advect.o \
-							$(BUILD)options_h.o $(BUILD)domain_h.o $(BUILD)adv_mpdata.o $(BUILD)advect_4th.o
+							$(BUILD)options_h.o $(BUILD)domain_h.o $(BUILD)adv_mpdata.o
 
 $(BUILD)adv_fluxcorr.o:$(PHYS)adv_fluxcorr.f90 $(BUILD)data_structures.o $(BUILD)domain_h.o
 
-$(BUILD)advect.o:$(PHYS)advect.f90 $(BUILD)data_structures.o $(BUILD)options_h.o $(BUILD)domain_h.o
-$(BUILD)advect_4th.o:$(PHYS)advect_4th.f90 $(BUILD)data_structures.o $(BUILD)options_h.o $(BUILD)domain_h.o \
+$(BUILD)advect.o:$(PHYS)advect.f90 $(BUILD)data_structures.o $(BUILD)options_h.o $(BUILD)domain_h.o \
                                             $(BUILD)icar_constants.o $(BUILD)adv_fluxcorr.o
 
 $(BUILD)adv_mpdata.o:$(PHYS)adv_mpdata.f90 $(PHYS)adv_mpdata_FCT_core.f90 $(BUILD)data_structures.o $(BUILD)options_h.o $(BUILD)domain_h.o
