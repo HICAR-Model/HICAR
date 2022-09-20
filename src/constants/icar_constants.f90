@@ -336,11 +336,10 @@ module icar_constants
     integer, parameter :: kRA_SIMPLE     = 2
     integer, parameter :: kRA_RRTMG      = 3
 
-    integer, parameter :: kADV_UPWIND    = 1
+    integer, parameter :: kADV_STD       = 1
     integer, parameter :: kADV_MPDATA    = 2
-    integer, parameter :: kADV_4TH       = 4
 
-    integer, parameter :: kFLUXCOR_WRF   = 1
+    integer, parameter :: kFLUXCOR_MONO   = 1
 
     integer, parameter :: kWIND_LINEAR   = 1
     integer, parameter :: kCONSERVE_MASS = 2
