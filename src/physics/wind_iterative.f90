@@ -153,7 +153,7 @@ contains
             call update_coefs(domain)
         endif
                                 
-        call init_iter_winds()
+        !call init_iter_winds()
                                 
         call KSPCreate(PETSC_COMM_WORLD,ksp,ierr)
         conv_tol = 1e-4
@@ -195,7 +195,7 @@ contains
         call DMDestroy(da,ierr)
         call KSPDestroy(ksp,ierr)
         
-        call finalize_iter_winds()
+        !call finalize_iter_winds()
                 
     end subroutine calc_iter_winds
     

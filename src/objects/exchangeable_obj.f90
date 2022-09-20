@@ -40,6 +40,15 @@ contains
     !Based on how grids are intialized, we can find out if this is a x/y staggered grid
     this%xe = 0
     this%ye = 0
+    
+    this%its = grid%its
+    this%ite = grid%ite
+    this%jts = grid%jts
+    this%jte = grid%jte
+    this%kts = grid%kts
+    this%kte = grid%kte
+
+    
     if ((grid%ns_halo_nx - (grid%nx_global / grid%ximages + 1)) > 0) then
         this%xe = 1
     else if ((grid%ew_halo_ny - (grid%ny_global / grid%yimages + 1)) > 0) then
@@ -237,9 +246,9 @@ contains
       nx = size(this%data_3d,1)
       
       if (metadata) then
-          this%halo_south_in(1:nx,:,1:(halo_size+this%ye))[north_neighbor] = this%meta_data%dqdt_3d(:,:,(n-halo_size*2+1-this%ye):(n-halo_size))
+          this%halo_south_in(1+halo_size:nx-halo_size,this%kts:this%kte,1:(halo_size+this%ye))[north_neighbor] = this%meta_data%dqdt_3d(this%its:this%ite,this%kts:this%kte,(n-halo_size*2+1-this%ye):(n-halo_size))
       else
-          this%halo_south_in(1:nx,:,1:(halo_size+this%ye))[north_neighbor] = this%data_3d(:,:,(n-halo_size*2+1-this%ye):(n-halo_size))
+          this%halo_south_in(1+halo_size:nx-halo_size,this%kts:this%kte,1:(halo_size+this%ye))[north_neighbor] = this%data_3d(this%its:this%ite,this%kts:this%kte,(n-halo_size*2+1-this%ye):(n-halo_size))
       endif
   end subroutine
 
@@ -256,9 +265,9 @@ contains
       nx = size(this%data_3d,1)
       
       if (metadata) then
-          this%halo_north_in(1:nx,:,1:halo_size)[south_neighbor] = this%meta_data%dqdt_3d(:,:,(start+halo_size+this%ye):(start+halo_size*2-1+this%ye))
+          this%halo_north_in(1+halo_size:nx-halo_size,this%kts:this%kte,1:halo_size)[south_neighbor] = this%meta_data%dqdt_3d(this%its:this%ite,this%kts:this%kte,(start+halo_size+this%ye):(start+halo_size*2-1+this%ye))
       else
-          this%halo_north_in(1:nx,:,1:halo_size)[south_neighbor] = this%data_3d(:,:,(start+halo_size+this%ye):(start+halo_size*2-1+this%ye))
+          this%halo_north_in(1+halo_size:nx-halo_size,this%kts:this%kte,1:halo_size)[south_neighbor] = this%data_3d(this%its:this%ite,this%kts:this%kte,(start+halo_size+this%ye):(start+halo_size*2-1+this%ye))
       endif
   end subroutine
 
@@ -275,9 +284,9 @@ contains
       nx = size(this%data_3d,1)
       
       if (metadata) then
-          this%meta_data%dqdt_3d(:,:,n-halo_size+1:n) = this%halo_north_in(:nx,:,1:halo_size)
+          this%meta_data%dqdt_3d(this%its:this%ite,this%kts:this%kte,n-halo_size+1:n) = this%halo_north_in(1+halo_size:nx-halo_size,this%kts:this%kte,1:halo_size)
       else
-          this%data_3d(:,:,n-halo_size+1:n) = this%halo_north_in(:nx,:,1:halo_size)
+          this%data_3d(this%its:this%ite,this%kts:this%kte,n-halo_size+1:n) = this%halo_north_in(1+halo_size:nx-halo_size,this%kts:this%kte,1:halo_size)
       endif
   end subroutine
 
@@ -294,9 +303,9 @@ contains
       nx = size(this%data_3d,1)
       
       if (metadata) then
-          this%meta_data%dqdt_3d(:,:,start:start+halo_size-1+this%ye) = this%halo_south_in(:nx,:,1:(halo_size+this%ye))
+          this%meta_data%dqdt_3d(this%its:this%ite,this%kts:this%kte,start:start+halo_size-1+this%ye) = this%halo_south_in(1+halo_size:nx-halo_size,this%kts:this%kte,1:(halo_size+this%ye))
       else
-          this%data_3d(:,:,start:start+halo_size-1+this%ye) = this%halo_south_in(:nx,:,1:(halo_size+this%ye))
+          this%data_3d(this%its:this%ite,this%kts:this%kte,start:start+halo_size-1+this%ye) = this%halo_south_in(1+halo_size:nx-halo_size,this%kts:this%kte,1:(halo_size+this%ye))
       endif
   end subroutine
 
@@ -315,9 +324,9 @@ contains
       ny = size(this%data_3d,3)
       
       if (metadata) then
-          this%halo_west_in(1:(halo_size+this%xe),:,1:ny)[east_neighbor] = this%meta_data%dqdt_3d((n-halo_size*2+1-this%xe):(n-halo_size),:,:)
+          this%halo_west_in(1:(halo_size+this%xe),this%kts:this%kte,1+halo_size:ny-halo_size)[east_neighbor] = this%meta_data%dqdt_3d((n-halo_size*2+1-this%xe):(n-halo_size),this%kts:this%kte,this%jts:this%jte)
       else
-          this%halo_west_in(1:(halo_size+this%xe),:,1:ny)[east_neighbor] = this%data_3d((n-halo_size*2+1-this%xe):(n-halo_size),:,:)
+          this%halo_west_in(1:(halo_size+this%xe),this%kts:this%kte,1+halo_size:ny-halo_size)[east_neighbor] = this%data_3d((n-halo_size*2+1-this%xe):(n-halo_size),this%kts:this%kte,this%jts:this%jte)
       endif
   end subroutine
 
@@ -334,9 +343,9 @@ contains
       ny = size(this%data_3d,3)
       
       if (metadata) then
-          this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%meta_data%dqdt_3d((start+halo_size+this%xe):(start+halo_size*2-1+this%xe),:,:)
+          this%halo_east_in(1:halo_size,this%kts:this%kte,1+halo_size:ny-halo_size)[west_neighbor] = this%meta_data%dqdt_3d((start+halo_size+this%xe):(start+halo_size*2-1+this%xe),this%kts:this%kte,this%jts:this%jte)
       else
-          this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%data_3d((start+halo_size+this%xe):(start+halo_size*2-1+this%xe),:,:)
+          this%halo_east_in(1:halo_size,this%kts:this%kte,1+halo_size:ny-halo_size)[west_neighbor] = this%data_3d((start+halo_size+this%xe):(start+halo_size*2-1+this%xe),this%kts:this%kte,this%jts:this%jte)
       endif
   end subroutine
 
@@ -353,9 +362,9 @@ contains
       ny = size(this%data_3d,3)
       
       if (metadata) then
-          this%meta_data%dqdt_3d(n-halo_size+1:n,:,:) = this%halo_east_in(1:halo_size,:,1:ny)
+          this%meta_data%dqdt_3d(n-halo_size+1:n,this%kts:this%kte,this%jts:this%jte) = this%halo_east_in(1:halo_size,this%kts:this%kte,1+halo_size:ny-halo_size)
       else
-          this%data_3d(n-halo_size+1:n,:,:) = this%halo_east_in(1:halo_size,:,1:ny)
+          this%data_3d(n-halo_size+1:n,this%kts:this%kte,this%jts:this%jte) = this%halo_east_in(1:halo_size,this%kts:this%kte,1+halo_size:ny-halo_size)
       endif
   end subroutine
 
@@ -372,9 +381,9 @@ contains
       ny = size(this%data_3d,3)
       
       if (metadata) then
-          this%meta_data%dqdt_3d(start:start+halo_size-1+this%xe,:,:) = this%halo_west_in(1:(halo_size+this%xe),:,1:ny)
+          this%meta_data%dqdt_3d(start:start+halo_size-1+this%xe,this%kts:this%kte,this%jts:this%jte) = this%halo_west_in(1:(halo_size+this%xe),this%kts:this%kte,1+halo_size:ny-halo_size)
       else
-          this%data_3d(start:start+halo_size-1+this%xe,:,:) = this%halo_west_in(1:(halo_size+this%xe),:,1:ny)
+          this%data_3d(start:start+halo_size-1+this%xe,this%kts:this%kte,this%jts:this%jte) = this%halo_west_in(1:(halo_size+this%xe),this%kts:this%kte,1+halo_size:ny-halo_size)
       endif
   end subroutine
 end submodule

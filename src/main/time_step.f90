@@ -47,28 +47,28 @@ contains
     !! @return dt [ scalar ]        Maximum stable time step    [s]
     !!
     !!------------------------------------------------------------
-    function compute_dt(dx, u, v, w, rho, dz, CFL, cfl_strictness, use_density) result(dt)
+    function compute_dt(dx, u, v, w, rho, dz, ims, ime, kms, kme, jms, jme, its, ite, jts, jte, CFL, cfl_strictness, use_density) result(dt)
         real,       intent(in)                   :: dx
-        real,       intent(in), dimension(:,:,:) :: u, v, w, rho
-        real,       intent(in), dimension(:)     :: dz
+        real,       intent(in), dimension(ims:ime+1,kms:kme,jms:jme) :: u 
+        real,       intent(in), dimension(ims:ime,kms:kme,jms:jme+1) :: v
+        real,       intent(in), dimension(ims:ime,kms:kme,jms:jme)   :: w, rho
+        real,       intent(in), dimension(kms:kme)     :: dz
+        integer,    intent(in)                   :: ims, ime, kms, kme, jms, jme, its, ite, jts, jte
         real,       intent(in)                   :: CFL
         integer,    intent(in)                   :: cfl_strictness
         logical,    intent(in)                   :: use_density
+        
         ! output value
         real :: dt
         ! locals
         real :: three_d_cfl = 0.577350269 ! = sqrt(3)/3
-        integer :: i, j, k, nx, nz, ny, zoffset
+        integer :: i, j, k, zoffset
         real :: maxwind3d, maxwind1d, current_wind, sqrt3
 
         sqrt3 = sqrt(3.0) * 1.001 ! with a safety factor
 
         maxwind1d = 0
         maxwind3d = 0
-
-        nx = size(w,1)
-        nz = size(w,2)
-        ny = size(w,3)
 
         if (cfl_strictness==1) then
             ! to ensure we are stable for 1D advection:
@@ -94,15 +94,15 @@ contains
         else
             ! to ensure we are stable for 3D advection we'll use the average "max" wind speed
             ! but that average has to be divided by sqrt(3) for stability in 3 dimensional advection
-            do j=1,ny
-                do k=1,nz
-                    if (k==1) then
+            do j=jts,jte
+                do k=kms,kme
+                    if (k==kms) then
                         zoffset = 0
                     else
                         zoffset = -1
                     endif
 
-                    do i=1,nx
+                    do i=its,ite
                         ! just compute the sum of the wind speeds, but take the max over the two
                         ! faces of the grid cell (e.g. east and west sides)
                         ! this will be divided by 3 later by three_d_cfl
@@ -209,13 +209,14 @@ contains
     !! @param end_time      the end of the current full time step (when step will return)
     !!
     !!------------------------------------------------------------
-    subroutine update_dt(dt, future_seconds, options, dx, u, v, w, density)
+    subroutine update_dt(dt, future_seconds, options, domain, update)
         implicit none
         type(time_delta_t), intent(inout) :: dt
         double precision,   intent(inout) :: future_seconds
         type(options_t),    intent(in)    :: options
-        real,               intent(in)    :: dx
-        real,               intent(in), dimension(:,:,:) :: u, v, w, density
+        type(domain_t),     intent(in)    :: domain
+        logical, optional,  intent(in)    :: update
+        
         double precision                  :: seconds
         ! compute internal timestep dt to maintain stability
         ! courant condition for 3D advection. 
@@ -223,8 +224,21 @@ contains
         !First, set dt to whatever the dt for the current time step was calculated to be
         call dt%set(seconds=min(future_seconds,120.0D0))
 
-        seconds = compute_dt(dx, u, v, w, density, options%parameters%dz_levels, options%time_options%cfl_reduction_factor, &
-                                 cfl_strictness=options%time_options%cfl_strictness, use_density=.false.)
+        if ((present(update)) .and. (update)) then
+            seconds = compute_dt(domain%dx, domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, &
+                            domain%w%meta_data%dqdt_3d, domain%density%data_3d, options%parameters%dz_levels, &
+                            domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, &
+                            domain%its, domain%ite, domain%jts, domain%jte, &
+                            options%time_options%cfl_reduction_factor, &
+                            cfl_strictness=options%time_options%cfl_strictness, use_density=.false.)
+        else
+            seconds = compute_dt(domain%dx, domain%u%data_3d, domain%v%data_3d, &
+                            domain%w%data_3d, domain%density%data_3d, options%parameters%dz_levels, &
+                            domain%ims, domain%ime, domain%kms, domain%kme, domain%jms, domain%jme, &
+                            domain%its, domain%ite, domain%jts, domain%jte, &
+                            options%time_options%cfl_reduction_factor, &
+                            cfl_strictness=options%time_options%cfl_strictness, use_density=.false.)
+        endif
         ! perform a reduction across all images to find the minimum time step required
 !#ifndef __INTEL_COMPILER
 !        call CO_MIN(seconds)
@@ -372,10 +386,11 @@ contains
                 !After advection, apply tendencies to cells and call diagnostic update. Now MP can be called
                 
                 call exch_timer%start()
-                call domain%halo_exchange()
+                call domain%halo_exchange_big()
                 call exch_timer%stop()
 
                 call adv_timer%start()
+
                 call advect(domain, options, real(dt%seconds()))
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain", fix=.True.)
                 call adv_timer%stop()
@@ -383,6 +398,7 @@ contains
                 call domain%diagnostic_update(options)
                 
                 call mp_timer%start()
+
                 call mp(domain, options, real(dt%seconds()))!, halo=domain%grid%halo_size)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp_halo", fix=.True.)
                 call mp_timer%stop()
