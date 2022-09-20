@@ -25,6 +25,7 @@ contains
             dims(3) = this%jme - this%jms + 1
         endif
     end function
+    
 
     !> -------------------------------
     !! Decompose the domain into as even a set of tiles as possible in two dimensions
@@ -136,41 +137,21 @@ contains
         memory_start = (me-1)*(base_n) + min(me-1,mod(n_global,nimg)) + 1
 
     end function my_start
-
-  
-    !> -------------------------------
-    !! Determine the necesarry halo size based on the numerical accuracy of the advection scheme
-    !! -------------------------------
-    function determine_halo_size(adv) result(halo_size)
-        implicit none
-        integer, intent(in) :: adv
-        integer :: halo_size
-        
-        halo_size = 1
-       
-        if (adv == kADV_UPWIND) then
-           halo_size = 1
-        else if (adv == kADV_MPDATA) then
-            halo_size = 2
-        else if (adv == kADV_4TH) then
-            halo_size = 4
-        endif
-    end function
     
     !> -------------------------------
     !! Generate the domain decomposition mapping and compute the indicies for local memory
     !!
     !! -------------------------------
-    module subroutine set_grid_dimensions(this, nx, ny, nz, adv, nx_extra, ny_extra, for_image)
+    module subroutine set_grid_dimensions(this, nx, ny, nz, adv_order, nx_extra, ny_extra, for_image)
       class(grid_t),   intent(inout) :: this
       integer,         intent(in)    :: nx, ny, nz
-      integer,         intent(in), optional :: adv, nx_extra, ny_extra, for_image
+      integer,         intent(in), optional :: adv_order, nx_extra, ny_extra, for_image
 
       integer :: nx_e, ny_e, halo_size
       integer :: image
-      
+
       halo_size = kDEFAULT_HALO_SIZE
-      if (present(adv)) halo_size = determine_halo_size(adv)
+      if (present(adv_order)) halo_size = ceiling(adv_order/2.0)
 
       image = this_image()
       if (present(for_image)) image = for_image
