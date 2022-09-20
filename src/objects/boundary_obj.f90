@@ -6,16 +6,15 @@
 !!
 !!------------------------------------------------------------
 submodule(boundary_interface) boundary_implementation
-
     use array_utilities,        only : interpolate_in_z
-    use io_routines,            only : io_getdims, io_read, io_maxDims, io_variable_is_present
+    use io_routines,            only : io_getdims, io_read, io_maxDims, io_variable_is_present, io_write
     use time_io,                only : read_times, find_timestep_in_file
     use co_util,                only : broadcast
     use string,                 only : str
     use mod_atm_utilities,      only : rh_to_mr, compute_3d_p, compute_3d_z, exner_function
     use geo,                    only : standardize_coordinates
     use vertical_interpolation, only : vLUT, vinterp
-
+    use debug_module,           only : check_ncdf
     implicit none
 contains
 
@@ -26,10 +25,12 @@ contains
     !! Distributes initial conditions to all other images
     !!
     !!------------------------------------------------------------
-    module subroutine init(this, options, domain_vars)
+    module subroutine init(this, options, domain_lat, domain_lon, domain_vars)
         class(boundary_t), intent(inout) :: this
         type(options_t),   intent(inout) :: options
-        type(var_dict_t),  intent(inout) :: domain_vars
+        real, dimension(:,:), intent(in)     :: domain_lat
+        real, dimension(:,:), intent(in)     :: domain_lon
+        type(var_dict_t),     intent(inout)  :: domain_vars
 
         character(len=kMAX_NAME_LENGTH), allocatable :: vars_to_read(:)
         integer,                         allocatable :: var_dimensions(:)
@@ -55,7 +56,7 @@ contains
                                  options%parameters%time_var,       &
                                  options%parameters%pvar,           &
                                  options%parameters%psvar,           &
-                                 domain_vars)
+                                 domain_lat, domain_lon, domain_vars)
 
         ! endif
         ! call this%distribute_initial_conditions()
@@ -192,7 +193,7 @@ contains
 
         do i=1, size(var_list)
 
-            call add_var_to_dict(this%variables, file_list(this%curfile), var_list(i), dim_list(i), this%curstep, [nx, nz, ny])
+            call add_var_to_dict(this, file_list(this%curfile), var_list(i), dim_list(i), this%curstep, [nx, nz, ny])
             ! if (this_image()==1)  print*, i," var_list(i): ",trim(var_list(i)), " dim_list(i): ", dim_list(i), " this%curstep ", this%curstep
 
         end do
@@ -206,7 +207,7 @@ contains
     !!
     !!------------------------------------------------------------
     module subroutine init_local(this, options, file_list, var_list, dim_list, start_time, &
-                                 lat_var, lon_var, z_var, time_var, p_var, ps_var, domain_vars)
+                                 lat_var, lon_var, z_var, time_var, p_var, ps_var, domain_lat, domain_lon, domain_vars)
         class(boundary_t),               intent(inout)  :: this
         type(options_t),                 intent(inout)  :: options
         character(len=kMAX_NAME_LENGTH), intent(in)     :: file_list(:)
@@ -219,11 +220,13 @@ contains
         character(len=kMAX_NAME_LENGTH), intent(in)     :: time_var
         character(len=kMAX_NAME_LENGTH), intent(in)     :: p_var
         character(len=kMAX_NAME_LENGTH), intent(in)     :: ps_var
+        real, dimension(:,:),            intent(in)     :: domain_lat
+        real, dimension(:,:),            intent(in)     :: domain_lon
         type(var_dict_t),                intent(inout)  :: domain_vars
 
         type(variable_t)  :: test_variable
-        real, allocatable :: temp_z(:,:,:)
-
+        real, allocatable :: temp_z(:,:,:), temp_z_trans(:,:,:), temp_lat(:,:), temp_lon(:,:)
+        character(len=5)       :: img_str
 
         integer :: i, nx, ny, nz
 
@@ -232,8 +235,24 @@ contains
         call read_bc_time(this%current_time, file_list(this%curfile), time_var, this%curstep)
 
         !  read in latitude and longitude coordinate data
-        call io_read(file_list(this%curfile), lat_var, this%lat, this%curstep)
-        call io_read(file_list(this%curfile), lon_var, this%lon, this%curstep)
+        call io_read(file_list(this%curfile), lat_var, temp_lat, this%curstep)
+        call io_read(file_list(this%curfile), lon_var, temp_lon, this%curstep)
+
+        !Here we should begin the sub-setting:
+        !domain object should be fed in as an argument
+        !The lat/lon bounds of the domain object are used to find the appropriate indexes of the forcing data
+        !These bounds are then extended by 1 in each direction to accomodate bilinear interpolation
+        
+        call set_boundary_image(this, temp_lat, temp_lon, domain_lat, domain_lon)
+        call io_write('temp_lat.nc',"lat",temp_lat)
+        call io_write('temp_lon.nc',"lon",temp_lon)
+
+        !After finding forcing image indices, subset the lat/lon variables
+        allocate(this%lat((this%ite-this%its+1),(this%jte-this%jts+1)))
+        allocate(this%lon((this%ite-this%its+1),(this%jte-this%jts+1)))
+
+        this%lat = temp_lat(this%its:this%ite,this%jts:this%jte)
+        this%lon = temp_lon(this%its:this%ite,this%jts:this%jte)
 
         ! read in the height coordinate of the input data
         if (.not. options%parameters%compute_z) then
@@ -244,9 +263,11 @@ contains
             nz = size(temp_z,3)
 
             if (allocated(this%z)) deallocate(this%z)
-            allocate(this%z(nx,nz,ny))
-
-            this%z = reshape(temp_z, shape=[nx,nz,ny], order=[1,3,2])
+            allocate(this%z((this%ite-this%ite+1),nz,(this%jte-this%jts+1)))
+            allocate(temp_z_trans(nx,nz,ny))
+            
+            temp_z_trans = reshape(temp_z, shape=[nx,nz,ny], order=[1,3,2])
+            this%z = temp_z_trans(this%its:this%ite,:,this%jts:this%jte)
         else
             call io_read(file_list(this%curfile), p_var,   temp_z,   this%curstep)
             nx = size(temp_z,1)
@@ -254,14 +275,26 @@ contains
             nz = size(temp_z,3)
 
             if (allocated(this%z)) deallocate(this%z)
-            allocate(this%z(nx,nz,ny))
+            allocate(this%z((this%ite-this%ite+1),nz,(this%jte-this%jts+1)))
 
         endif
+        
+        this%kts = 1
+        this%kte = nz
 
+        if (this%ite < this%its) write(*,*) 'image: ',this_image(),'  its: ',this%its,'  ite: ',this%ite,'  jts: ',this%jts,'  jte: ',this%jte
+        if (this%kte < this%kts) write(*,*) 'image: ',this_image(),'  its: ',this%its,'  ite: ',this%ite,'  jts: ',this%jts,'  jte: ',this%jte
+        if (this%jte < this%jts) write(*,*) 'image: ',this_image(),'  its: ',this%its,'  ite: ',this%ite,'  jts: ',this%jts,'  jte: ',this%jte
+
+        
+        write(img_str,'(I4)') this_image()
+        call io_write('best_z.nc',"z",this%z(:,:,:))
+        call io_write(trim(img_str)//".nc", "z", this%z(:,:,:) )
 
         ! call assert(size(var_list) == size(dim_list), "list of variable dimensions must match list of variables")
         do i=1, size(var_list)
-            call add_var_to_dict(this%variables, file_list(this%curfile), var_list(i), dim_list(i), this%curstep, [nx, nz, ny])
+            call add_var_to_dict(this, file_list(this%curfile), var_list(i), dim_list(i), this%curstep, &
+                                [(this%ite-this%its+1), nz, (this%jte-this%jts+1)])
         end do
         
         call domain_vars%reset_iterator()
@@ -274,6 +307,69 @@ contains
         call update_computed_vars(this, options, update=options%parameters%time_varying_z)
 
     end subroutine
+
+    !>------------------------------------------------------------
+    !! Determine image location for boundary object within forcing data
+    !!
+    !!------------------------------------------------------------
+
+    subroutine set_boundary_image(this, temp_lat, temp_lon, domain_lat, domain_lon)
+        implicit none
+        type(boundary_t), intent(inout)   :: this
+        real, dimension(:,:), intent(in)  :: temp_lat, temp_lon, domain_lat, domain_lon
+        
+        real, allocatable, dimension(:,:) ::  LL_d, UR_d
+        real LLlat, LLlon, URlat, URlon
+        integer, dimension(2) :: temp_inds
+        integer :: nx, ny, d_ims, d_ime, d_jms, d_jme
+        
+        d_ims = lbound(domain_lat,1)
+        d_ime = ubound(domain_lat,1)
+        d_jms = lbound(domain_lat,2)
+        d_jme = ubound(domain_lat,2)
+
+        nx = size(temp_lat,1)
+        ny = size(temp_lat,2)
+        
+        allocate(LL_d(nx,ny))
+        allocate(UR_d(nx,ny))
+
+        ! get lower left and upper right lat/lon pairs from domain
+        LLlat = domain_lat(d_ims,d_jms)
+        LLlon = domain_lon(d_ims,d_jms)
+        URlat = domain_lat(d_ime,d_jme)
+        URlon = domain_lon(d_ime,d_jme)
+
+        ! calculate distance from LL/UR lat/lon for boundary lat/lons
+        LL_d = ((temp_lat-LLlat)**2+(temp_lon-LLlon)**2)
+        UR_d = ((temp_lat-URlat)**2+(temp_lon-URlon)**2)
+
+        ! find minimum distances to determine boundary image indices
+        temp_inds = minloc(LL_d)
+        this%its = temp_inds(1); this%jts = temp_inds(2)
+        temp_inds = minloc(UR_d)
+        this%ite = temp_inds(1); this%jte = temp_inds(2)
+
+        ! increase boundary image indices by 5 as buffer to allow for interpolation
+        this%its = max(this%its - 5,1)
+        this%ite = min(this%ite + 5,nx)
+        this%jts = max(this%jts - 5,1)
+        this%jte = min(this%jte + 5,ny)
+
+        if (this%ite < this%its) write(*,*) 'image: ',this_image(),'  its: ',this%its,'  ite: ',this%ite,'  jts: ',this%jts,'  jte: ',this%jte
+        if (this%ite < this%its) write(*,*) 'image: ',this_image(),'  d_ims: ',d_ims,'  d_ime: ',d_ime,'  d_jms: ',d_jms,'  d_jme: ',d_jme
+        if (this%ite < this%its) write(*,*) 'image: ',this_image(),'  LLlat: ',LLlat,'  LLlon: ',LLlon,'  URlat: ',URlat,'  URlon: ',URlon
+        if (this%ite < this%its) write(*,*) 'image: ',this_image(),'  min_loc: ',minloc(LL_d),'  max_loc: ',minloc(UR_d)
+        if (this%ite < this%its) call io_write('LL_d.nc',"dist",LL_d)
+
+        if (this%jte < this%jts) write(*,*) 'image: ',this_image(),'  its: ',this%its,'  ite: ',this%ite,'  jts: ',this%jts,'  jte: ',this%jte
+        if (this%jte < this%jts) write(*,*) 'image: ',this_image(),'  d_ims: ',d_ims,'  d_ime: ',d_ime,'  d_jms: ',d_jms,'  d_jme: ',d_jme
+        if (this%jte < this%jts) write(*,*) 'image: ',this_image(),'  LLlat: ',LLlat,'  LLlon: ',LLlon,'  URlat: ',URlat,'  URlon: ',URlon
+        if (this%jte < this%jts) write(*,*) 'image: ',this_image(),'  min_loc: ',minloc(LL_d),'  max_loc: ',minloc(UR_d)
+        if (this%jte < this%jts) call io_write('LL_d.nc',"dist",LL_d)
+
+    end subroutine set_boundary_image
+
 
     !>------------------------------------------------------------
     !! Setup the main geo structure in the boundary structure
@@ -318,9 +414,9 @@ contains
     !! Variable is then added to a master variable dictionary
     !!
     !!------------------------------------------------------------
-    subroutine add_var_to_dict(var_dict, file_name, var_name, ndims, timestep, dims)
+    subroutine add_var_to_dict(this, file_name, var_name, ndims, timestep, dims)
         implicit none
-        type(var_dict_t), intent(inout) :: var_dict
+        type(boundary_t), intent(inout) :: this
         character(len=*), intent(in)    :: file_name
         character(len=*), intent(in)    :: var_name
         integer,          intent(in)    :: ndims
@@ -330,17 +426,18 @@ contains
         real, allocatable :: temp_2d_data(:,:)
         real, allocatable :: temp_3d_data(:,:,:)
         type(variable_t)  :: new_variable
-        integer           :: nx,ny,nz
 
+        !if (any(dims <= 0 )) error stop 'image: ',this_image(),'     dims(0): ',dims(0),'dims(1): ',dims(1),'dims(2): ',dims(2),
 
         if (ndims==2) then
             call io_read(file_name, var_name, temp_2d_data, timestep)
             ! print*, "    file_name, var_name ", file_name, trim(var_name)
 
-            call new_variable%initialize( shape( temp_2d_data ) )
-            new_variable%data_2d = temp_2d_data
+            call new_variable%initialize( [dims(1),dims(3)] )
+            
+            new_variable%data_2d = temp_2d_data(this%its:this%ite,this%jts:this%jte)
 
-            call var_dict%add_var(var_name, new_variable)
+            call this%variables%add_var(var_name, new_variable)
             ! print*, "    added boundary variable ", trim(var_name), " to dict with shape ", shape( temp_2d_data )
             ! do not deallocate data arrays because they are pointed to inside the var_dict now
             ! deallocate(new_variable%data_2d)
@@ -348,15 +445,12 @@ contains
         elseif (ndims==3) then
             call io_read(file_name, var_name, temp_3d_data, timestep)
 
-            nx = size(temp_3d_data, 1)
-            ny = size(temp_3d_data, 2)
-            nz = size(temp_3d_data, 3)
+            call new_variable%initialize( dims )
 
-
-            call new_variable%initialize( [nx,nz,ny] )
-            new_variable%data_3d = reshape(temp_3d_data, shape=[nx,nz,ny], order=[1,3,2])
-
-            call var_dict%add_var(var_name, new_variable)
+            new_variable%data_3d = reshape(temp_3d_data(this%its:this%ite,this%jts:this%jte,:), &
+                                    shape=[dims(1),dims(2),dims(3)], order=[1,3,2])
+                        
+            call this%variables%add_var(var_name, new_variable)
 
             ! do not deallocate data arrays because they are pointed to inside the var_dict now
             ! deallocate(new_variable%data_3d)
@@ -366,7 +460,7 @@ contains
             call new_variable%initialize( dims )
             new_variable%computed = .True.
 
-            call var_dict%add_var(var_name, new_variable)
+            call this%variables%add_var(var_name, new_variable)
         endif
 
     end subroutine
@@ -403,13 +497,16 @@ contains
         type(variable_t)  :: var
         type(variable_t)  :: pvar, zvar, tvar
         character(len=kMAX_NAME_LENGTH) :: name
-        integer :: nx, ny, nz, err
+        integer :: nx, ny, nz, err, ncfile_id, varid
 
 
         ! if (this_image()==1) then
             call update_forcing_step(this, this%file_list, options%parameters%time_var)
 
             call read_bc_time(this%current_time, this%file_list(this%curfile), options%parameters%time_var, this%curstep)
+
+            !err = nf90_open(this%file_list(this%curfile), IOR(nf90_nowrite,NF90_NETCDF4), ncfile_id, comm = MPI_COMM_WORLD, info = MPI_INFO_NULL)
+            err = nf90_open(this%file_list(this%curfile), nf90_nowrite, ncfile_id)
 
             associate(list => this%variables)
 
@@ -419,27 +516,43 @@ contains
                 ! get the next variable in the structure
                 var = list%next(name)
 
+                
                 ! note that pressure (and maybe z eventually?) can be computed from the other so they may not be read
                 if (var%computed) then
                     cycle
-                elseif (var%three_d) then
+                else
+                    call check_ncdf( nf90_inq_varid(ncfile_id, name, varid), " Getting var ID for "//trim(name))
+                
+                    if (var%three_d) then
                     ! because the data arrays are pointers, this should update the data stored in this%variables
-                    call io_read(this%file_list(this%curfile), name, data3d, this%curstep)
+                    ! call io_read(this%file_list(this%curfile), name, data3d, this%curstep)
 
-                    nx = size(data3d, 1)
-                    ny = size(data3d, 2)
-                    nz = size(data3d, 3)
+                        nx = size(var%data_3d, 1)
+                        ny = size(var%data_3d, 3)
+                        nz = size(var%data_3d, 2)
+                        if (allocated(data3d)) deallocate(data3d)
+                        allocate(data3d(nx,ny,nz))
+
+
+                        call check_ncdf( nf90_get_var(ncfile_id, varid, data3d, start=(/ this%its,this%jts,this%kts /), &
+                                            count=(/ (this%ite-this%its+1),(this%jte-this%jts+1),(this%kte-this%kts+1) /)), " Getting 3D var "//trim(name))
 
                     ! need to vinterp this dataset to the original vertical levels (if necessary)
 
-                    var%data_3d(:,:,:) = reshape(data3d, shape=[nx,nz,ny], order=[1,3,2])
+                        var%data_3d(:,:,:) = reshape(data3d, shape=[nx,nz,ny], order=[1,3,2])
 
-                else if (var%two_d) then
-                    call io_read(this%file_list(this%curfile), name, data2d, this%curstep)
-                    var%data_2d(:,:) = data2d(:,:)
+                    else if (var%two_d) then
+                !    call io_read(this%file_list(this%curfile), name, data2d, this%curstep)
+                        call check_ncdf( nf90_get_var(ncfile_id, varid, var%data_2d, start=(/ this%its,this%jts /), &
+                                            count=(/ (this%ite-this%its+1),(this%jte-this%jts+1) /)), " Getting 2D "//trim(name))
+                        !var%data_2d(:,:) = data2d(:,:)
+                    endif
                 endif
 
             end do
+
+            ! close file
+            call check_ncdf(nf90_close(ncfile_id), "Closing file "//trim(this%file_list(this%curfile)))
 
             ! after reading all variables that can be read, not compute any remaining variables (e.g. z from p+ps)
             call update_computed_vars(this, options, update=.True.)

@@ -20,12 +20,22 @@ contains
 
         integer :: err
 
-        this%dimensions = grid%dimensions
-        this%dim_len    = grid%get_dims()
 
         this%two_d   = grid%is2d
         this%three_d = grid%is3d
 
+        this%dimensions = grid%dimensions
+        this%dim_len    = grid%get_dims()
+        if (this%two_d) then
+            allocate(this%global_dim_len(2))
+            this%global_dim_len(1) = grid%ide
+            this%global_dim_len(2) = grid%jde
+        else
+            allocate(this%global_dim_len(3))
+            this%global_dim_len(1) = grid%ide
+            this%global_dim_len(2) = grid%kde
+            this%global_dim_len(3) = grid%jde
+        endif
         this%forcing_var = ""
         if (present(forcing_var)) this%forcing_var = forcing_var
 

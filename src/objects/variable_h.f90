@@ -24,6 +24,8 @@ module variable_interface
 
         integer :: n_dimensions
         integer,                        allocatable :: dim_len(:)
+        integer,                        allocatable :: global_dim_len(:)
+
         character(len=kMAX_DIM_LENGTH), allocatable :: dimensions(:)
 
         ! note these are used for netcdf output

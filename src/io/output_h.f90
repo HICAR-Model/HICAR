@@ -12,8 +12,8 @@
 !!
 !!----------------------------------------------------------
 module output_interface
+  use mpi
   use netcdf
-
   use icar_constants
   use variable_interface, only : variable_t
   use domain_interface,   only : domain_t
@@ -51,9 +51,18 @@ module output_interface
 
       ! the netcdf ID for an open file
       integer :: ncfile_id
+      integer :: start_3d(3)
+      integer :: cnt_3d(3)
 
       ! number of dimensions in the file
       integer :: n_dims = 0
+      integer :: i_s
+      integer :: i_e
+      integer :: k_s
+      integer :: k_e
+      integer :: j_s
+      integer :: j_e
+
       ! list of netcdf dimension IDs
       integer :: dim_ids(kMAX_DIMENSIONS)
       ! name of the dimensions in the file
@@ -76,9 +85,11 @@ module output_interface
       !! Initialize the object (e.g. allocate the variables array)
       !!
       !!----------------------------------------------------------
-      module subroutine init(this)
+      module subroutine init(this, domain)
           implicit none
           class(output_t),   intent(inout)  :: this
+          type(domain_t),    intent(in)     :: domain
+
       end subroutine
 
       !>----------------------------------------------------------

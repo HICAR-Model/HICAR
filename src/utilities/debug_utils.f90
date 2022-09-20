@@ -1,4 +1,5 @@
 module debug_module
+    use netcdf
     use domain_interface, only  : domain_t
     use string,           only  : str
 
@@ -154,6 +155,34 @@ contains
         endif
 
     end subroutine fix_var
+
+    !>------------------------------------------------------------
+    !! Simple error handling for common netcdf file errors
+    !!
+    !! If status does not equal nf90_noerr, then print an error message and STOP
+    !! the entire program.
+    !!
+    !! @param   status  integer return code from nc_* routines
+    !! @param   extra   OPTIONAL string with extra context to print in case of an error
+    !!
+    !!------------------------------------------------------------
+    subroutine check_ncdf(status,extra)
+        implicit none
+        integer, intent ( in) :: status
+        character(len=*), optional, intent(in) :: extra
+
+        ! check for errors
+        if(status /= nf90_noerr) then
+            ! print a useful message
+            print *, trim(nf90_strerror(status))
+            if(present(extra)) then
+                ! print any optionally provided context
+                write(*,*) trim(extra)
+            endif
+            ! STOP the program execution
+            stop "Stopped"
+        end if
+    end subroutine check_ncdf
 
 
 end module debug_module
