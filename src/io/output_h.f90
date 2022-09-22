@@ -51,17 +51,9 @@ module output_interface
 
       ! the netcdf ID for an open file
       integer :: ncfile_id
-      integer :: start_3d(3)
-      integer :: cnt_3d(3)
 
       ! number of dimensions in the file
       integer :: n_dims = 0
-      integer :: i_s
-      integer :: i_e
-      integer :: k_s
-      integer :: k_e
-      integer :: j_s
-      integer :: j_e
 
       ! list of netcdf dimension IDs
       integer :: dim_ids(kMAX_DIMENSIONS)
@@ -85,10 +77,9 @@ module output_interface
       !! Initialize the object (e.g. allocate the variables array)
       !!
       !!----------------------------------------------------------
-      module subroutine init(this, domain)
+      module subroutine init(this)
           implicit none
           class(output_t),   intent(inout)  :: this
-          type(domain_t),    intent(in)     :: domain
 
       end subroutine
 
