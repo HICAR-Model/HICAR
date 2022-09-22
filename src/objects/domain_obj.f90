@@ -2379,19 +2379,19 @@ contains
         call this%info%add_attribute("kds",str(this%grid%kds))
         call this%info%add_attribute("kde",str(this%grid%kde))
 
-        call this%info%add_attribute("ims",str(this%grid%ims))
-        call this%info%add_attribute("ime",str(this%grid%ime))
-        call this%info%add_attribute("jms",str(this%grid%jms))
-        call this%info%add_attribute("jme",str(this%grid%jme))
-        call this%info%add_attribute("kms",str(this%grid%kms))
-        call this%info%add_attribute("kme",str(this%grid%kme))
+        !call this%info%add_attribute("ims",str(this%grid%ims))
+        !call this%info%add_attribute("ime",str(this%grid%ime))
+        !call this%info%add_attribute("jms",str(this%grid%jms))
+        !call this%info%add_attribute("jme",str(this%grid%jme))
+        !call this%info%add_attribute("kms",str(this%grid%kms))
+        !call this%info%add_attribute("kme",str(this%grid%kme))
 
-        call this%info%add_attribute("its",str(this%grid%its))
-        call this%info%add_attribute("ite",str(this%grid%ite))
-        call this%info%add_attribute("jts",str(this%grid%jts))
-        call this%info%add_attribute("jte",str(this%grid%jte))
-        call this%info%add_attribute("kts",str(this%grid%kts))
-        call this%info%add_attribute("kte",str(this%grid%kte))
+        !call this%info%add_attribute("its",str(this%grid%its))
+        !call this%info%add_attribute("ite",str(this%grid%ite))
+        !call this%info%add_attribute("jts",str(this%grid%jts))
+        !call this%info%add_attribute("jte",str(this%grid%jte))
+        !call this%info%add_attribute("kts",str(this%grid%kts))
+        !call this%info%add_attribute("kte",str(this%grid%kte))
 
     end subroutine setup_meta_data
 

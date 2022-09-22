@@ -65,11 +65,27 @@ contains
 
         meta_data%two_d     = input_var%meta_data%two_d
         meta_data%three_d   = input_var%meta_data%three_d
-        if (allocated(input_var%meta_data%dim_len)) allocate(meta_data%dim_len,source=input_var%meta_data%dim_len)
-        if (allocated(input_var%meta_data%global_dim_len)) allocate(meta_data%global_dim_len,source=input_var%meta_data%global_dim_len)
-        
-        if (meta_data%two_d) meta_data%data_2d => input_var%meta_data%data_2d
-        if (meta_data%three_d) meta_data%data_3d => input_var%meta_data%data_3d
+        meta_data%grid      = input_var%meta_data%grid
+        if(meta_data%two_d) then
+            if (allocated(input_var%meta_data%dim_len)) allocate(meta_data%dim_len,source=input_var%meta_data%dim_len)
+            if (allocated(input_var%meta_data%global_dim_len)) allocate(meta_data%global_dim_len,source=input_var%meta_data%global_dim_len)
+
+            meta_data%data_2d => input_var%meta_data%data_2d
+        else
+            if (allocated(input_var%meta_data%dim_len)) then
+                allocate(meta_data%dim_len(3))
+                meta_data%dim_len(1) = input_var%meta_data%dim_len(1)
+                meta_data%dim_len(2) = input_var%meta_data%dim_len(3)
+                meta_data%dim_len(3) = input_var%meta_data%dim_len(2)
+            endif
+            if (allocated(input_var%meta_data%global_dim_len)) then
+                allocate(meta_data%global_dim_len(3))
+                meta_data%global_dim_len(1) = input_var%meta_data%global_dim_len(1)
+                meta_data%global_dim_len(2) = input_var%meta_data%global_dim_len(3)
+                meta_data%global_dim_len(3) = input_var%meta_data%global_dim_len(2)
+            endif
+            meta_data%data_3d => input_var%meta_data%data_3d
+        endif
 
     end function get_metadata_exch
 
@@ -96,11 +112,28 @@ contains
 
         meta_data%two_d     = input_var%two_d
         meta_data%three_d   = input_var%three_d
-        if (allocated(input_var%dim_len)) allocate(meta_data%dim_len,source=input_var%dim_len)
-        if (allocated(input_var%global_dim_len)) allocate(meta_data%global_dim_len,source=input_var%global_dim_len)
-        
-        if (meta_data%two_d) meta_data%data_2d => input_var%data_2d
-        if (meta_data%three_d) meta_data%data_3d => input_var%data_3d
+        meta_data%grid      = input_var%grid
+
+        if(meta_data%two_d) then
+            if (allocated(input_var%dim_len)) allocate(meta_data%dim_len,source=input_var%dim_len)
+            if (allocated(input_var%global_dim_len)) allocate(meta_data%global_dim_len,source=input_var%global_dim_len)
+
+            meta_data%data_2d => input_var%data_2d
+        else
+            if (allocated(input_var%dim_len)) then
+                allocate(meta_data%dim_len(3))
+                meta_data%dim_len(1) = input_var%dim_len(1)
+                meta_data%dim_len(2) = input_var%dim_len(3)
+                meta_data%dim_len(3) = input_var%dim_len(2)
+            endif
+            if (allocated(input_var%global_dim_len)) then
+                allocate(meta_data%global_dim_len(3))
+                meta_data%global_dim_len(1) = input_var%global_dim_len(1)
+                meta_data%global_dim_len(2) = input_var%global_dim_len(3)
+                meta_data%global_dim_len(3) = input_var%global_dim_len(2)
+            endif
+            meta_data%data_3d => input_var%data_3d
+        endif
 
     end function get_metadata_var
 

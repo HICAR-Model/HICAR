@@ -26,6 +26,7 @@ contains
 
         this%dimensions = grid%dimensions
         this%dim_len    = grid%get_dims()
+        this%grid       = grid
         if (this%two_d) then
             allocate(this%global_dim_len(2))
             this%global_dim_len(1) = grid%ide

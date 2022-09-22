@@ -505,8 +505,8 @@ contains
 
             call read_bc_time(this%current_time, this%file_list(this%curfile), options%parameters%time_var, this%curstep)
 
-            !err = nf90_open(this%file_list(this%curfile), IOR(nf90_nowrite,NF90_NETCDF4), ncfile_id, comm = MPI_COMM_WORLD, info = MPI_INFO_NULL)
-            err = nf90_open(this%file_list(this%curfile), nf90_nowrite, ncfile_id)
+            err = nf90_open(this%file_list(this%curfile), IOR(nf90_nowrite,NF90_NETCDF4), ncfile_id, comm = MPI_COMM_WORLD, info = MPI_INFO_NULL)
+            !err = nf90_open(this%file_list(this%curfile), nf90_nowrite, ncfile_id)
 
             associate(list => this%variables)
 
@@ -522,7 +522,8 @@ contains
                     cycle
                 else
                     call check_ncdf( nf90_inq_varid(ncfile_id, name, varid), " Getting var ID for "//trim(name))
-                
+                    call check_ncdf( nf90_var_par_access(ncfile_id, varid, nf90_collective))
+
                     if (var%three_d) then
                     ! because the data arrays are pointers, this should update the data stored in this%variables
                     ! call io_read(this%file_list(this%curfile), name, data3d, this%curstep)

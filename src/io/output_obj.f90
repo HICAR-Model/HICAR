@@ -10,7 +10,7 @@ contains
         type(domain_t),   intent(in)     :: domain
         integer :: i
 
-        if (.not.this%is_initialized) call this%init(domain)
+        if (.not.this%is_initialized) call this%init()
 
         do i=1,domain%info%n_attrs
             call this%add_attribute(domain%info%attributes(i)%name, domain%info%attributes(i)%value)
@@ -23,7 +23,7 @@ contains
         class(output_t),   intent(inout) :: this
         type(variable_t),  intent(in)     :: variable
 
-        ! if (.not.this%is_initialized) call this%init()
+        if (.not.this%is_initialized) call this%init()
 
         if (associated(variable%data_2d).or.associated(variable%data_3d)) then
 
@@ -42,9 +42,9 @@ contains
         character(len=*), intent(in)    :: filename
         integer,          intent(in)    :: current_step
         type(Time_type),  intent(in)    :: time
-        integer :: err
+        integer :: err, oldmode
 
-        ! if (.not.this%is_initialized) call this%init()
+        if (.not.this%is_initialized) call this%init()
 
         ! open file
         this%filename = filename
@@ -56,6 +56,8 @@ contains
             ! in case we need to add a new variable when setting up variables
             call check_ncdf(nf90_redef(this%ncfile_id), "Setting redefine mode for: "//trim(filename))
         endif
+        
+        call check_ncdf( nf90_set_fill(this%ncfile_id, nf90_nofill, oldmode), "Setting fill mode to none")
 
         ! define variables or find variable IDs (and dimensions)
         call setup_variables(this, time)
@@ -379,6 +381,7 @@ contains
             call check_ncdf( nf90_put_att(this%ncfile_id, var%var_id,"UTCoffset","0"))
 
         endif
+        call check_ncdf( nf90_var_par_access(this%ncfile_id, var%var_id, nf90_collective))
         end associate
 
     end subroutine setup_time_variable
@@ -389,54 +392,65 @@ contains
         class(output_t), intent(in) :: this
         integer,         intent(in) :: current_step
         type(Time_type), intent(in) :: time
-        integer :: i
+        integer :: i, i_s, i_e, k_s, k_e, j_s, j_e
 
-        integer :: start_three_D_t(4) = [1,1,1,1]
-        integer :: start_two_D_t(3)  = [1,1,1]
-        
-        start_three_D_t(1) = this%start_3d(1); start_three_D_t(2) = this%start_3d(3); start_three_D_t(3) = this%start_3d(2); 
-        start_two_D_t(1) = this%start_3d(1); start_two_D_t(2) = this%start_3d(3);
+        integer :: start_three_D_t(4)
+        integer :: start_two_D_t(3)
+        integer :: cnt_3d(3)
+        integer :: cnt_2d(2)
 
-        start_three_D_t(4) = current_step
-        start_two_D_t(3)   = current_step
 
         do i=1,this%n_variables
             associate(var => this%variables(i))
-                if (var%three_d) then
-                    write(*,*) 'variable: ',var%name
-                    write(*,*) 'cnt_3d: ',this%cnt_3d
-                    write(*,*) 'start_3d: ',this%start_3d
+                i_s = var%grid%its
+                i_e = var%grid%ite
+                j_s = var%grid%jts
+                j_e = var%grid%jte
+        
+                if (var%grid%ims == var%grid%ids) i_s = var%grid%ids
+                if (var%grid%ime == var%grid%ide) i_e = var%grid%ide
+                if (var%grid%jms == var%grid%jds) j_s = var%grid%jds
+                if (var%grid%jme == var%grid%jde) j_e = var%grid%jde
 
-                    write(*,*) '  this%i_s: ',this%i_s,'  this%i_e: ',this%i_e,'  this%k_s: ',this%k_s,'  this%k_e: ',this%k_e,'  this%j_s: ',this%j_s,'  this%j_e: ',this%j_e
-                    write(*,*) '  lbound-1: ',lbound(var%data_3d,1),'  ubound-1: ',ubound(var%data_3d,1),'  lbound-3: ',lbound(var%data_3d,3),'  ubound-3: ',ubound(var%data_3d,3)
+
+                if (var%three_d) then
+                
+                    k_s = var%grid%kts
+                    k_e = var%grid%kte
+                    if (var%grid%kms == var%grid%kds) k_s = var%grid%kds
+                    if (var%grid%kme == var%grid%kde) k_e = var%grid%kde
+                    start_three_D_t = (/ i_s, j_s, k_s, current_step /)
+                    cnt_3d = (/ (i_e-i_s+1), (j_e-j_s+1), (k_e-k_s+1)  /)
+
 
                     if (var%unlimited_dim) then
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            reshape(var%data_3d(this%i_s:this%i_e,this%k_s:this%k_e,this%j_s:this%j_e),  &
-                                        shape=(/ this%cnt_3d(1), this%cnt_3d(3), this%cnt_3d(2) /), order=[1,3,2]), &
-                                        start_three_D_t, count=(/ this%cnt_3d(1), this%cnt_3d(3), this%cnt_3d(2), 1 /)), "saving:"//trim(var%name) )
+                            reshape(var%data_3d(i_s:i_e,k_s:k_e,j_s:j_e), shape=cnt_3d, order=[1,3,2]), &
+                                        start_three_D_t, count=(/cnt_3d(1), cnt_3d(2), cnt_3d(3), 1/)), "saving:"//trim(var%name) )
                     elseif (this%creating) then
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            reshape(var%data_3d(this%i_s:this%i_e,this%k_s:this%k_e,this%j_s:this%j_e),  &
-                            shape=(/ this%cnt_3d(1), this%cnt_3d(3), this%cnt_3d(2) /), order=[1,3,2]), &
-                            start=(/ this%start_3d(1), this%start_3d(3), this%start_3d(2) /),&
-                            count=(/ this%cnt_3d(1), this%cnt_3d(3), this%cnt_3d(2) /) ), "saving:"//trim(var%name) )
+                            reshape(var%data_3d(i_s:i_e,k_s:k_e,j_s:j_e),  &
+                            shape=cnt_3d, order=[1,3,2]), start=(/ start_three_D_t(1), start_three_D_t(2), start_three_D_t(3) /),&
+                            count=cnt_3d ), "saving:"//trim(var%name) )
                     endif
 
                 elseif (var%two_d) then
+                    start_two_D_t = (/ i_s, j_s, current_step /)
+                    cnt_2d = (/ (i_e-i_s+1), (j_e-j_s+1) /)
+
                     if (var%unlimited_dim) then
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(this%i_s:this%i_e,this%j_s:this%j_e), &
-                                start_two_D_t,count=(/ this%cnt_3d(1), this%cnt_3d(3), 1/)), "saving:"//trim(var%name) )
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(i_s:i_e,j_s:j_e), &
+                                start_two_D_t,count=(/ cnt_2d(1), cnt_2d(2), 1/)), "saving:"//trim(var%name) )
                     elseif (this%creating) then
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(this%i_s:this%i_e,this%j_s:this%j_e), &
-                                    start=(/ this%start_3d(1), this%start_3d(3) /), &
-                                    count=(/ this%cnt_3d(1), this%cnt_3d(3) /)), "saving:"//trim(var%name) )
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(i_s:i_e,j_s:j_e), &
+                                    start=(/ start_two_D_t(1), start_two_D_t(2) /), &
+                                    count=cnt_2d), "saving:"//trim(var%name) )
                     endif
                 endif
             end associate
         end do
 
-        call check_ncdf( nf90_put_var(this%ncfile_id, this%time%var_id, dble(time%mjd()), [current_step] ),   &
+        call check_ncdf( nf90_put_var(this%ncfile_id, this%time%var_id, dble(time%mjd()), [current_step]),   &
                     "saving:"//trim(this%time%name) )
 
 
@@ -447,6 +461,7 @@ contains
         class(output_t),    intent(inout) :: this
         type(variable_t),   intent(inout) :: var
         integer :: i, err
+        
 
         if (allocated(var%dim_ids)) deallocate(var%dim_ids)
 
@@ -459,13 +474,11 @@ contains
 
             ! probably the dimension doesn't exist in the file, so we will create it.
             if (err/=NF90_NOERR) then
-
                 ! assume that the last dimension should be the unlimited dimension (generally a good idea...)
                 if (var%unlimited_dim .and. (i==size(var%dim_ids))) then
                     call check_ncdf( nf90_def_dim(this%ncfile_id, trim(var%dimensions(i)), NF90_UNLIMITED, &
                                 var%dim_ids(i) ), "def_dim"//var%dimensions(i) )
                 else
-                    if (this_image()==1) write(*,*) 'global dims: ',var%global_dim_len
                     call check_ncdf( nf90_def_dim(this%ncfile_id, var%dimensions(i), var%global_dim_len(i),       &
                                 var%dim_ids(i) ), "def_dim"//var%dimensions(i) )
                 endif
@@ -478,13 +491,29 @@ contains
         implicit none
         class(output_t),   intent(inout) :: this
         type(variable_t),  intent(inout) :: var
-        integer :: i, err
+        integer :: i, n, err
+        integer, allocatable :: chunks(:)
 
         err = nf90_inq_varid(this%ncfile_id, var%name, var%var_id)
 
         ! if the variable was not found in the netcdf file then we will define it.
         if (err /= NF90_NOERR) then
-            call check_ncdf( nf90_def_var(this%ncfile_id, var%name, NF90_REAL, var%dim_ids, var%var_id), &
+                    
+            allocate(chunks(var%n_dimensions))
+            chunks(1) = 20; chunks(2) = 20;
+            if (var%three_d) chunks(3) = var%global_dim_len(3)
+            if (var%n_dimensions > size(var%dim_len)) chunks(var%n_dimensions) = 1
+
+            !do n = 1, var%n_dimensions
+            !    if (n >n == size(var%dim_len)) then
+            !        chunks(n) = var%dim_len(n)
+            !    elseif (n > size(var%dim_len)) then
+            !        chunks(n) = 1
+            !    endif
+            !enddo
+            
+            if (this_image()==1) write(*,*) 'chunks: ',chunks
+            call check_ncdf( nf90_def_var(this%ncfile_id, var%name, NF90_REAL, var%dim_ids, var%var_id, chunksizes=chunks), &
                         "Defining variable:"//trim(var%name) )
 
             ! setup attributes
@@ -502,32 +531,14 @@ contains
 
     end subroutine setup_variable
 
-    module subroutine init(this,domain)
+    module subroutine init(this)
         implicit none
         class(output_t),   intent(inout)  :: this
-        type(domain_t),    intent(in)     :: domain
-        integer :: i_s, i_e, k_s, k_e, j_s, j_e
+        
         allocate(this%variables(kINITIAL_VAR_SIZE))
         this%n_variables = 0
         this%n_dims      = 0
         this%is_initialized = .True.
-        
-        this%i_s = domain%its
-        this%i_e = domain%ite
-        this%k_s = domain%kts
-        this%k_e = domain%kte
-        this%j_s = domain%jts
-        this%j_e = domain%jte
-        
-        if (domain%ims == domain%ids) this%i_s = domain%ids
-        if (domain%ime == domain%ide) this%i_e = domain%ide
-        if (domain%kms == domain%kds) this%k_s = domain%kds
-        if (domain%kme == domain%kde) this%k_e = domain%kde
-        if (domain%jms == domain%jds) this%j_s = domain%jds
-        if (domain%jme == domain%jde) this%j_e = domain%jde
-
-        this%start_3d = (/ this%i_s, this%k_s, this%j_s /)
-        this%cnt_3d = (/ (this%i_e-this%i_s+1), (this%k_e-this%k_s+1), (this%j_e-this%j_s+1) /)
 
 
     end subroutine
