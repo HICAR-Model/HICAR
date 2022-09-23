@@ -232,8 +232,8 @@ ifeq ($(MODE), debug)
 		LINK=
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-O3 -h noomp -c -g
-		LINK=-h noomp
+		COMP=-h omp -O2 -c -g
+		LINK=-fopenmp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
 	endif

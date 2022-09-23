@@ -45,7 +45,7 @@ contains
         integer :: err, oldmode
 
         if (.not.this%is_initialized) call this%init()
-
+        
         ! open file
         this%filename = filename
         err = nf90_open(filename, IOR(NF90_WRITE,NF90_NETCDF4), this%ncfile_id, comm = MPI_COMM_WORLD, info = MPI_INFO_NULL)
@@ -451,7 +451,7 @@ contains
         end do
 
         call check_ncdf( nf90_put_var(this%ncfile_id, this%time%var_id, dble(time%mjd()), [current_step]),   &
-                    "saving:"//trim(this%time%name) )
+                   "saving:"//trim(this%time%name) )
 
 
     end subroutine save_data
@@ -500,19 +500,11 @@ contains
         if (err /= NF90_NOERR) then
                     
             allocate(chunks(var%n_dimensions))
-            chunks(1) = 20; chunks(2) = 20;
+            chunks(1) = var%global_dim_len(1); chunks(2) = var%global_dim_len(2);
             if (var%three_d) chunks(3) = var%global_dim_len(3)
             if (var%n_dimensions > size(var%dim_len)) chunks(var%n_dimensions) = 1
 
-            !do n = 1, var%n_dimensions
-            !    if (n >n == size(var%dim_len)) then
-            !        chunks(n) = var%dim_len(n)
-            !    elseif (n > size(var%dim_len)) then
-            !        chunks(n) = 1
-            !    endif
-            !enddo
             
-            if (this_image()==1) write(*,*) 'chunks: ',chunks
             call check_ncdf( nf90_def_var(this%ncfile_id, var%name, NF90_REAL, var%dim_ids, var%var_id, chunksizes=chunks), &
                         "Defining variable:"//trim(var%name) )
 

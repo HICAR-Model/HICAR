@@ -17,7 +17,7 @@
 !!
 !!-----------------------------------------
 program icar
-
+    use mpi
     use iso_fortran_env,    only : output_unit
     use options_interface,  only : options_t
     use domain_interface,   only : domain_t
@@ -51,9 +51,17 @@ program icar
 
     character(len=1024) :: file_name, restart_file_name
     character(len=49)   :: file_date_format = '(I4,"-",I0.2,"-",I0.2,"_",I0.2,"-",I0.2,"-",I0.2)'
-    integer :: i, restart_counter
+    integer :: i, restart_counter, ierr
     integer :: output_vars(18)
     double precision    :: future_dt_seconds
+    logical :: init_flag
+
+    init_flag = .False.
+    call MPI_initialized(init_flag, ierr)
+    if (.not.(init_flag)) then
+        call MPI_INIT(ierr)
+        init_flag = .True.
+    endif
 
     call small_time_delta%set(1)
 
@@ -164,6 +172,7 @@ program icar
         if (this_image()==1) write(*,*) "   End  time = ", trim(options%parameters%end_time%as_string())
         if (this_image()==1) write(*,*) "  Next Input = ", trim(boundary%current_time%as_string())
         if (this_image()==1) write(*,*) "  Next Output= ", trim(next_output%as_string())
+        if (this_image()==1) write(*,*) "  output         : ", trim(output_timer%as_string())
 
         ! this is the meat of the model physics, run all the physics for the current time step looping over internal timesteps
         if (.not.(options%wind%wind_only)) then
@@ -214,8 +223,6 @@ program icar
 
     end do
     
-    if (options%physics%windtype==kITERATIVE_WINDS) call finalize_iter_winds() 
-    
     !
     !-----------------------------------------
     call total_timer%stop()
@@ -238,6 +245,9 @@ program icar
         write(*,*) "halo-exchange  : ", trim(exch_timer%as_string())
         write(*,*) "winds          : ", trim(wind_timer%as_string())
     endif
+    
+    !if (init_flag) call MPI_FINALIZE(ierr)
+    if (options%physics%windtype==kITERATIVE_WINDS) call finalize_iter_winds() 
 
 contains
 
