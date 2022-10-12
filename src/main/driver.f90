@@ -156,6 +156,7 @@ program icar
                 call domain%interpolate_forcing(boundary, update=.True.)
                 call input_timer%stop()
                 call domain%diagnostic_update(options)
+                sync images ( DOM_IMG_INDX )
                 call wind_timer%start()
                 call update_winds(domain, options)
                 call wind_timer%stop()
@@ -185,6 +186,7 @@ program icar
             if (this_image()==1) write(*,*) "  Next Output= ", trim(next_output%as_string())
             if (this_image()==1) write(*,*) "  output         : ", trim(output_timer%as_string())
             if (this_image()==1) write(*,*) "  input          : ", trim(input_timer%as_string())
+            if (this_image()==1) write(*,*) "  wind           : ", trim(wind_timer%as_string())
 
             ! this is the meat of the model physics, run all the physics for the current time step looping over internal timesteps
             if (.not.(options%wind%wind_only)) then
