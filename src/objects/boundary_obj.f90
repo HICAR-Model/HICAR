@@ -14,6 +14,7 @@ submodule(boundary_interface) boundary_implementation
     use mod_atm_utilities,      only : rh_to_mr, compute_3d_p, compute_3d_z, exner_function
     use geo,                    only : standardize_coordinates
     use vertical_interpolation, only : vLUT, vinterp
+    use timer_interface,    only : timer_t
     use debug_module,           only : check_ncdf
     implicit none
 contains
@@ -35,7 +36,6 @@ contains
         character(len=kMAX_NAME_LENGTH), allocatable :: vars_to_read(:)
         integer,                         allocatable :: var_dimensions(:)
 
-        this%file_list = options%parameters%boundary_files
 
         ! the parameters option type can't contain allocatable arrays because it is a coarray
         ! so we need to allocate the vars_to_read and var_dimensions outside of the options type
@@ -47,7 +47,7 @@ contains
         ! also need to explicitly save lat and lon data
         ! if (this_image() == 1) then
             call this%init_local(options,                           &
-                                 this%file_list,                    &
+                                 options%parameters%boundary_files, &
                                  vars_to_read, var_dimensions,      &
                                  options%parameters%start_time,     &
                                  options%parameters%latvar,         &
@@ -77,16 +77,18 @@ contains
         character(len=kMAX_NAME_LENGTH), allocatable :: vars_to_read(:)
         integer,                         allocatable :: var_dimensions(:)
         character(len=kMAX_NAME_LENGTH)  :: lat_ext
+        character(len=kMAX_NAME_LENGTH)  :: start_file(1)
+
         character(len=kMAX_NAME_LENGTH)  :: lon_ext
         character(len=kMAX_NAME_LENGTH)  :: zvar_ext
         ! character(len=kMAX_NAME_LENGTH), allocatable :: ext_list(:)
         ! integer, allocatable :: dim_list(:)
 
-        allocate(this%file_list(1))
+        ! allocate(this%file_list(1))
         ! allocate(ext_list(1))
         ! allocate(dim_list(1))
 
-        this%file_list(1) = options%parameters%external_files
+        start_file(1) = options%parameters%external_files
 
         call setup_variable_lists(options%parameters%ext_var_list, options%parameters%ext_dim_list, vars_to_read, var_dimensions)  ! this simply copies o%p%ext_vars to vars_to_read and same for dims (+some checks)
 
@@ -94,7 +96,7 @@ contains
         if ( trim(options%parameters%z_ext) /= "") zvar_ext = options%parameters%z_ext
 
         call this%init_local2(options,                          &
-                             this%file_list,                    &
+                             start_file,                    &
                              vars_to_read, var_dimensions,      &
                              start_time = options%parameters%start_time,     &
                              lat_ext = options%parameters%lat_ext,        &  !lat_ext,
@@ -136,17 +138,17 @@ contains
         if (present(time_ext) .and. (trim(time_ext)/="") ) then
             ! figure out while file and timestep contains the requested start_time
             ! if (this_image()==1) print * ," looking for time_ext"
-            call set_curfile_curstep(this, start_time, file_list, time_ext)
-            call read_bc_time(this%current_time, file_list(this%curfile), time_ext, this%curstep)
+            call set_firstfile_firststep(this, start_time, file_list, time_ext)
+            ! call read_bc_time(this%current_time, file_list(this%curfile), time_ext, this%curstep)
         else
-            this%curstep=1 !?
-            this%curfile=1 !?
+            this%firststep=1 !?
+            this%firstfile=file_list(1) !?
         endif
 
 
         !  read in latitude and longitude coordinate data
-        call io_read(file_list(this%curfile), lat_ext, this%lat, this%curstep)
-        call io_read(file_list(this%curfile), lon_ext, this%lon, this%curstep)
+        call io_read(this%firstfile, lat_ext, this%lat, this%firststep)
+        call io_read(this%firstfile, lon_ext, this%lon, this%firststep)
 
 
         ! if ( (size(this%lat,2)==1) .and. (size(this%lon,2)==1) ) then  !(size(this%lat,1)/=size(this%lon,1)) (shape(this%lat) /= shape(this%lon)) .and.
@@ -193,7 +195,7 @@ contains
 
         do i=1, size(var_list)
 
-            call add_var_to_dict(this, file_list(this%curfile), var_list(i), dim_list(i), this%curstep, [nx, nz, ny])
+            call add_var_to_dict(this, var_list(i), dim_list(i), [nx, nz, ny])
             ! if (this_image()==1)  print*, i," var_list(i): ",trim(var_list(i)), " dim_list(i): ", dim_list(i), " this%curstep ", this%curstep
 
         end do
@@ -231,12 +233,12 @@ contains
         integer :: i, nx, ny, nz
 
         ! figure out while file and timestep contains the requested start_time
-        call set_curfile_curstep(this, start_time, file_list, time_var)
-        call read_bc_time(this%current_time, file_list(this%curfile), time_var, this%curstep)
+        call set_firstfile_firststep(this, start_time, file_list, time_var)
+        ! call read_bc_time(this%current_time, file_list(this%curfile), time_var, this%curstep)
 
         !  read in latitude and longitude coordinate data
-        call io_read(file_list(this%curfile), lat_var, temp_lat, this%curstep)
-        call io_read(file_list(this%curfile), lon_var, temp_lon, this%curstep)
+        call io_read(this%firstfile, lat_var, temp_lat, this%firststep)
+        call io_read(this%firstfile, lon_var, temp_lon, this%firststep)
 
         !Here we should begin the sub-setting:
         !domain object should be fed in as an argument
@@ -257,7 +259,7 @@ contains
         ! read in the height coordinate of the input data
         if (.not. options%parameters%compute_z) then
             ! call io_read(file_list(this%curfile), z_var,   temp_z,   this%curstep)
-            call io_read(file_list(1), z_var,   temp_z,   1)
+            call io_read(this%firstfile, z_var,   temp_z,   1)
             nx = size(temp_z,1)
             ny = size(temp_z,2)
             nz = size(temp_z,3)
@@ -269,7 +271,7 @@ contains
             temp_z_trans = reshape(temp_z, shape=[nx,nz,ny], order=[1,3,2])
             this%z = temp_z_trans(this%its:this%ite,:,this%jts:this%jte)
         else
-            call io_read(file_list(this%curfile), p_var,   temp_z,   this%curstep)
+            call io_read(this%firstfile, p_var,   temp_z,   this%firststep)
             nx = size(temp_z,1)
             ny = size(temp_z,2)
             nz = size(temp_z,3)
@@ -291,12 +293,12 @@ contains
         call io_write('best_z.nc',"z",this%z(:,:,:))
         call io_write(trim(img_str)//".nc", "z", this%z(:,:,:) )
 
+        
         ! call assert(size(var_list) == size(dim_list), "list of variable dimensions must match list of variables")
         do i=1, size(var_list)
-            call add_var_to_dict(this, file_list(this%curfile), var_list(i), dim_list(i), this%curstep, &
-                                [(this%ite-this%its+1), nz, (this%jte-this%jts+1)])
+            call add_var_to_dict(this, var_list(i), dim_list(i), [(this%ite-this%its+1), nz, (this%jte-this%jts+1)])
         end do
-        
+
         call domain_vars%reset_iterator()
 
         do while (domain_vars%has_more_elements())
@@ -304,7 +306,36 @@ contains
             call add_var_hi_to_dict(this%variables_hi, test_variable%forcing_var, test_variable%n_dimensions, test_variable%dim_len)
         enddo
 
-        call update_computed_vars(this, options, update=options%parameters%time_varying_z)
+    end subroutine
+
+    !>------------------------------------------------------------
+    !! Set the boundary data structure to the correct time step / file in the list of files
+    !!
+    !! Reads the time_var from each file successively until it finds a timestep that matches time
+    !!------------------------------------------------------------
+    subroutine set_firstfile_firststep(bc, time, file_list, time_var)
+        implicit none
+        type(boundary_t),   intent(inout) :: bc
+        type(Time_type),    intent(in) :: time
+        character(len=*),   intent(in) :: file_list(:)
+        character(len=*),   intent(in) :: time_var
+
+
+        integer :: error, i
+
+        ! these are module variables that should be correctly set when the subroutine returns
+        bc%firststep = 1
+        error = 1
+        i = 0
+        do while ( (error/=0) .and. (i < size(file_list)) )
+            i = i + 1
+            bc%firstfile = file_list(i)
+            bc%firststep = find_timestep_in_file(bc%firstfile, time_var, time, error=error)
+        enddo
+
+        if (error==1) then
+            stop "Ran out of files to process while searching for matching time variable!"
+        endif
 
     end subroutine
 
@@ -351,6 +382,7 @@ contains
         this%ite = temp_inds(1); this%jte = temp_inds(2)
 
         ! increase boundary image indices by 5 as buffer to allow for interpolation
+        
         this%its = max(this%its - 5,1)
         this%ite = min(this%ite + 5,nx)
         this%jts = max(this%jts - 5,1)
@@ -414,46 +446,24 @@ contains
     !! Variable is then added to a master variable dictionary
     !!
     !!------------------------------------------------------------
-    subroutine add_var_to_dict(this, file_name, var_name, ndims, timestep, dims)
+    subroutine add_var_to_dict(this, var_name, ndims, dims)
         implicit none
         type(boundary_t), intent(inout) :: this
-        character(len=*), intent(in)    :: file_name
         character(len=*), intent(in)    :: var_name
         integer,          intent(in)    :: ndims
-        integer,          intent(in)    :: timestep
         integer,          intent(in)    :: dims(3)
 
         real, allocatable :: temp_2d_data(:,:)
         real, allocatable :: temp_3d_data(:,:,:)
         type(variable_t)  :: new_variable
 
-        !if (any(dims <= 0 )) error stop 'image: ',this_image(),'     dims(0): ',dims(0),'dims(1): ',dims(1),'dims(2): ',dims(2),
-
         if (ndims==2) then
-            call io_read(file_name, var_name, temp_2d_data, timestep)
-            ! print*, "    file_name, var_name ", file_name, trim(var_name)
-
             call new_variable%initialize( [dims(1),dims(3)] )
-            
-            new_variable%data_2d = temp_2d_data(this%its:this%ite,this%jts:this%jte)
-
             call this%variables%add_var(var_name, new_variable)
-            ! print*, "    added boundary variable ", trim(var_name), " to dict with shape ", shape( temp_2d_data )
-            ! do not deallocate data arrays because they are pointed to inside the var_dict now
-            ! deallocate(new_variable%data_2d)
 
         elseif (ndims==3) then
-            call io_read(file_name, var_name, temp_3d_data, timestep)
-
             call new_variable%initialize( dims )
-
-            new_variable%data_3d = reshape(temp_3d_data(this%its:this%ite,this%jts:this%jte,:), &
-                                    shape=[dims(1),dims(2),dims(3)], order=[1,3,2])
-                        
             call this%variables%add_var(var_name, new_variable)
-
-            ! do not deallocate data arrays because they are pointed to inside the var_dict now
-            ! deallocate(new_variable%data_3d)
 
         ! these variables are computed (e.g. pressure from height or height from pressure)
         elseif (ndims==-3) then
@@ -485,92 +495,7 @@ contains
     end subroutine
 
 
-    !>------------------------------------------------------------
-    !! Reads a new set of forcing data for the next time step
-    !!
-    !!------------------------------------------------------------
-    module subroutine update_forcing(this, options)
-        class(boundary_t), intent(inout) :: this
-        type(options_t),   intent(inout) :: options
-
-        real, allocatable :: data3d(:,:,:), data2d(:,:)
-        type(variable_t)  :: var
-        type(variable_t)  :: pvar, zvar, tvar
-        character(len=kMAX_NAME_LENGTH) :: name
-        integer :: nx, ny, nz, err, ncfile_id, varid
-
-
-        ! if (this_image()==1) then
-            call update_forcing_step(this, this%file_list, options%parameters%time_var)
-
-            call read_bc_time(this%current_time, this%file_list(this%curfile), options%parameters%time_var, this%curstep)
-
-            err = nf90_open(this%file_list(this%curfile), IOR(nf90_nowrite,NF90_NETCDF4), ncfile_id, comm = MPI_COMM_WORLD, info = MPI_INFO_NULL)
-            !err = nf90_open(this%file_list(this%curfile), nf90_nowrite, ncfile_id)
-
-            associate(list => this%variables)
-
-            ! loop through the list of variables that need to be read in
-            call list%reset_iterator()
-            do while (list%has_more_elements())
-                ! get the next variable in the structure
-                var = list%next(name)
-
-                
-                ! note that pressure (and maybe z eventually?) can be computed from the other so they may not be read
-                if (var%computed) then
-                    cycle
-                else
-                    call check_ncdf( nf90_inq_varid(ncfile_id, name, varid), " Getting var ID for "//trim(name))
-                    call check_ncdf( nf90_var_par_access(ncfile_id, varid, nf90_collective))
-
-                    if (var%three_d) then
-                    ! because the data arrays are pointers, this should update the data stored in this%variables
-                    ! call io_read(this%file_list(this%curfile), name, data3d, this%curstep)
-
-                        nx = size(var%data_3d, 1)
-                        ny = size(var%data_3d, 3)
-                        nz = size(var%data_3d, 2)
-                        if (allocated(data3d)) deallocate(data3d)
-                        allocate(data3d(nx,ny,nz))
-
-
-                        call check_ncdf( nf90_get_var(ncfile_id, varid, data3d, start=(/ this%its,this%jts,this%kts /), &
-                                            count=(/ (this%ite-this%its+1),(this%jte-this%jts+1),(this%kte-this%kts+1) /)), " Getting 3D var "//trim(name))
-
-                    ! need to vinterp this dataset to the original vertical levels (if necessary)
-
-                        var%data_3d(:,:,:) = reshape(data3d, shape=[nx,nz,ny], order=[1,3,2])
-
-                    else if (var%two_d) then
-                !    call io_read(this%file_list(this%curfile), name, data2d, this%curstep)
-                        call check_ncdf( nf90_get_var(ncfile_id, varid, var%data_2d, start=(/ this%its,this%jts /), &
-                                            count=(/ (this%ite-this%its+1),(this%jte-this%jts+1) /)), " Getting 2D "//trim(name))
-                        !var%data_2d(:,:) = data2d(:,:)
-                    endif
-                endif
-
-            end do
-
-            ! close file
-            call check_ncdf(nf90_close(ncfile_id), "Closing file "//trim(this%file_list(this%curfile)))
-
-            ! after reading all variables that can be read, not compute any remaining variables (e.g. z from p+ps)
-            call update_computed_vars(this, options, update=.True.)
-
-            ! if the vertical levels of the forcing data change over time, they need to be interpolated to the original levels here.
-            if (options%parameters%time_varying_z) then
-                call interpolate_original_levels(this, options)
-            endif
-
-            end associate
-        ! endif
-
-        ! call this%distribute_update()
-
-    end subroutine
-
-    subroutine interpolate_original_levels(this, options)
+    module subroutine interpolate_original_levels(this, options)
         implicit none
         class(boundary_t),   intent(inout)   :: this
         type(options_t),     intent(in)      :: options
@@ -619,7 +544,7 @@ contains
     end subroutine
 
 
-    subroutine update_computed_vars(this, options, update)
+    module subroutine update_computed_vars(this, options, update)
         implicit none
         class(boundary_t),   intent(inout)   :: this
         type(options_t),     intent(in)      :: options
@@ -980,139 +905,7 @@ contains
         enddo
     end subroutine
 
-    !>------------------------------------------------------------
-    !! Find the time step in the input forcing to start the model on
-    !!
-    !! The model start date (start_time) may not be the same as the first forcing
-    !! date (initial_time).  Convert the difference between the two into forcing
-    !! steps by dividing by the time delta between forcing steps (in_dt) after
-    !! converting in_dt from seconds to days.
-    !!
-    !! @param  options  model options structure
-    !! @retval step     integer number of steps into the forcing sequence
-    !!
-    !!------------------------------------------------------------
 
-
-    !>------------------------------------------------------------
-    !! Figure out how many time steps are in a file based on a specified variable
-    !!
-    !! By default assumes that the variable has three dimensions.  If not, var_space_dims must be set
-    !!------------------------------------------------------------
-    function get_n_timesteps(filename, varname, var_space_dims) result(steps_in_file)
-        implicit none
-        character(len=*), intent(in) :: filename, varname
-        integer,          intent(in), optional :: var_space_dims
-        integer :: steps_in_file
-
-        integer :: dims(io_maxDims)
-        integer :: space_dims
-
-        space_dims=3
-        if (present(var_space_dims)) space_dims = var_space_dims
-
-        call io_getdims(filename, varname, dims)
-
-        if (dims(1) == space_dims) then
-            steps_in_file = 1
-        else
-            steps_in_file = dims(dims(1)+1)
-        endif
-
-    end function
-
-
-    !>------------------------------------------------------------
-    !! Set the boundary data structure to the correct time step / file in the list of files
-    !!
-    !! Reads the time_var from each file successively until it finds a timestep that matches time
-    !!------------------------------------------------------------
-    subroutine set_curfile_curstep(bc, time, file_list, time_var)
-        implicit none
-        type(boundary_t),   intent(inout) :: bc
-        type(Time_type),    intent(in) :: time
-        character(len=*),   intent(in) :: file_list(:)
-        character(len=*),   intent(in) :: time_var
-
-
-        integer :: error
-
-        ! these are module variables that should be correctly set when the subroutine returns
-        bc%curfile = 1
-        bc%curstep = 1
-        error = 1
-        bc%curfile = 0
-        do while ( (error/=0) .and. (bc%curfile < size(file_list)) )
-            bc%curfile = bc%curfile + 1
-            bc%curstep = find_timestep_in_file(file_list(bc%curfile), time_var, time, error=error)
-        enddo
-
-        if (error==1) then
-            stop "Ran out of files to process while searching for matching time variable!"
-        endif
-
-    end subroutine
-
-
-    !>------------------------------------------------------------
-    !! Update the curstep and curfile (increments curstep and curfile if necessary)
-    !!
-    !!------------------------------------------------------------
-    subroutine update_forcing_step(bc, file_list, time_var)
-        implicit none
-        type(boundary_t),   intent(inout) :: bc
-        character(len=*),   intent(in) :: file_list(:)
-        character(len=*),   intent(in) :: time_var
-
-
-        integer :: steps_in_file
-
-        bc%curstep = bc%curstep + 1 ! this may be all we have to do most of the time
-
-        ! check that we haven't stepped passed the end of the current file
-        steps_in_file = get_n_timesteps(file_list(bc%curfile), time_var, 0)
-
-        if (steps_in_file < bc%curstep) then
-            ! if we have, use the next file
-            bc%curfile = bc%curfile + 1
-            ! and the first timestep in the next file
-            bc%curstep = 1
-
-            ! if we have run out of input files, stop with an error message
-            if (bc%curfile > size(file_list)) then
-                stop "Ran out of files to process while searching for matching time variable!"
-            endif
-
-        endif
-    end subroutine
-
-
-    !>------------------------------------------------------------
-    !!  Read in the time step from a boundary conditions file if available
-    !!
-    !!  if not time_var is specified, nothing happens
-    !!
-    !! Should update this to save the times so they don't all have to be read again every timestep
-    !!
-    !! @param model_time    Double Scalar to hold time data
-    !! @param filename      Name of the NetCDF file to read.
-    !! @param varname       Name of the time variable to read from <filename>.
-    !! @param curstep       The time step in <filename> to read.
-    !!
-    !!------------------------------------------------------------
-    subroutine read_bc_time(model_time, filename, time_var, curstep)
-        implicit none
-        type(Time_type),    intent(inout) :: model_time
-        character(len=*),   intent(in)    :: filename, time_var
-        integer,            intent(in)    :: curstep
-
-        type(Time_type), dimension(:), allocatable :: times
-
-        call read_times(filename, time_var, times, curstep=curstep)
-        model_time = times(1)
-        deallocate(times)
-
-    end subroutine read_bc_time
 
     module subroutine update_delta_fields(this, dt)
         implicit none

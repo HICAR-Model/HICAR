@@ -7,13 +7,20 @@ module icar_constants
     implicit none
 
     character(len=5) :: kVERSION_STRING = "2.0"
-
+    
+    ! Define team IDs for coarray teams
+    integer, parameter :: kCOMPUTE_TEAM = 1
+    integer, parameter :: kIO_TEAM = 2
+    integer, allocatable :: DOM_IMG_INDX(:)
+    integer :: kNUM_SERVERS = 0
+    integer :: kNUM_COMPUTE = 0
+    
     ! string lengths
     integer, parameter :: kMAX_FILE_LENGTH = 1024
     integer, parameter :: kMAX_DIM_LENGTH  = 1024
     integer, parameter :: kMAX_NAME_LENGTH = 1024
     integer, parameter :: kMAX_ATTR_LENGTH = 1024
-
+    
     !>--------------------------------------------
     ! list of integer constants to be used when accessing various arrays that track variable allocation, usage, etc. requests
     !
@@ -348,6 +355,16 @@ module icar_constants
 
     integer, parameter :: kLC_LAND       = 1
     integer, parameter :: kLC_WATER      = 2
+
+    ! the fixed lengths of various land-surface grids
+    integer, parameter :: kSOIL_GRID_Z       = 4
+    integer, parameter :: kSNOW_GRID_Z       = 3
+    integer, parameter :: kSNOWSOIL_GRID_Z   = 7
+    integer, parameter :: kCROP_GRID_Z       = 5
+    integer, parameter :: kMONTH_GRID_Z      = 12
+    integer, parameter :: kGECROS_GRID_Z     = 60
+    integer, parameter :: kSOILCOMP_GRID_Z   = 8
+
 
     ! mm of accumulated precip before "tipping" into the bucket
     ! only performed on output operations

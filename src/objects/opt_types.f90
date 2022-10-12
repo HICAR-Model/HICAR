@@ -174,24 +174,35 @@ module options_types
     end type rad_options_type
 
     ! ------------------------------------------------
-    ! store output file related options
+    ! store I/O related options
     ! ------------------------------------------------
-    type output_options_type
+    type io_options_type
 
         ! file names
-        character (len=MAXFILELENGTH) :: output_file, restart_file
+        character (len=MAXFILELENGTH) :: output_file, restart_out_file
         character (len=MAXFILELENGTH) :: output_file_frequency
+        
+
+        real :: in_dt                   ! time step between forcing inputs [s]
+        type(time_delta_t) :: input_dt  ! store in_dt as a time delta object
 
         real :: out_dt                  ! time step between output [s]
         type(time_delta_t) :: output_dt ! store out_dt as a time delta object
+        
         real :: rst_dt                  ! time step between writing restart data [s]
         type(time_delta_t) :: restart_dt! rst_dt as a time delta object
         integer :: restart_count
+        
+        integer :: frames_per_outfile      ! frames (outputintervals) per out file
+
+        real :: outputinterval          ! time steps per output
+        real :: inputinterval           ! time steps per input
 
         ! these are the variables that need to be written and read from disk as primary output
         integer :: vars_for_output( kMAX_STORAGE_VARS ) = 0
 
-    end type output_options_type
+
+    end type io_options_type
 
 
     ! ------------------------------------------------
@@ -266,19 +277,10 @@ module options_types
         type(Time_type) :: restart_time ! Date of the restart time step
         ! integer :: restart_step         ! step in forcing data to begin running
         integer :: restart_date(6)      ! date to initialize from (y,m,d, h,m,s)
-        integer :: restart_step_in_file ! step in restart file to initialize from
 
         ! various real parameters/options
         real :: dx                      ! grid cell width [m]
         real :: dxlow                   ! forcing model grid cell width [m]
-        real :: in_dt                   ! time step between forcing inputs [s]
-        type(time_delta_t) :: input_dt  ! store in_dt as a time delta object
-
-        real :: out_dt                  ! time step between output [s]
-        type(time_delta_t) :: output_dt ! store out_dt as a time delta object
-        real :: outputinterval          ! time steps per output
-        real :: inputinterval           ! time steps per input
-        real :: frames_per_outfile      ! frames (outputintervals) per out file
 
         real :: smooth_wind_distance    ! distance over which to smooth the forcing wind field (m)
         logical :: time_varying_z       ! read in a new z coordinate every time step and interpolate accordingly
@@ -292,6 +294,8 @@ module options_types
         type(Time_type) :: initial_time ! Date of the first forcing time step
         type(Time_type) :: start_time   ! Date to start running the model
         type(Time_type) :: end_time     ! End point for the model simulation
+        
+        integer :: restart_step_in_file ! step in restart file to initialize from
 
         real :: t_offset                ! offset to temperature because WRF outputs potential temperature-300
 

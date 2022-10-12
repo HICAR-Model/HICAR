@@ -24,11 +24,9 @@ module boundary_interface
     type :: boundary_t
         type(meta_data_t)    :: info
 
-        ! list of input files
-        character (len=kMAX_FILE_LENGTH), allocatable :: file_list(:)
         !   manage file pointer and position in file for boundary conditions
-        integer :: curfile
-        integer :: curstep
+        character(len=kMAX_NAME_LENGTH) :: firstfile
+        integer :: firststep
         integer :: its
         integer :: ite
         integer :: kts
@@ -58,7 +56,6 @@ module boundary_interface
 
         procedure :: init
         procedure :: init_external
-        procedure :: update_forcing
         procedure :: update_delta_fields
 
         procedure :: distribute_update
@@ -67,7 +64,8 @@ module boundary_interface
         ! procedure :: find_start_time
         procedure :: init_local
         procedure :: init_local2
-
+        procedure :: update_computed_vars
+        procedure :: interpolate_original_levels
     end type
 
     interface
@@ -126,12 +124,6 @@ module boundary_interface
         type(var_dict_t),     intent(inout)             :: domain_vars
     end subroutine
 
-    module subroutine update_forcing(this, options)
-        implicit none
-        class(boundary_t), intent(inout) :: this
-        type(options_t),   intent(inout) :: options
-    end subroutine
-
     module subroutine distribute_update(this)
         implicit none
         class(boundary_t), intent(inout) :: this
@@ -146,6 +138,19 @@ module boundary_interface
         implicit none
         class(boundary_t),    intent(inout) :: this
         type(time_delta_t), intent(in)    :: dt
+    end subroutine
+    
+    module subroutine update_computed_vars(this, options, update)
+        implicit none
+        class(boundary_t),   intent(inout)   :: this
+        type(options_t),     intent(in)      :: options
+        logical,             intent(in),    optional :: update
+    end subroutine
+    
+    module subroutine interpolate_original_levels(this, options)
+        implicit none
+        class(boundary_t),   intent(inout)   :: this
+        type(options_t),     intent(in)      :: options
     end subroutine
     
   end interface

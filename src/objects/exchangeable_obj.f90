@@ -16,7 +16,7 @@ contains
     type(variable_t),                intent(in),    optional :: metadata
     character(len=kMAX_NAME_LENGTH), intent(in),    optional :: forcing_var
 
-    integer :: err
+    integer :: err, my_index
 
     halo_size = grid%halo_size
 
@@ -59,8 +59,7 @@ contains
     allocate( this%halo_north_in( grid%ns_halo_nx+halo_size*2, grid%halo_nz, halo_size           )[*])
     allocate( this%halo_east_in(  halo_size        ,  grid%halo_nz, grid%ew_halo_ny+halo_size*2  )[*])
     allocate( this%halo_west_in(  halo_size+this%xe,  grid%halo_nz, grid%ew_halo_ny+halo_size*2  )[*])
-
-
+    
     if (.not.allocated(neighbors)) call this%set_neighbors(grid)
 
     if (present(metadata)) then
@@ -77,47 +76,49 @@ contains
   module subroutine set_neighbors(this, grid)
       class(exchangeable_t), intent(inout) :: this
       type(grid_t),          intent(in)    :: grid
-      integer :: n_neighbors, current
+      integer :: n_neighbors, current, me
 
       ! set up the neighbors array so we can sync with our neighbors when needed
       if (.not.allocated(neighbors)) then
-        associate(me=>this_image())
-          south_neighbor = me - grid%ximages
-          north_neighbor = me + grid%ximages
-          east_neighbor  = me + 1
-          west_neighbor  = me - 1
+          me = FINDLOC(DOM_IMG_INDX,this_image(),dim=1)
 
-          n_neighbors = merge(0,1,this%south_boundary)  &
+          !If we were found/are a compute process
+          if (me > 0) then
+              if (.not.(this%south_boundary)) south_neighbor = DOM_IMG_INDX(me - grid%ximages)
+              if (.not.(this%north_boundary)) north_neighbor = DOM_IMG_INDX(me + grid%ximages)
+              if (.not.(this%east_boundary)) east_neighbor  = DOM_IMG_INDX(me + 1)
+              if (.not.(this%west_boundary)) west_neighbor  = DOM_IMG_INDX(me - 1)
+
+              n_neighbors = merge(0,1,this%south_boundary)  &
                        +merge(0,1,this%north_boundary)  &
                        +merge(0,1,this%east_boundary)   &
                        +merge(0,1,this%west_boundary)
-          n_neighbors = max(1, n_neighbors)
+              n_neighbors = max(1, n_neighbors)
 
-          allocate(neighbors(n_neighbors))
+              allocate(neighbors(n_neighbors))
 
-          current = 1
-          if (.not. this%south_boundary) then
-              neighbors(current) = south_neighbor
-              current = current+1
+              current = 1
+              if (.not. this%south_boundary) then
+                  neighbors(current) = south_neighbor
+                  current = current+1
+              endif
+              if (.not. this%north_boundary) then
+                  neighbors(current) = north_neighbor
+                  current = current+1
+              endif
+              if (.not. this%east_boundary) then
+                  neighbors(current) = east_neighbor
+                  current = current+1
+              endif
+              if (.not. this%west_boundary) then
+                  neighbors(current) = west_neighbor
+                  current = current+1
+              endif
+              ! if current = 1 then all of the boundaries were set, just store ourself as our "neighbor"
+              if (current == 1) then
+                  neighbors(current) = me
+              endif
           endif
-          if (.not. this%north_boundary) then
-              neighbors(current) = north_neighbor
-              current = current+1
-          endif
-          if (.not. this%east_boundary) then
-              neighbors(current) = east_neighbor
-              current = current+1
-          endif
-          if (.not. this%west_boundary) then
-              neighbors(current) = west_neighbor
-              current = current+1
-          endif
-          ! if current = 1 then all of the boundaries were set, just store ourself as our "neighbor"
-          if (current == 1) then
-              neighbors(current) = me
-          endif
-
-        end associate
       endif
 
   end subroutine

@@ -37,8 +37,8 @@ contains
         meta_data = var_meta(var_idx)
 
         ! set the dimensionality to false
-        meta_data%two_d     = .False.
-        meta_data%three_d   = .False.
+        !meta_data%two_d     = .False.
+        !meta_data%three_d   = .False.
 
     end function get_metadata_nod
 
@@ -265,6 +265,9 @@ contains
         ! allocate the actual data structure to be used
         allocate(var_meta(kMAX_STORAGE_VARS))
 
+        do i=1,size(var_meta)
+            allocate(var_meta(i)%dim_len,source=(/ 0, 0, 0/))
+        enddo
 
         !>------------------------------------------------------------
         !!  U  East West Winds
@@ -273,6 +276,9 @@ contains
             var%name        = "u"
             var%dimensions  = three_d_u_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%xstag       = 1
             var%attributes  = [attribute_t("standard_name", "grid_eastward_wind"),              &
                                attribute_t("long_name",     "Grid relative eastward wind"),     &
                                attribute_t("units",         "m s-1"),                           &
@@ -285,6 +291,9 @@ contains
             var%name        = "v"
             var%dimensions  = three_d_v_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%ystag       = 1
             var%attributes  = [attribute_t("standard_name", "grid_northward_wind"),             &
                                attribute_t("long_name",     "Grid relative northward wind"),    &
                                attribute_t("units",         "m s-1"),                           &
@@ -297,6 +306,8 @@ contains
             var%name        = "w_grid"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "grid_upward_air_velocity"),    &
                                attribute_t("long_name",     "Vertical wind"),                   &
                                attribute_t("description",   "Vertical wind relative to the grid"),&
@@ -308,6 +319,8 @@ contains
             var%name        = "w"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "upward_air_velocity"),             &
                                attribute_t("long_name",     "Vertical wind"),                   &
                                attribute_t("description",   "Vertical wind including u/v"),     &
@@ -321,6 +334,8 @@ contains
             var%name        = "nsquared"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "square_of_brunt_vaisala_frequency_in_air"),&
                                attribute_t("long_name",     "Burnt Vaisala frequency squared"), &
                                attribute_t("units",         "s-2"),                             &
@@ -333,6 +348,8 @@ contains
             var%name        = "pressure"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "air_pressure"),                    &
                                attribute_t("long_name",     "Pressure"),                        &
                                attribute_t("units",         "Pa"),                              &
@@ -345,6 +362,8 @@ contains
             var%name        = "pressure_i"
             var%dimensions  = three_d_t_interface_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "air_pressure"),                    &
                                attribute_t("long_name",     "Pressure"),                        &
                                attribute_t("units",         "Pa"),                              &
@@ -357,6 +376,8 @@ contains
             var%name        = "psfc"
             var%dimensions  = two_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("standard_name", "surface_air_pressure"),            &
                                attribute_t("long_name",     "Surface Pressure"),                &
                                attribute_t("units",         "Pa"),                              &
@@ -369,6 +390,8 @@ contains
             var%name        = "potential_temperature"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "air_potential_temperature"),       &
                                attribute_t("long_name",     "Potential Temperature"),           &
                                attribute_t("units",         "K"),                               &
@@ -381,6 +404,8 @@ contains
             var%name        = "temperature"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "air_temperature"),                 &
                                attribute_t("long_name",     "Temperature"),                     &
                                attribute_t("units",         "K"),                               &
@@ -393,6 +418,8 @@ contains
             var%name        = "qv"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "mass_fraction_of_water_vapor_in_air"), &
                                attribute_t("long_name",     "Water Vapor Mixing Ratio"),            &
                                attribute_t("units",         "kg kg-1"),                             &
@@ -405,6 +432,8 @@ contains
             var%name        = "qc"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "cloud_liquid_water_mixing_ratio"),     &
                                attribute_t("units",         "kg kg-1"),                             &
                                attribute_t("coordinates",   "lat lon")]
@@ -416,6 +445,8 @@ contains
             var%name        = "nc"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "number_concentration_of_cloud_droplets_in_air"), &
                                attribute_t("units",         "cm-3"),                                              &
                                attribute_t("coordinates",   "lat lon")]
@@ -427,6 +458,8 @@ contains
             var%name        = "qi"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "cloud_ice_mixing_ratio"),              &
                                attribute_t("units",         "kg kg-1"),                             &
                                attribute_t("coordinates",   "lat lon")]
@@ -438,6 +471,8 @@ contains
             var%name        = "ni"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "number_concentration_of_ice_crystals_in_air"), &
                                attribute_t("units",         "cm-3"),                                            &
                                attribute_t("coordinates",   "lat lon")]
@@ -449,6 +484,8 @@ contains
             var%name        = "qr"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "mass_fraction_of_rain_in_air"),        &
                                attribute_t("units",         "kg kg-1"),                             &
                                attribute_t("coordinates",   "lat lon")]
@@ -460,6 +497,8 @@ contains
             var%name        = "nr"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "number_concentration_of_rain_particles_in_air"), &
                                attribute_t("units",         "cm-3"),                                              &
                                attribute_t("coordinates",   "lat lon")]
@@ -471,6 +510,8 @@ contains
             var%name        = "qs"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "mass_fraction_of_snow_in_air"),        &
                                attribute_t("units",         "kg kg-1"),                             &
                                attribute_t("coordinates",   "lat lon")]
@@ -482,6 +523,8 @@ contains
             var%name        = "ns"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "number_concentration_of_snow_particles_in_air"), &
                                attribute_t("units",         "cm-3"),                                              &
                                attribute_t("coordinates",   "lat lon")]
@@ -493,6 +536,8 @@ contains
             var%name        = "qg"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "mass_fraction_of_graupel_in_air"),     &
                                attribute_t("units",         "kg kg-1"),                             &
                                attribute_t("coordinates",   "lat lon")]
@@ -504,6 +549,8 @@ contains
             var%name        = "ng"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "number_concentration_of_graupel_particles_in_air"), &
                                attribute_t("units",         "cm-3"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -515,6 +562,8 @@ contains
             var%name        = "ice1_a"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "planar-nucleated a^2c mixing ratio"), &
                                attribute_t("units",         "m^3 kg^-1"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -526,6 +575,8 @@ contains
             var%name        = "ice1_c"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "planar-nucleated c^2a mixing ratio"), &
                                attribute_t("units",         "m^3 kg^-1"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -537,6 +588,8 @@ contains
             var%name        = "ice2_mass"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "columnar-nucleated mixing ratio"), &
                                attribute_t("units",         "kg kg^-1"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -548,6 +601,8 @@ contains
             var%name        = "ice2_number"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "columnar-nucleated number mixing ratio"), &
                                attribute_t("units",         "kg^-1"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -559,6 +614,8 @@ contains
             var%name        = "ice2_a"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "columnar-nucleated a^2c mixing ratio"), &
                                attribute_t("units",         "m^3 kg^-1"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -570,6 +627,8 @@ contains
             var%name        = "ice2_c"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "columnar-nucleated c^2a mixing ratio"), &
                                attribute_t("units",         "m^3 kg^-1"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -581,6 +640,8 @@ contains
             var%name        = "ice3_mass"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "aggregate mixing ratio"), &
                                attribute_t("units",         "kg kg^-1"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -592,6 +653,8 @@ contains
             var%name        = "ice3_number"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "aggregate number mixing ratio"), &
                                attribute_t("units",         "kg^-1"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -603,6 +666,8 @@ contains
             var%name        = "ice3_a"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "aggregate a^2c mixing ratio"), &
                                attribute_t("units",         "m^3 kg^-1"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -614,6 +679,8 @@ contains
             var%name        = "ice3_c"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "aggregate c^2a mixing ratio"), &
                                attribute_t("units",         "m^3 kg^-1"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -636,6 +703,8 @@ contains
         associate(var=>var_meta(kVARS%precipitation))
             var%name        = "precipitation"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "precipitation_amount"),                &
                                attribute_t("units",         "kg m-2"),                              &
@@ -647,6 +716,8 @@ contains
         associate(var=>var_meta(kVARS%convective_precipitation))
             var%name        = "cu_precipitation"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "convective_precipitation_amount"),     &
                                attribute_t("units",         "kg m-2"),                              &
@@ -659,6 +730,8 @@ contains
             var%name        = "snowfall"
             var%dimensions  = two_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("standard_name", "snowfall_amount"),                     &
                                attribute_t("units",         "kg m-2"),                              &
                                attribute_t("coordinates",   "lat lon")]
@@ -669,6 +742,8 @@ contains
         associate(var=>var_meta(kVARS%graupel))
             var%name        = "graupel"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "graupel_amount"),                      &
                                attribute_t("units",         "kg m-2"),                              &
@@ -681,6 +756,8 @@ contains
             var%name        = "exner"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("non_standard_name", "exner_function_result"),           &
                                attribute_t("units",         "K K-1"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -692,6 +769,8 @@ contains
             var%name        = "density"
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%attributes  = [attribute_t("standard_name", "air_density"),                         &
                                attribute_t("units",         "kg m-3"),                              &
                                attribute_t("coordinates",   "lat lon")]
@@ -701,6 +780,8 @@ contains
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%z))
             var%name        = "z"
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%dimensions  = three_d_dimensions
             var%attributes  = [attribute_t("standard_name", "height_above_reference_ellipsoid"),    &
                                attribute_t("units",         "m"),                                   &
@@ -711,6 +792,8 @@ contains
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%z_interface))
             var%name        = "z_i"
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%dimensions  = three_d_interface_dimensions
             var%attributes  = [attribute_t("standard_name", "height_above_reference_ellipsoid"),    &
                                attribute_t("units",         "m"),                                   &
@@ -721,6 +804,8 @@ contains
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%dz))
             var%name        = "dz"
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%dimensions  = three_d_dimensions
             var%attributes  = [attribute_t("non_standard_name", "layer_thickness"),                 &
                                attribute_t("units",         "m"),                                   &
@@ -731,6 +816,8 @@ contains
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%dz_interface))
             var%name        = "dz_i"
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%dimensions  = three_d_interface_dimensions
             var%attributes  = [attribute_t("non_standard_name", "layer_thickness"),                 &
                                attribute_t("units",         "m"),                                   &
@@ -742,6 +829,8 @@ contains
         associate(var=>var_meta(kVARS%cloud_fraction))
             var%name        = "clt"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "cloud_area_fraction"),                 &
                                attribute_t("units",         "1"),                                   &
@@ -753,6 +842,8 @@ contains
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%re_cloud))
             var%name        = "re_cloud"
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "effective_radius_of_cloud_liquid_water_particles"), &
@@ -765,6 +856,8 @@ contains
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%re_ice))
             var%name        = "re_ice"
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "effective_radius_of_stratiform_cloud_ice_particles"), &
@@ -777,6 +870,8 @@ contains
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%re_snow))
             var%name        = "re_snow"
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "effective_radius_of_stratiform_snow_particles"), &
@@ -790,6 +885,8 @@ contains
         associate(var=>var_meta(kVARS%out_longwave_rad))
             var%name        = "rlut"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "toa_outgoing_longwave_flux"), &
                                attribute_t("units",         "W m-2"),                      &
@@ -802,6 +899,8 @@ contains
         associate(var=>var_meta(kVARS%longwave_cloud_forcing))
             var%name        = "lwcf"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "longwave_cloud_forcing"), &
                                attribute_t("units",         "W m-2"),                      &
@@ -814,6 +913,8 @@ contains
         associate(var=>var_meta(kVARS%shortwave_cloud_forcing))
             var%name        = "swcf"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "shortwave_cloud_forcing"), &
                                attribute_t("units",         "W m-2"),                       &
@@ -826,6 +927,8 @@ contains
         associate(var=>var_meta(kVARS%cosine_zenith_angle))
             var%name        = "cosz"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "cosine_zenith_angle"), &
                                attribute_t("units",         " "),                       &
@@ -837,6 +940,8 @@ contains
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%tend_swrad))
             var%name        = "tend_swrad"
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "sw_rad_tend"), &
@@ -851,6 +956,8 @@ contains
         associate(var=>var_meta(kVARS%land_emissivity))
             var%name        = "emiss"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_longwave_emissivity"), &
                                attribute_t("units",         " "),                           &
@@ -862,6 +969,8 @@ contains
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%temperature_interface))
             var%name        = "temperature_i"
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%dimensions  = three_d_t_interface_dimensions
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "air_temperature"),                    &
@@ -878,6 +987,8 @@ contains
         associate(var=>var_meta(kVARS%shortwave))
             var%name        = "rsds"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_downwelling_shortwave_flux_in_air"), &
                                attribute_t("units",         "W m-2"),                                     &
@@ -889,6 +1000,8 @@ contains
         associate(var=>var_meta(kVARS%shortwave_direct))
             var%name        = "shortwave_direct"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_direct_downwelling_shortwave_flux_in_air"), &
                                attribute_t("units",         "W m-2"),                                            &
@@ -900,6 +1013,8 @@ contains
         associate(var=>var_meta(kVARS%shortwave_diffuse))
             var%name        = "shortwave_diffuse"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_diffuse_downwelling_shortwave_flux_in_air"), &
                                attribute_t("units",         "W m-2"),                                             &
@@ -911,6 +1026,8 @@ contains
         associate(var=>var_meta(kVARS%longwave))
             var%name        = "rlds"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_downwelling_longwave_flux_in_air"), &
                                attribute_t("units",         "W m-2"),                                    &
@@ -922,6 +1039,8 @@ contains
         associate(var=>var_meta(kVARS%rad_absorbed_total))
             var%name        = "rad_absorbed_total"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "total_absorbed_radiation"),             &
                                attribute_t("units",         "W m-2"),                                    &
@@ -933,6 +1052,8 @@ contains
         associate(var=>var_meta(kVARS%rad_absorbed_veg))
             var%name        = "rad_absorbed_veg"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "radiation_absorbed_by_vegetation"),     &
                                attribute_t("units",         "W m-2"),                                    &
@@ -944,6 +1065,8 @@ contains
         associate(var=>var_meta(kVARS%rad_absorbed_bare))
             var%name        = "rad_absorbed_bare"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "radiation_absorbed_by_bare_ground"),    &
                                attribute_t("units",         "W m-2"),                                    &
@@ -955,6 +1078,8 @@ contains
         associate(var=>var_meta(kVARS%rad_net_longwave))
             var%name        = "rad_net_longwave"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "net_upward_longwave_flux_in_air"),          &
                                attribute_t("units",         "W m-2"),                                    &
@@ -966,6 +1091,8 @@ contains
         associate(var=>var_meta(kVARS%longwave_up))
             var%name        = "rlus"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_upwelling_longwave_flux_in_air"),   &
                                attribute_t("units",         "W m-2"),                                    &
@@ -977,6 +1104,8 @@ contains
         associate(var=>var_meta(kVARS%ground_heat_flux))
             var%name        = "hfgs"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "upward_heat_flux_at_ground_level_in_soil"), &
                                attribute_t("units",         "W m-2"),                                    &
@@ -988,6 +1117,9 @@ contains
         associate(var=>var_meta(kVARS%vegetation_fraction))
             var%name        = "vegetation_fraction"
             var%dimensions  = two_d_month_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dim_len(3)  = kMONTH_GRID_Z
             var%attributes  = [attribute_t("standard_name", "vegetation_area_fraction"),            &
                                attribute_t("units",         "m2 m-2"),                              &
                                attribute_t("coordinates",   "lat lon")]
@@ -998,6 +1130,8 @@ contains
         associate(var=>var_meta(kVARS%vegetation_fraction_max))
             var%name        = "vegetation_fraction_max"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "max_vegetation_area_fraction"),    &
                                attribute_t("units",         "m2 m-2"),                              &
@@ -1009,6 +1143,8 @@ contains
         associate(var=>var_meta(kVARS%vegetation_fraction_out))
             var%name        = "vegetation_fraction_out"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "vegetation_fraction_out"),         &
                                attribute_t("units",         "m2 m-2"),                              &
@@ -1020,6 +1156,8 @@ contains
         associate(var=>var_meta(kVARS%veg_type))
             var%name        = "veg_type"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "vegetation_type"),                 &
                                attribute_t("units",      "1"),                                      &
                                attribute_t("coordinates",   "lat lon")]
@@ -1030,6 +1168,8 @@ contains
         associate(var=>var_meta(kVARS%mass_leaf))
             var%name        = "mass_leaf"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "leaf_mass"),                      &
                                attribute_t("units",      "g m-2"),                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -1040,6 +1180,8 @@ contains
         associate(var=>var_meta(kVARS%mass_root))
             var%name        = "mass_root"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "root_mass"),                      &
                                attribute_t("units",      "g m-2"),                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -1050,6 +1192,8 @@ contains
         associate(var=>var_meta(kVARS%mass_stem))
             var%name        = "mass_stem"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "stem_mass"),                      &
                                attribute_t("units",      "g m-2"),                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -1060,6 +1204,8 @@ contains
         associate(var=>var_meta(kVARS%mass_wood))
             var%name        = "mass_wood"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "wood_mass"),                      &
                                attribute_t("units",      "g m-2"),                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -1070,6 +1216,8 @@ contains
         associate(var=>var_meta(kVARS%lai))
             var%name        = "lai"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "leaf_area_index"),                     &
                                attribute_t("units",         "m2 m-2"),                              &
@@ -1081,6 +1229,8 @@ contains
         associate(var=>var_meta(kVARS%sai))
             var%name        = "sai"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "stem_area_index"),                 &
                                attribute_t("units",         "m2 m-2"),                              &
@@ -1092,6 +1242,8 @@ contains
         associate(var=>var_meta(kVARS%date_planting))
             var%name        = "date_planting"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "planting_date"),                   &
                                attribute_t("units",         "1"),                                   &
@@ -1103,6 +1255,8 @@ contains
         associate(var=>var_meta(kVARS%date_harvest))
             var%name        = "date_harvest"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "harvest_date"),                    &
                                attribute_t("units",         "1"),                                   &
@@ -1114,6 +1268,8 @@ contains
         associate(var=>var_meta(kVARS%crop_category))
             var%name        = "crop_category"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "crop_category"),                   &
                                attribute_t("units",         "1"),                                   &
                                attribute_t("coordinates",   "lat lon")]
@@ -1124,6 +1280,9 @@ contains
         associate(var=>var_meta(kVARS%crop_type))
             var%name        = "crop_type"
             var%dimensions  = three_d_crop_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dim_len(3)  = kCROP_GRID_Z
             var%attributes  = [attribute_t("non_standard_name", "crop_type"),                       &
                                attribute_t("units",         "1"),                                   &
                                attribute_t("coordinates",   "lat lon")]
@@ -1134,6 +1293,8 @@ contains
         associate(var=>var_meta(kVARS%growing_season_gdd))
             var%name        = "growing_season_gdd"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "growing_season_gdd"),              &
                                attribute_t("units",         "1"),                                   &
@@ -1145,6 +1306,8 @@ contains
         associate(var=>var_meta(kVARS%irr_eventno_sprinkler))
             var%name        = "irr_eventno_sprinkler"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_eventno_sprinkler"),           &
                                attribute_t("units",         "1"),                                   &
@@ -1156,6 +1319,8 @@ contains
         associate(var=>var_meta(kVARS%irr_frac_total))
             var%name        = "irr_frac_total"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_frac_total"),                  &
                                attribute_t("units",         "1"),                                   &
@@ -1167,6 +1332,8 @@ contains
         associate(var=>var_meta(kVARS%irr_frac_sprinkler))
             var%name        = "irr_frac_sprinkler"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_frac_sprinkler"),              &
                                attribute_t("units",         "1"),                                   &
@@ -1178,6 +1345,8 @@ contains
         associate(var=>var_meta(kVARS%irr_frac_micro))
             var%name        = "irr_frac_micro"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_frac_micro"),                  &
                                attribute_t("units",         "1"),                                   &
@@ -1189,6 +1358,8 @@ contains
         associate(var=>var_meta(kVARS%irr_frac_flood))
             var%name        = "irr_frac_flood"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_frac_flood"),                  &
                                attribute_t("units",         "1"),                                   &
@@ -1200,6 +1371,8 @@ contains
         associate(var=>var_meta(kVARS%irr_eventno_micro))
             var%name        = "irr_eventno_micro"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_eventno_micro"),               &
                                attribute_t("units",         "1"),                                   &
@@ -1211,6 +1384,8 @@ contains
         associate(var=>var_meta(kVARS%irr_eventno_flood))
             var%name        = "irr_eventno_flood"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_eventno_flood"),               &
                                attribute_t("units",         "1"),                                   &
@@ -1222,6 +1397,8 @@ contains
         associate(var=>var_meta(kVARS%irr_alloc_sprinkler))
             var%name        = "irr_alloc_sprinkler"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_alloc_sprinkler"),             &
                                attribute_t("units",         "m"),                                   &
@@ -1233,6 +1410,8 @@ contains
         associate(var=>var_meta(kVARS%irr_alloc_micro))
             var%name        = "irr_alloc_micro"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_alloc_micro"),                 &
                                attribute_t("units",         "m"),                                   &
@@ -1244,6 +1423,8 @@ contains
         associate(var=>var_meta(kVARS%irr_alloc_flood))
             var%name        = "irr_alloc_flood"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_alloc_flood"),                 &
                                attribute_t("units",         "m"),                                   &
@@ -1255,6 +1436,8 @@ contains
         associate(var=>var_meta(kVARS%irr_evap_loss_sprinkler))
             var%name        = "irr_evap_loss_sprinkler"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_evap_loss_sprinkler"),         &
                                attribute_t("units",         "m timestep-1"),                        &
@@ -1266,6 +1449,8 @@ contains
         associate(var=>var_meta(kVARS%irr_amt_sprinkler))
             var%name        = "irr_amt_sprinkler"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_amt_sprinkler"),               &
                                attribute_t("units",         "mm"),                                  &
@@ -1277,6 +1462,8 @@ contains
         associate(var=>var_meta(kVARS%irr_amt_micro))
             var%name        = "irr_amt_micro"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_amt_micro"),                   &
                                attribute_t("units",         "mm"),                                  &
@@ -1288,6 +1475,8 @@ contains
         associate(var=>var_meta(kVARS%irr_amt_flood))
             var%name        = "irr_amt_flood"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "irr_amt_flood"),                   &
                                attribute_t("units",         "mm"),                                  &
@@ -1299,6 +1488,8 @@ contains
         associate(var=>var_meta(kVARS%growing_season_gdd))
             var%name        = "growing_season_gdd"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "growing_season_gdd"),              &
                                attribute_t("units",         "1"),                                   &
@@ -1310,6 +1501,8 @@ contains
         associate(var=>var_meta(kVARS%mass_ag_grain))
             var%name        = "mass_ag_grain"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "mass_agricultural_grain"),         &
                                attribute_t("units",         "g m-2"),                               &
@@ -1321,6 +1514,8 @@ contains
         associate(var=>var_meta(kVARS%growing_degree_days))
             var%name        = "growing_degree_days"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "growing_degree_days"),             &
                                attribute_t("units",         "1"),                                   &
@@ -1332,6 +1527,8 @@ contains
         associate(var=>var_meta(kVARS%plant_growth_stage))
             var%name        = "plant_growth_stage"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "plant_growth_stage"),              &
                                attribute_t("units",         "1"),                                   &
@@ -1343,6 +1540,8 @@ contains
         associate(var=>var_meta(kVARS%net_ecosystem_exchange))
             var%name        = "net_ecosystem_exchange"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "net_ecosystem_exchange_expressed_as_carbon_dioxide"), &
                                attribute_t("units",         "g m-2 s-1"),                                              &
@@ -1354,6 +1553,8 @@ contains
         associate(var=>var_meta(kVARS%gross_primary_prod))
             var%name        = "gross_primary_prod"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "gross_primary_productivity_of_biomass_expressed_as_carbon"), &
                                attribute_t("units",         "g m-2 s-1"),                                                 &
@@ -1365,6 +1566,8 @@ contains
         associate(var=>var_meta(kVARS%net_primary_prod))
             var%name        = "net_primary_prod"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "net_primary_productivity_of_biomass_expressed_as_carbon"), &
                                attribute_t("units",         "g m-2 s-1"),                                               &
@@ -1376,6 +1579,8 @@ contains
         associate(var=>var_meta(kVARS%apar))
             var%name        = "apar"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "absorbed_photosynthetically_active_radiation"), &
                                attribute_t("units",         "W m-2"),                                            &
@@ -1387,6 +1592,8 @@ contains
         associate(var=>var_meta(kVARS%photosynthesis_total))
             var%name        = "photosynthesis_total"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "total_photosynthesis_expressed_as_carbon_dioxide"), &
                                attribute_t("units",         "mmol m-2 s-1"),                                         &
@@ -1398,6 +1605,8 @@ contains
         associate(var=>var_meta(kVARS%stomatal_resist_total))
             var%name        = "stomatal_resist_total"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "total_leaf_stomatal_resistance"),                   &
                                attribute_t("units",         "s m-1"),                                                &
@@ -1409,6 +1618,8 @@ contains
         associate(var=>var_meta(kVARS%stomatal_resist_sun))
             var%name        = "stomatal_resist_sun"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "sunlif_leaf_stomatal_resistance"),                  &
                                attribute_t("units",         "s m-1"),                                                &
@@ -1420,6 +1631,8 @@ contains
         associate(var=>var_meta(kVARS%stomatal_resist_shade))
             var%name        = "stomatal_resist_shade"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "shaded_leaf_stomatal_resistance"),                 &
                                attribute_t("units",         "s m-1"),                                               &
@@ -1431,7 +1644,10 @@ contains
         associate(var=>var_meta(kVARS%gecros_state))
             var%name        = "gecros_state"
             var%dimensions  = three_d_t_gecros_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kGECROS_GRID_Z
             var%attributes  = [attribute_t("non_standard_name", "gecros_state"),                                    &
                                attribute_t("units",         "N/A"),                                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -1442,6 +1658,8 @@ contains
         associate(var=>var_meta(kVARS%canopy_water))
             var%name        = "canopy_water"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "canopy_water_amount"),                 &
                                attribute_t("units",         "kg m-2"),                              &
@@ -1453,6 +1671,8 @@ contains
         associate(var=>var_meta(kVARS%canopy_water_ice))
             var%name        = "canopy_ice"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "canopy_snow_amount"),                  &
                                attribute_t("units",         "kg m-2"),                              &
@@ -1464,6 +1684,8 @@ contains
         associate(var=>var_meta(kVARS%canopy_water_liquid))
             var%name        = "canopy_liquid"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "canopy_liquid_water_amount"),      &
                                attribute_t("units",         "kg m-2"),                              &
@@ -1475,6 +1697,8 @@ contains
         associate(var=>var_meta(kVARS%canopy_vapor_pressure))
             var%name        = "canopy_vapor_pressure"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "canopy_air_vapor_pressure"),       &
                                attribute_t("units",         "Pa"),                                  &
@@ -1486,6 +1710,8 @@ contains
         associate(var=>var_meta(kVARS%canopy_temperature))
             var%name        = "canopy_temperature"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "canopy_air_temperature"),          &
                                attribute_t("units",         "K"),                                   &
@@ -1497,6 +1723,8 @@ contains
         associate(var=>var_meta(kVARS%canopy_fwet))
             var%name        = "canopy_fwet"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "canopy_wetted_fraction"),          &
                                attribute_t("units",         "1"),                                   &
@@ -1508,6 +1736,8 @@ contains
         associate(var=>var_meta(kVARS%veg_leaf_temperature))
             var%name        = "veg_leaf_temperature"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "veg_leaf_temperature"),            &
                                attribute_t("units",         "K"),                                   &
@@ -1519,6 +1749,8 @@ contains
         associate(var=>var_meta(kVARS%ground_surf_temperature))
             var%name        = "ground_surf_temperature"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "ground_surface_temperature"),      &
                                attribute_t("units",         "K"),                                   &
@@ -1530,6 +1762,8 @@ contains
         associate(var=>var_meta(kVARS%frac_between_gap))
             var%name        = "frac_between_gap"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "between_gap_fraction"),            &
                                attribute_t("units",         "1"),                                   &
@@ -1541,6 +1775,8 @@ contains
         associate(var=>var_meta(kVARS%frac_within_gap))
             var%name        = "frac_within_gap"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "within_gap_fraction"),             &
                                attribute_t("units",         "1"),                                   &
@@ -1552,6 +1788,8 @@ contains
         associate(var=>var_meta(kVARS%ground_temperature_canopy))
             var%name        = "ground_temperature_canopy"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "under_canopy_ground_temperature"), &
                                attribute_t("units",         "K"),                                   &
@@ -1563,6 +1801,8 @@ contains
         associate(var=>var_meta(kVARS%ground_temperature_bare))
             var%name        = "ground_temperature_bare"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "bare_ground_temperature"),         &
                                attribute_t("units",         "K"),                                   &
@@ -1574,6 +1814,8 @@ contains
         associate(var=>var_meta(kVARS%snowfall_ground))
             var%name        = "snowfall_ground"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "ground_snow_rate"),                &
                                attribute_t("units",         "mm s-1"),                              &
@@ -1585,6 +1827,8 @@ contains
         associate(var=>var_meta(kVARS%rainfall_ground))
             var%name        = "rainfall_ground"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "ground_rain_rate"),                &
                                attribute_t("units",         "mm s-1"),                                   &
@@ -1596,6 +1840,8 @@ contains
         associate(var=>var_meta(kVARS%snow_water_equivalent))
             var%name        = "swe"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_snow_amount"),                 &
                                attribute_t("units",         "kg m-2"),                              &
@@ -1607,6 +1853,8 @@ contains
         associate(var=>var_meta(kVARS%snow_water_eq_prev))
             var%name        = "swe_0"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "surface_snow_amount_prev"),        &
                                attribute_t("units",         "kg m-2"),                              &
@@ -1618,6 +1866,8 @@ contains
         associate(var=>var_meta(kVARS%snow_albedo_prev))
             var%name        = "snow_albedo_0"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "snowpack_albedo_prev"),            &
                                attribute_t("units",         "1"),                                   &
@@ -1629,7 +1879,10 @@ contains
         associate(var=>var_meta(kVARS%snow_temperature))
             var%name        = "snow_temperature"
             var%dimensions  = three_d_t_snow_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kSNOW_GRID_Z
             var%attributes  = [attribute_t("standard_name", "temperature_in_surface_snow"),         &
                                attribute_t("units",         "K"),                                   &
                                attribute_t("coordinates",   "lat lon")]
@@ -1640,7 +1893,10 @@ contains
         associate(var=>var_meta(kVARS%snow_layer_depth))
             var%name        = "snow_layer_depth"
             var%dimensions  = three_d_t_snowsoil_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kSNOWSOIL_GRID_Z
             var%attributes  = [attribute_t("non_standard_name", "snow_layer_depth"),                &
                                attribute_t("units",         "m"),                                   &
                                attribute_t("coordinates",   "lat lon")]
@@ -1651,7 +1907,10 @@ contains
         associate(var=>var_meta(kVARS%snow_layer_ice))
             var%name        = "snow_layer_ice"
             var%dimensions  = three_d_t_snow_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kSNOW_GRID_Z
             var%attributes  = [attribute_t("non_standard_name", "snow_layer_ice_content"),          &
                                attribute_t("units",         "mm"),                                  &
                                attribute_t("coordinates",   "lat lon")]
@@ -1662,7 +1921,10 @@ contains
         associate(var=>var_meta(kVARS%snow_layer_liquid_water))
             var%name        = "snow_layer_liquid_water"
             var%dimensions  = three_d_t_snow_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kSNOW_GRID_Z
             var%attributes  = [attribute_t("non_standard_name", "snow_layer_liquid_water_content"), &
                                attribute_t("units",         "mm"),                                  &
                                attribute_t("coordinates",   "lat lon")]
@@ -1673,6 +1935,8 @@ contains
         associate(var=>var_meta(kVARS%snow_age_factor))
             var%name        = "tau_ss"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "snow_age_factor"),                 &
                                attribute_t("units",         "1"),                                   &
@@ -1684,6 +1948,8 @@ contains
         associate(var=>var_meta(kVARS%snow_height))
             var%name        = "snow_height"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_snow_height"),                 &
                                attribute_t("units",         "m"),                                   &
@@ -1695,6 +1961,8 @@ contains
         associate(var=>var_meta(kVARS%snow_nlayers))
             var%name        = "snow_nlayers"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "snow_nlayers"),                    &
                                attribute_t("units",         "1"),                                   &
@@ -1706,7 +1974,10 @@ contains
         associate(var=>var_meta(kVARS%soil_water_content))
             var%name        = "soil_water_content"
             var%dimensions  = three_d_t_soil_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kSOIL_GRID_Z
             var%attributes  = [attribute_t("standard_name", "moisture_content_of_soil_layer"),      &
                                attribute_t("units",         "kg m-2"),                              &
                                attribute_t("coordinates",   "lat lon")]
@@ -1717,7 +1988,10 @@ contains
         associate(var=>var_meta(kVARS%eq_soil_moisture))
             var%name        = "eq_soil_moisture"
             var%dimensions  = three_d_t_soil_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kSOIL_GRID_Z
             var%attributes  = [attribute_t("non_standard_name", "equilibrium_volumetric_soil_moisture"), &
                                attribute_t("units",         "m3 m-3"),                                   &
                                attribute_t("coordinates",   "lat lon")]
@@ -1728,6 +2002,8 @@ contains
         associate(var=>var_meta(kVARS%smc_watertable_deep))
             var%name        = "smc_watertable_deep"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "soil_moisture_content_in_layer_to_water_table_when_deep"), &
                                attribute_t("units",         "m3 m-3"),                                                      & !units not defined in noahmpdrv (guess)
@@ -1739,6 +2015,8 @@ contains
         associate(var=>var_meta(kVARS%recharge))
             var%name        = "recharge"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "groundwater_recharge"),            &
                                attribute_t("units",         "mm"),                                  & !units not defined in noahmpdrv (guess)
@@ -1750,6 +2028,8 @@ contains
         associate(var=>var_meta(kVARS%recharge_deep))
             var%name        = "recharge_deep"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "groundwater_recharge_deep"),           &
                                attribute_t("units",         "mm"),                                  & !units not defined in noahmpdrv (guess)
@@ -1761,6 +2041,8 @@ contains
         associate(var=>var_meta(kVARS%evap_canopy))
             var%name        = "evap_canopy"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "water_evaporation_flux_from_canopy"),  &
                                attribute_t("units",         "mm s-1"),                              &
@@ -1772,6 +2054,8 @@ contains
         associate(var=>var_meta(kVARS%evap_soil_surface))
             var%name        = "evap_soil_surface"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "water_evaporation_flux_from_soil"),    &
                                attribute_t("units",         "mm s-1"),                              &
@@ -1783,6 +2067,8 @@ contains
         associate(var=>var_meta(kVARS%transpiration_rate))
             var%name        = "transpiration_rate"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "transpiration_rate"),              &
                                attribute_t("units",         "mm s-1"),                              &
@@ -1794,6 +2080,8 @@ contains
         associate(var=>var_meta(kVARS%ch_veg))
             var%name        = "ch_veg"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "ch_vegetated"),                    &
                                attribute_t("units",         "1"),                                   &
@@ -1805,6 +2093,8 @@ contains
         associate(var=>var_meta(kVARS%ch_veg_2m))
             var%name        = "ch_veg_2m"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "ch_vegetated_2m"),                 &
                                attribute_t("units",         "1"),                                   &
@@ -1816,6 +2106,8 @@ contains
         associate(var=>var_meta(kVARS%ch_bare))
             var%name        = "ch_bare"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "ch_bare_ground"),                  &
                                attribute_t("units",         "1"),                                   &
@@ -1827,6 +2119,8 @@ contains
         associate(var=>var_meta(kVARS%ch_bare_2m))
             var%name        = "ch_bare_2m"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "ch_bare_2m"),                      &
                                attribute_t("units",         "1"),                                   &
@@ -1838,6 +2132,8 @@ contains
         associate(var=>var_meta(kVARS%ch_under_canopy))
             var%name        = "ch_under_canopy"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "ch_under_canopy"),                 &
                                attribute_t("units",         "1"),                                   &
@@ -1849,6 +2145,8 @@ contains
         associate(var=>var_meta(kVARS%ch_leaf))
             var%name        = "ch_leaf"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "ch_leaf"),                         &
                                attribute_t("units",         "1"),                                   &
@@ -1860,6 +2158,8 @@ contains
         associate(var=>var_meta(kVARS%sensible_heat_veg))
             var%name        = "sensible_heat_veg"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "sensible_heat_veg"),               &
                                attribute_t("units",         "W m-2"),                               &
@@ -1871,6 +2171,8 @@ contains
         associate(var=>var_meta(kVARS%sensible_heat_bare))
             var%name        = "sensible_heat_bare"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "sensible_heat_bare"),              &
                                attribute_t("units",         "W m-2"),                               &
@@ -1882,6 +2184,8 @@ contains
         associate(var=>var_meta(kVARS%sensible_heat_canopy))
             var%name        = "sensible_heat_canopy"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "sensible_heat_canopy"),            &
                                attribute_t("units",         "W m-2"),                               &
@@ -1893,6 +2197,8 @@ contains
         associate(var=>var_meta(kVARS%evap_heat_veg))
             var%name        = "evap_heat_veg"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "evap_heat_veg"),                   &
                                attribute_t("units",         "W m-2"),                               &
@@ -1904,6 +2210,8 @@ contains
         associate(var=>var_meta(kVARS%evap_heat_bare))
             var%name        = "evap_heat_bare"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "evap_heat_bare"),                  &
                                attribute_t("units",         "W m-2"),                               &
@@ -1915,6 +2223,8 @@ contains
         associate(var=>var_meta(kVARS%evap_heat_canopy))
             var%name        = "evap_heat_canopy"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "evap_heat_canopy"),                &
                                attribute_t("units",         "W m-2"),                               &
@@ -1926,6 +2236,8 @@ contains
         associate(var=>var_meta(kVARS%transpiration_heat))
             var%name        = "transpiration_heat"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "transpiration_heat"),              &
                                attribute_t("units",         "W m-2"),                               &
@@ -1937,6 +2249,8 @@ contains
         associate(var=>var_meta(kVARS%ground_heat_veg))
             var%name        = "ground_heat_veg"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "ground_heat_veg"),                 &
                                attribute_t("units",         "W m-2"),                               &
@@ -1948,6 +2262,8 @@ contains
         associate(var=>var_meta(kVARS%ground_heat_bare))
             var%name        = "ground_heat_bare"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "ground_heat_bare"),                &
                                attribute_t("units",         "W m-2"),                               &
@@ -1959,6 +2275,8 @@ contains
         associate(var=>var_meta(kVARS%net_longwave_veg))
             var%name        = "net_longwave_veg"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "net_longwave_veg"),                &
                                attribute_t("units",         "W m-2"),                               &
@@ -1970,6 +2288,8 @@ contains
         associate(var=>var_meta(kVARS%net_longwave_bare))
             var%name        = "net_longwave_bare"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "net_longwave_bare"),               &
                                attribute_t("units",         "W m-2"),                               &
@@ -1981,6 +2301,8 @@ contains
         associate(var=>var_meta(kVARS%net_longwave_canopy))
             var%name        = "net_longwave_canopy"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "net_longwave_canopy"),             &
                                attribute_t("units",         "W m-2"),                               &
@@ -1992,6 +2314,8 @@ contains
         associate(var=>var_meta(kVARS%runoff_surface))
             var%name        = "runoff_surface"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_runoff_flux"),                 &
                                attribute_t("units",         "mm s-1"),                              &
@@ -2003,6 +2327,8 @@ contains
         associate(var=>var_meta(kVARS%runoff_subsurface))
             var%name        = "runoff_subsurface"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "subsurface_runoff_flux"),          &
                                attribute_t("units",         "mm s-1"),                              &
@@ -2014,6 +2340,8 @@ contains
         associate(var=>var_meta(kVARS%soil_totalmoisture))
             var%name        = "soil_column_total_water"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "soil_moisture_content"),               &
                                attribute_t("units",         "kg m-2"),                              &
@@ -2025,7 +2353,10 @@ contains
         associate(var=>var_meta(kVARS%soil_temperature))
             var%name        = "soil_temperature"
             var%dimensions  = three_d_t_soil_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kSOIL_GRID_Z
             var%attributes  = [attribute_t("standard_name", "soil_temperature"),                    &
                                attribute_t("units",         "K"),                                   &
                                attribute_t("coordinates",   "lat lon")]
@@ -2036,6 +2367,8 @@ contains
         associate(var=>var_meta(kVARS%soil_deep_temperature))
             var%name        = "soil_deep_temperature"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "deep_soil_temperature"),           &
                                attribute_t("units",         "K"),                                   &
                                attribute_t("coordinates",   "lat lon")]
@@ -2046,6 +2379,8 @@ contains
         associate(var=>var_meta(kVARS%soil_carbon_stable))
             var%name        = "soil_carbon_stable"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("standard_name", "slow_soil_pool_mass_content_of_carbon"), &
                                attribute_t("units",         "g m-2"),                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -2056,6 +2391,8 @@ contains
         associate(var=>var_meta(kVARS%soil_carbon_fast))
             var%name        = "soil_carbon_fast"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("standard_name", "fast_soil_pool_mass_content_of_carbon"), &
                                attribute_t("units",         "g m-2"),                                 &
                                attribute_t("coordinates",   "lat lon")]
@@ -2066,6 +2403,8 @@ contains
         associate(var=>var_meta(kVARS%soil_texture_1))
             var%name        = "soil_class_1"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "soil_class_layer1"),                 &
                                attribute_t("units",         "1"),                                     &
                                attribute_t("coordinates",   "lat lon")]
@@ -2076,6 +2415,8 @@ contains
         associate(var=>var_meta(kVARS%soil_texture_2))
             var%name        = "soil_class_2"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "soil_class_layer2"),                 &
                                attribute_t("units",         "1"),                                     &
                                attribute_t("coordinates",   "lat lon")]
@@ -2086,6 +2427,8 @@ contains
         associate(var=>var_meta(kVARS%soil_texture_3))
             var%name        = "soil_class_3"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "soil_class_layer3"),                 &
                                attribute_t("units",         "1"),                                     &
                                attribute_t("coordinates",   "lat lon")]
@@ -2096,6 +2439,8 @@ contains
         associate(var=>var_meta(kVARS%soil_texture_4))
             var%name        = "soil_class_4"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "soil_class_layer4"),                 &
                                attribute_t("units",         "1"),                                     &
                                attribute_t("coordinates",   "lat lon")]
@@ -2106,6 +2451,9 @@ contains
         associate(var=>var_meta(kVARS%soil_sand_and_clay))
             var%name        = "soil_sand_and_clay_composition"
             var%dimensions  = three_d_soilcomp_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dim_len(3)  = kSOILCOMP_GRID_Z
             var%attributes  = [attribute_t("non_standard_name", "soil_sand_and_clay_composition"),    &
                                attribute_t("units",         "1"),                                     &
                                attribute_t("coordinates",   "lat lon")]
@@ -2116,6 +2464,8 @@ contains
         associate(var=>var_meta(kVARS%water_table_depth))
             var%name        = "water_table_depth"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("standard_name", "water_table_depth"),                    &
                                attribute_t("units",         "m"),                                    &
                                attribute_t("coordinates",   "lat lon")]
@@ -2126,6 +2476,8 @@ contains
         associate(var=>var_meta(kVARS%water_aquifer))
             var%name        = "water_aquifer"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "water_in_aquifer"),                 &
                                attribute_t("units",         "mm"),                                   &
                                attribute_t("coordinates",   "lat lon")]
@@ -2136,6 +2488,8 @@ contains
         associate(var=>var_meta(kVARS%storage_gw))
             var%name        = "storage_gw"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "groundwater_storage"),              &
                                attribute_t("units",         "mm"),                                   &
                                attribute_t("coordinates",   "lat lon")]
@@ -2146,6 +2500,8 @@ contains
         associate(var=>var_meta(kVARS%storage_lake))
             var%name        = "storage_lake"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "lake_storage"),                     &
                                attribute_t("units",         "mm"),                                   &
                                attribute_t("coordinates",   "lat lon")]
@@ -2156,6 +2512,8 @@ contains
         associate(var=>var_meta(kVARS%roughness_z0))
             var%name        = "surface_roughness"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_roughness_length"),            &
                                attribute_t("long_name",     "Surface roughness length"),            &
@@ -2168,6 +2526,8 @@ contains
         associate(var=>var_meta(kVARS%surface_rad_temperature))
             var%name        = "surface_rad_temperature"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_radiative_temperature"),       &
                                attribute_t("units",         "K"),                                   &
@@ -2179,6 +2539,8 @@ contains
         associate(var=>var_meta(kVARS%temperature_2m))
             var%name        = "ta2m"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "air_temperature"),                     &
                                attribute_t("long_name",     "Bulk air temperature at 2m"),          &
@@ -2191,6 +2553,8 @@ contains
         associate(var=>var_meta(kVARS%temperature_2m_veg))
             var%name        = "temperature_2m_veg"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "air_temperature"),                     &
                                attribute_t("units",         "K"),                                   &
@@ -2202,6 +2566,8 @@ contains
         associate(var=>var_meta(kVARS%temperature_2m_bare))
             var%name        = "temperature_2m_bare"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "air_temperature"),                     &
                                attribute_t("units",         "K"),                                   &
@@ -2213,6 +2579,8 @@ contains
         associate(var=>var_meta(kVARS%mixing_ratio_2m_veg))
             var%name        = "mixing_ratio_2m_veg"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "mixing_ratio"),                    &
                                attribute_t("units",         "kg kg-1"),                             &
@@ -2224,6 +2592,8 @@ contains
         associate(var=>var_meta(kVARS%mixing_ratio_2m_bare))
             var%name        = "mixing_ratio_2m_bare"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "mixing_ratio"),                    &
                                attribute_t("units",         "kg kg-1"),                             &
@@ -2235,6 +2605,8 @@ contains
         associate(var=>var_meta(kVARS%humidity_2m))
             var%name        = "hus2m"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "specific_humidity"),                   &
                                attribute_t("units",         "kg kg-2"),                             &
@@ -2246,6 +2618,8 @@ contains
         associate(var=>var_meta(kVARS%v_10m))
             var%name        = "v10m"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "northward_10m_wind_speed"),            &
                                attribute_t("units",         "m s-1"),                               &
@@ -2257,6 +2631,8 @@ contains
         associate(var=>var_meta(kVARS%u_10m))
             var%name        = "u10m"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "eastward_10m_wind_speed"),             &
                                attribute_t("units",         "m s-1"),                               &
@@ -2268,6 +2644,8 @@ contains
         associate(var=>var_meta(kVARS%coeff_momentum_drag))
             var%name        = "coeff_momentum_drag"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_drag_coefficient_for_momentum_in_air"), &
                                attribute_t("units",         "1"),                                            &
@@ -2279,6 +2657,8 @@ contains
         associate(var=>var_meta(kVARS%coeff_heat_exchange))
             var%name        = "coeff_heat_exchange"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "sensible_heat_exchange_coefficient"), &
                                attribute_t("units",         "1"),                                      &
@@ -2290,6 +2670,8 @@ contains
         associate(var=>var_meta(kVARS%skin_temperature))
             var%name        = "ts"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_temperature"),                 &
                                attribute_t("units",         "K"),                                   &
@@ -2301,6 +2683,8 @@ contains
         associate(var=>var_meta(kVARS%sensible_heat))
             var%name        = "hfss"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_upward_sensible_heat_flux"),   &
                                attribute_t("units",         "W m-2"),                               &
@@ -2312,6 +2696,8 @@ contains
         associate(var=>var_meta(kVARS%latent_heat))
             var%name        = "hfls"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_upward_latent_heat_flux"),     &
                                attribute_t("units",         "W m-2"),                               &
@@ -2323,6 +2709,8 @@ contains
         associate(var=>var_meta(kVARS%land_mask))
             var%name        = "land_mask"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("non_standard_name", "land_water_mask"),                 &
                                attribute_t("coordinates",       "lat lon")]
         end associate
@@ -2332,6 +2720,8 @@ contains
         associate(var=>var_meta(kVARS%terrain))
             var%name        = "terrain"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("standard_name", "height_above_reference_ellipsoid"),    &
                                attribute_t("units",         "m"),                                   &
                                attribute_t("coordinates",   "lat lon")]
@@ -2342,6 +2732,8 @@ contains
         associate(var=>var_meta(kVARS%latitude))
             var%name        = "lat"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("standard_name", "latitude"),                            &
                                attribute_t("units",         "degrees_north"),                       &
                                attribute_t("axis","Y")]
@@ -2352,6 +2744,8 @@ contains
         associate(var=>var_meta(kVARS%longitude))
             var%name        = "lon"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("standard_name", "longitude"),                           &
                                attribute_t("units",         "degrees_east"),                        &
                                attribute_t("axis","X")]
@@ -2362,6 +2756,9 @@ contains
         associate(var=>var_meta(kVARS%u_latitude))
             var%name        = "u_lat"
             var%dimensions  = two_d_u_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%xstag       = 1
             var%attributes  = [attribute_t("non_standard_name", "latitude_on_u_grid"),              &
                                attribute_t("units",         "degrees_north")]
         end associate
@@ -2371,6 +2768,9 @@ contains
         associate(var=>var_meta(kVARS%u_longitude))
             var%name        = "u_lon"
             var%dimensions  = two_d_u_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%xstag       = 1
             var%attributes  = [attribute_t("non_standard_name", "longitude_on_u_grid"),             &
                                attribute_t("units",         "degrees_east")]
         end associate
@@ -2380,6 +2780,9 @@ contains
         associate(var=>var_meta(kVARS%v_latitude))
             var%name        = "v_lat"
             var%dimensions  = two_d_v_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%ystag       = 1
             var%attributes  = [attribute_t("non_standard_name", "latitude_on_v_grid"),              &
                                attribute_t("units",         "degrees_north")]
         end associate
@@ -2389,6 +2792,9 @@ contains
         associate(var=>var_meta(kVARS%v_longitude))
             var%name        = "v_lon"
             var%dimensions  = two_d_v_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%ystag       = 1
             var%attributes  = [attribute_t("non_standard_name", "longitude_on_v_grid"),             &
                                attribute_t("units",         "degrees_east")]
         end associate

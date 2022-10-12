@@ -353,7 +353,7 @@ contains
         jts = domain%grid%jts
         jte = domain%grid%jte
         
-        if (.not.allocated(domain%advection_dz)) then
+        if (.not.associated(domain%w%meta_data%dqdt_3d)) then
 
             call init_winds(domain, options)
             !call initialize_blocking(domain, options)

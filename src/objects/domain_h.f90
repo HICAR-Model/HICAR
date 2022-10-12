@@ -325,7 +325,8 @@ module domain_interface
     real, allocatable :: west_in(:,:,:,:)[:]
     real, allocatable :: east_in(:,:,:,:)[:]
 
-    
+    ! MPI communicator object for doing parallel communications among domain objects
+    integer, public :: IO_comms
 
     ! contains the size of the domain (or the local tile?)
     integer :: nx, ny, nz, nx_global, ny_global
@@ -346,7 +347,7 @@ module domain_interface
   contains
     procedure :: init
     procedure :: var_request
-
+    
     procedure :: halo_send
     procedure :: halo_retrieve
     procedure :: halo_exchange
@@ -374,7 +375,7 @@ module domain_interface
         class(domain_t), intent(inout) :: this
         type(options_t), intent(inout) :: options
     end subroutine
-
+    
     ! read initial atmospheric conditions from forcing data
     module subroutine get_initial_conditions(this, forcing, options, external_conditions)
         implicit none

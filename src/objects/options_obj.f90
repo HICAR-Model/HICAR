@@ -57,7 +57,7 @@ contains
         call wind_namelist(         options_filename,   this)
         call var_namelist(          options_filename,   this%parameters)
         call parameters_namelist(   options_filename,   this%parameters)
-        call output_namelist(       options_filename,   this%output_options)
+        call io_namelist(           options_filename,   this%io_options)
         call model_levels_namelist( options_filename,   this%parameters)
 
         call time_parameters_namelist(         options_filename,   this)
@@ -592,32 +592,34 @@ contains
     !> -------------------------------
     !! Initialize the variable names to be written to standard output
     !!
-    !! Reads the output_list namelist
+    !! Reads the io_list namelist
     !!
     !! -------------------------------
-    subroutine output_namelist(filename, options)
+    subroutine io_namelist(filename, options)
         implicit none
         character(len=*),             intent(in)    :: filename
-        type(output_options_type), intent(inout) :: options
+        type(io_options_type),        intent(inout) :: options
 
-        integer :: name_unit, i, j, status
-        real    :: outputinterval, restartinterval
+        integer :: name_unit, i, j, status, frames_per_outfile
+        real    :: outputinterval, restartinterval, inputinterval
 
-        character(len=kMAX_FILE_LENGTH) :: output_file, restart_file
+        character(len=kMAX_FILE_LENGTH) :: output_file, restart_out_file
         character(len=kMAX_NAME_LENGTH) :: names(kMAX_STORAGE_VARS)
         character (len=MAXFILELENGTH) :: output_file_frequency
 
-        namelist /output_list/ names, outputinterval, restartinterval, &
-                               output_file, restart_file, output_file_frequency
+        namelist /io_list/ names, outputinterval, restartinterval, inputinterval, frames_per_outfile, &
+                               output_file, restart_out_file, output_file_frequency
 
         output_file         = "icar_out_"
-        restart_file        = "icar_rst_"
+        restart_out_file        = "icar_rst_"
         names(:)            = ""
-        outputinterval      =  3600
         restartinterval     =  24 ! in units of outputintervals
+        inputinterval       =  3600
+        outputinterval      =  3600
+        frames_per_outfile  =  24
 
         open(io_newunit(name_unit), file=filename)
-        read(name_unit, nml=output_list)
+        read(name_unit, nml=io_list)
         close(name_unit)
 
         do j=1, kMAX_STORAGE_VARS
@@ -629,9 +631,6 @@ contains
                 enddo
             endif
         enddo
-
-        options%out_dt     = outputinterval
-        call options%output_dt%set(seconds=outputinterval)
 
         if (trim(output_file_frequency) /= "") then
             options%output_file_frequency = output_file_frequency
@@ -648,6 +647,12 @@ contains
             endif
         endif
 
+        options%in_dt      = inputinterval
+        call options%input_dt%set(seconds=inputinterval)
+
+        options%out_dt     = outputinterval
+        call options%output_dt%set(seconds=outputinterval)
+
         options%rst_dt = outputinterval * restartinterval
         call options%restart_dt%set(seconds=options%rst_dt)
 
@@ -656,12 +661,14 @@ contains
         else
             options%restart_count = max(24, nint(restartinterval))
         endif
+        
+        options%frames_per_outfile = frames_per_outfile
 
         options%output_file = output_file
-        options%restart_file = restart_file
+        options%restart_out_file = restart_out_file
 
 
-    end subroutine output_namelist
+    end subroutine io_namelist
 
 
     !> -------------------------------
@@ -966,7 +973,7 @@ contains
         type(time_delta_t) :: dt
         ! parameters to read
 
-        real    :: dx, dxlow, outputinterval, restartinterval, inputinterval, t_offset, smooth_wind_distance, frames_per_outfile, agl_cap
+        real    :: dx, dxlow, t_offset, smooth_wind_distance, agl_cap
         integer :: ntimesteps, wind_iterations
         integer :: longitude_system
         integer :: nz, n_ext_winds,buffer, warning_level
@@ -985,7 +992,7 @@ contains
                                         cu_options_filename, rad_options_filename
 
 
-        namelist /parameters/ ntimesteps, wind_iterations, outputinterval, frames_per_outfile, inputinterval, surface_io_only,                &
+        namelist /parameters/ ntimesteps, wind_iterations, surface_io_only,                &
                               dx, dxlow, ideal, readz, readdz, nz, t_offset,                             &
                               debug, warning_level, interactive, restart,                                &
                               external_winds, buffer, n_ext_winds, advect_density, smooth_wind_distance, &
@@ -1029,7 +1036,6 @@ contains
         nz                  =  MAXLEVELS
         smooth_wind_distance= -9999
         calendar            = "gregorian"
-        inputinterval       = 3600
         high_res_soil_state = .False.
         use_agl_height      = .False.
         agl_cap             = 300
@@ -1038,9 +1044,6 @@ contains
         forcing_start_date  = ""
         end_date            = ""
         time_varying_z      = .False.
-        inputinterval       =  3600
-        outputinterval      =  3600
-        frames_per_outfile  =  24
         longitude_system    = kMAINTAIN_LON
 
         ! flag set to read specific parameterization options
@@ -1112,11 +1115,6 @@ contains
         options%smooth_wind_distance = smooth_wind_distance
         options%longitude_system = longitude_system
 
-        options%in_dt      = inputinterval
-        call options%input_dt%set(seconds=inputinterval)
-
-        options%out_dt     = outputinterval
-        call options%output_dt%set(seconds=outputinterval)
         ! if outputing at half-day or longer intervals, create monthly files
         ! if (outputinterval>=43200) then
         !     options%output_file_frequency="monthly"
@@ -1129,7 +1127,6 @@ contains
         ! endif
 
         ! options%paramters%frames_per_outfile : this may cause trouble with the above, but a nicer way
-        options%frames_per_outfile = frames_per_outfile
 
         ! options%surface_io_only = surface_io_only
 
@@ -1148,8 +1145,9 @@ contains
             call options%end_time%init(calendar)
             call options%end_time%set(end_date)
         else
-            call dt%set(seconds=ntimesteps * inputinterval)
-            options%end_time = options%start_time + dt
+            stop 'end data must be supplied in namelist'
+        !    call dt%set(seconds=ntimesteps * inputinterval)
+        !    options%end_time = options%start_time + dt
         endif
 
         options%dx               = dx

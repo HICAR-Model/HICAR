@@ -1,6 +1,6 @@
 module exchangeable_interface
   use assertions_mod,          only : assert, assertions
-  use icar_constants,          only : kMAX_NAME_LENGTH
+  use icar_constants
   use grid_interface,          only : grid_t
   use variable_interface,      only : variable_t
   implicit none
