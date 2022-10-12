@@ -296,7 +296,7 @@ contains
 
         
         !Assign one io process per node, up to 10 processes
-        kNUM_SERVERS = ceiling(mod(num_images(),36)) !min(ceiling(0.05*num_images()),10)
+        kNUM_SERVERS = ceiling(num_images()/36.0) !min(ceiling(0.05*num_images()),10)
         kNUM_COMPUTE = num_images()-kNUM_SERVERS
         !If we are the 2nd process on a node (how to find this out?), or if there is only 1 process on a node
         !make us the parent

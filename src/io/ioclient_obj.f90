@@ -62,7 +62,7 @@ contains
         integer :: i, n, nx, ny
         
         !Send domain fields to parent ca_write_buffer
-        associate(list => domain%adv_vars)
+        associate(list => domain%vars_to_out)
         n = 1
         nx = this%i_e_w - this%i_s_w + 1
         ny = this%j_e_w - this%j_s_w + 1

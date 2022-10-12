@@ -111,9 +111,7 @@ contains
                 nz = size(var%data_3d, 2)
                 if (allocated(data3d)) deallocate(data3d)
                 allocate(data3d(nx,ny,nz,1))
-                call timer%start()
                 call check_ncdf( nf90_get_var(this%ncfile_id, var%var_id, data3d, start=start_3d, count=cnt_3d), " Getting 3D var "//trim(name))
-                call timer%stop()
 
                 buffer(n,this%its:this%ite,this%kts:this%kte,this%jts:this%jte) = reshape(data3d(:,:,:,1), shape=[nx,nz,ny], order=[1,3,2])
             else if (var%two_d) then
@@ -121,8 +119,6 @@ contains
             endif
 
             n = n+1
-            write(*,*) 'var: ',trim(name),' ------- ',trim(timer%as_string())
-            call timer%reset()
         end do
         
         end associate
