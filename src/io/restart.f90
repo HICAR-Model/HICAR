@@ -35,7 +35,7 @@ subroutine read_restart_data(domain, dataset, filename, time_step)
     real, allocatable :: data_3d(:,:,:)
     real, allocatable :: data_2d(:,:)
 
-    do i=1,dataset%n_variables
+    do i=1,dataset%n_vars
 
         associate(var => dataset%variables(i))
 

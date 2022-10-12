@@ -43,22 +43,22 @@ contains
         call this%var_request(options)
         
         call read_domain_shape(this, options)
-
+        
         call create_variables(this, options)
-
+        
         call initialize_core_variables(this, options)  ! split into several subroutines?
 
         call read_land_variables(this, options)
 
         call setup_meta_data(this, options)
-        
+
         call set_adv_vars(this, options)
-        
+
         call init_relax_filters(this)
 
     end subroutine
     
-    module subroutine set_adv_vars(this, options)
+    subroutine set_adv_vars(this, options)
         class(domain_t), intent(inout) :: this
         type(options_t), intent(in)    :: options
 
@@ -122,7 +122,7 @@ contains
 
       call initialize_internal_variables(this, options)
       call this%enforce_limits()
-      this%model_time = forcing%current_time
+      this%model_time = options%parameters%start_time
 
 
       ! - - - - - - - - - - - - - - - - - - -  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -153,7 +153,7 @@ contains
     !! @param options   Model options (not used at present)
     !!
     !!------------------------------------------------------------
-    subroutine diagnostic_update(this, options)
+    module subroutine diagnostic_update(this, options)
         implicit none
         class(domain_t),  intent(inout)   :: this
         type(options_t), intent(in)      :: options
@@ -1172,6 +1172,10 @@ contains
         allocate(this%costheta( this% ims : this% ime, &
                                 this% jms : this% jme) )
 
+        allocate(this%advection_dz( this%ims:this%ime,  &
+                                    this%kms:this%kme,  &
+                                    this%jms:this%jme) )
+
 
     end subroutine allocate_z_arrays
 
@@ -1603,6 +1607,10 @@ contains
         call setup_geo(this%geo_agl,   this%latitude%data_2d,   this%longitude%data_2d,   this%z%data_3d, options%parameters%longitude_system)
         
         call setup_grid_rotations(this, options)
+        
+        do i=this%grid%kms, this%grid%kme
+            this%advection_dz(:,i,:) = options%parameters%dz_levels(i)
+        enddo
         
         ! Setup variables applicable to near-surface wind modifications
         if (options%wind%Sx) then
@@ -2441,7 +2449,7 @@ contains
         type(options_t), intent(in)     :: options
 
         real, allocatable :: temporary_data(:,:)
-        integer :: nx_global, ny_global, nz_global, nsmooth, n_neighbors, current, adv_order
+        integer :: nx_global, ny_global, nz_global, nsmooth, n_neighbors, current, adv_order, my_index
 
         nsmooth = max(1, int(options%parameters%smooth_wind_distance / options%parameters%dx))
         if (options%parameters%smooth_wind_distance == 0.0) nsmooth = 0
@@ -2494,19 +2502,17 @@ contains
         this%v_grid2d_ext%ime = min(this%v_grid2d%ime + nsmooth, this%v_grid2d%ide)
         this%v_grid2d_ext%jms = max(this%v_grid2d%jms - nsmooth, this%v_grid2d%jds)
         this%v_grid2d_ext%jme = min(this%v_grid2d%jme + nsmooth, this%v_grid2d%jde)
-
-
-        call this%grid_soil%set_grid_dimensions(     nx_global, ny_global, 4,adv_order=adv_order)
-        call this%grid_snow%set_grid_dimensions(     nx_global, ny_global, 3,adv_order=adv_order)
-        call this%grid_snowsoil%set_grid_dimensions( nx_global, ny_global, 7,adv_order=adv_order)
-        call this%grid_soilcomp%set_grid_dimensions( nx_global, ny_global, 8,adv_order=adv_order)
-        call this%grid_gecros%set_grid_dimensions(  nx_global, ny_global, 60,adv_order=adv_order)
-        call this%grid_croptype%set_grid_dimensions(  nx_global, ny_global, 5,adv_order=adv_order)
-        call this%grid_monthly%set_grid_dimensions( nx_global, ny_global, 12,adv_order=adv_order)
+        
+        call this%grid_soil%set_grid_dimensions(     nx_global, ny_global, kSOIL_GRID_Z,adv_order=adv_order)
+        call this%grid_snow%set_grid_dimensions(     nx_global, ny_global, kSNOW_GRID_Z,adv_order=adv_order)
+        call this%grid_snowsoil%set_grid_dimensions( nx_global, ny_global, kSNOWSOIL_GRID_Z,adv_order=adv_order)
+        call this%grid_soilcomp%set_grid_dimensions( nx_global, ny_global, kSOILCOMP_GRID_Z,adv_order=adv_order)
+        call this%grid_gecros%set_grid_dimensions(  nx_global, ny_global, kGECROS_GRID_Z,adv_order=adv_order)
+        call this%grid_croptype%set_grid_dimensions(  nx_global, ny_global, kCROP_GRID_Z,adv_order=adv_order)
+        call this%grid_monthly%set_grid_dimensions( nx_global, ny_global, kMONTH_GRID_Z,adv_order=adv_order)
 
 
         deallocate(temporary_data)
-
 
         this%north_boundary = (this%grid%yimg == this%grid%yimages)
         this%south_boundary = (this%grid%yimg == 1)
@@ -2521,41 +2527,44 @@ contains
         this%jme = this%grid%jme; this%jte = this%grid%jte; this%jde = this%grid%jde
         
 
-        if (.not.(this%south_boundary)) this%south_neighbor = this_image() - this%grid%ximages
-        if (.not.(this%north_boundary)) this%north_neighbor = this_image() + this%grid%ximages
-        if (.not.(this%east_boundary)) this%east_neighbor  = this_image() + 1
-        if (.not.(this%west_boundary)) this%west_neighbor  = this_image() - 1
+        my_index = FINDLOC(DOM_IMG_INDX,this_image(),dim=1)
+        !If we were found/are a compute process
+        if (my_index > 0) then
+            if (.not.(this%south_boundary)) this%south_neighbor = DOM_IMG_INDX(my_index - this%grid%ximages)
+            if (.not.(this%north_boundary)) this%north_neighbor = DOM_IMG_INDX(my_index + this%grid%ximages)
+            if (.not.(this%east_boundary)) this%east_neighbor  = DOM_IMG_INDX(my_index + 1)
+            if (.not.(this%west_boundary)) this%west_neighbor  = DOM_IMG_INDX(my_index - 1)
 
-        n_neighbors = merge(0,1,this%south_boundary)  &
+            n_neighbors = merge(0,1,this%south_boundary)  &
                      +merge(0,1,this%north_boundary)  &
                      +merge(0,1,this%east_boundary)   &
                      +merge(0,1,this%west_boundary)
-        n_neighbors = max(1, n_neighbors)
+            n_neighbors = max(1, n_neighbors)
 
-        allocate(this%neighbors(n_neighbors))
+            allocate(this%neighbors(n_neighbors))
 
-        current = 1
-        if (.not. this%south_boundary) then
-            this%neighbors(current) = this%south_neighbor
-            current = current+1
-        endif
-        if (.not. this%north_boundary) then
-            this%neighbors(current) = this%north_neighbor
-            current = current+1
-        endif
-        if (.not. this%east_boundary) then
-            this%neighbors(current) = this%east_neighbor
-            current = current+1
-        endif
-        if (.not. this%west_boundary) then
-            this%neighbors(current) = this%west_neighbor
-            current = current+1
-        endif
+            current = 1
+            if (.not. this%south_boundary) then
+                this%neighbors(current) = this%south_neighbor
+                current = current+1
+            endif
+            if (.not. this%north_boundary) then
+                this%neighbors(current) = this%north_neighbor
+                current = current+1
+            endif
+            if (.not. this%east_boundary) then
+                this%neighbors(current) = this%east_neighbor
+                current = current+1
+            endif
+            if (.not. this%west_boundary) then
+                this%neighbors(current) = this%west_neighbor
+                current = current+1
+            endif
         ! if current = 1 then all of the boundaries were set, just store ourself as our "neighbor"
-        if (current == 1) then
-            this%neighbors(current) = this_image()
+            if (current == 1) then
+                this%neighbors(current) = this_image()
+            endif
         endif
-
     end subroutine
 
     !> -------------------------------
@@ -2757,7 +2766,7 @@ contains
 
     end subroutine
 
-    module subroutine init_relax_filters(this)
+    subroutine init_relax_filters(this)
         implicit none
         class(domain_t),    intent(inout) :: this
         integer :: hs, nr, k, i

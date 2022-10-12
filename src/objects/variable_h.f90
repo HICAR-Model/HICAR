@@ -31,7 +31,8 @@ module variable_interface
         ! note these are used for netcdf output
         integer, allocatable    :: dim_ids(:)
         integer                 :: var_id = -1
-
+        integer :: xstag = 0
+        integer :: ystag = 0
     contains
         procedure, public  :: bcast_var
         procedure, public  :: init_grid

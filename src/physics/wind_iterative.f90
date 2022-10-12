@@ -75,71 +75,6 @@ contains
         update=.False.
         if (present(update_in)) update=update_in
                 
-        i_s = domain%its-1
-        i_e = domain%ite+1
-        k_s = domain%kts  
-        k_e = domain%kte  
-        j_s = domain%jts-1
-        j_e = domain%jte+1
-        
-        !i_s+hs, unless we are on global boundary, then i_s
-        if (domain%grid%ims==domain%grid%ids) i_s = domain%grid%ids
-        
-        !i_e, unless we are on global boundary, then i_e+1
-        if (domain%grid%ime==domain%grid%ide) i_e = domain%grid%ide
-        
-        !j_s+hs, unless we are on global boundary, then j_s
-        if (domain%grid%jms==domain%grid%jds) j_s = domain%grid%jds
-        
-        !j_e, unless we are on global boundary, then j_e+1
-        if (domain%grid%jme==domain%grid%jde) j_e = domain%grid%jde
-
-        hs = domain%grid%halo_size
-        if (.not.(allocated(dzdx))) then
-            !call MPI_INIT(ierr)
-            allocate(dzdx(i_s:i_e,k_s:k_e,j_s:j_e))
-            allocate(dzdy(i_s:i_e,k_s:k_e,j_s:j_e))
-            allocate(jaco(i_s:i_e,k_s:k_e,j_s:j_e))
-            allocate(sigma(i_s:i_e,k_s:k_e,j_s:j_e))
-            allocate(dz_if(i_s:i_e,k_s:k_e+1,j_s:j_e))
-            allocate(alpha(i_s:i_e,k_s:k_e,j_s:j_e))
-            allocate(div(i_s:i_e,k_s:k_e,j_s:j_e))
-            allocate( xl( 1:domain%grid%ximages ))
-            allocate( yl( 1:domain%grid%yimages ))
-            xl = 0
-            yl = 0
-            
-            dx = domain%dx
-            dzdx = domain%dzdx(i_s:i_e,k_s:k_e,j_s:j_e) 
-            dzdy = domain%dzdy(i_s:i_e,k_s:k_e,j_s:j_e)
-            jaco = domain%jacobian(i_s:i_e,k_s:k_e,j_s:j_e)
-            
-            dz_if(:,k_s,:) = domain%advection_dz(i_s:i_e,k_s,j_s:j_e)
-            dz_if(:,k_s+1:k_e,:) = (domain%advection_dz(i_s:i_e,k_s+1:k_e,j_s:j_e) + &
-                                   domain%advection_dz(i_s:i_e,k_s:k_e-1,j_s:j_e))/2
-            dz_if(:,k_e+1,:) = domain%advection_dz(i_s:i_e,k_e,j_s:j_e)
-            sigma = dz_if(:,k_s:k_e,:)/dz_if(:,k_s+1:k_e+1,:)
-            
-                    
-            !Calculate how global grid is decomposed for DMDA
-            !subtract halo size from boundaries of each cell to get x/y extent
-            if (domain%grid%yimg == 1) xl(domain%grid%ximg) = domain%grid%nx-hs*2
-            if (domain%grid%ximg == 1) yl(domain%grid%yimg) = domain%grid%ny-hs*2
-        
-            !Wait for all images to contribute their dimension            
-            call CO_MAX(xl)
-            call CO_MAX(yl)
-            
-            !Add points to xy-edges to accomodate ghost-points of DMDA grid
-            !cells at boundaries have 1 extra for ghost-point, and should also be corrected
-            !to have the hs which was falsely removed added back on
-            xl(1) = xl(1)+1+hs
-            xl(domain%grid%ximages) = xl(domain%grid%ximages)+1+hs
-
-            yl(1) = yl(1)+1+hs
-            yl(domain%grid%yimages) = yl(domain%grid%yimages)+1+hs
-            
-        endif
                 
         !Initialize div to be the initial divergence of the input wind field
         div = div_in(i_s:i_e,k_s:k_e,j_s:j_e) 
@@ -155,12 +90,12 @@ contains
                                 
         !call init_iter_winds()
                                 
-        call KSPCreate(PETSC_COMM_WORLD,ksp,ierr)
+        call KSPCreate(domain%IO_comms,ksp,ierr)
         conv_tol = 1e-4
 
         !call KSPSetTolerances(ksp,conv_tol,PETSC_DEFAULT_REAL,PETSC_DEFAULT_REAL,PETSC_DEFAULT_INTEGER,ierr)
         call KSPSetType(ksp,KSPBCGS,ierr);
-        call DMDACreate3d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DMDA_STENCIL_BOX, &
+        call DMDACreate3d(domain%IO_comms,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DMDA_STENCIL_BOX, &
                           (domain%ide+2),(domain%kde+2),(domain%jde+2),domain%grid%ximages,one,domain%grid%yimages,one,one, &
                           xl, PETSC_NULL_INTEGER,yl,da,ierr)
         
@@ -783,17 +718,92 @@ contains
         call PetscFinalize(ierr)
     end subroutine
 
-    subroutine init_iter_winds()
+    subroutine init_iter_winds(domain)
         implicit none
-
+        type(domain_t), intent(in) :: domain
         PetscErrorCode ierr
 
+        
         call PetscInitialize(PETSC_NULL_CHARACTER, ierr)
         if (ierr .ne. 0) then
             print*,'Unable to initialize PETSc'
             stop
         endif 
+        call init_module_vars(domain)
         if(this_image()==1) write(*,*) 'Initialized PETSc'
+    end subroutine
+    
+    subroutine init_module_vars(domain)
+        implicit none
+        type(domain_t), intent(in) :: domain
+
+        i_s = domain%its-1
+        i_e = domain%ite+1
+        k_s = domain%kts  
+        k_e = domain%kte  
+        j_s = domain%jts-1
+        j_e = domain%jte+1
+        
+        !i_s+hs, unless we are on global boundary, then i_s
+        if (domain%grid%ims==domain%grid%ids) i_s = domain%grid%ids
+        
+        !i_e, unless we are on global boundary, then i_e+1
+        if (domain%grid%ime==domain%grid%ide) i_e = domain%grid%ide
+        
+        !j_s+hs, unless we are on global boundary, then j_s
+        if (domain%grid%jms==domain%grid%jds) j_s = domain%grid%jds
+        
+        !j_e, unless we are on global boundary, then j_e+1
+        if (domain%grid%jme==domain%grid%jde) j_e = domain%grid%jde
+
+        hs = domain%grid%halo_size
+        if (.not.(allocated(dzdx))) then
+            !call MPI_INIT(ierr)
+            allocate(dzdx(i_s:i_e,k_s:k_e,j_s:j_e))
+            allocate(dzdy(i_s:i_e,k_s:k_e,j_s:j_e))
+            allocate(jaco(i_s:i_e,k_s:k_e,j_s:j_e))
+            allocate(sigma(i_s:i_e,k_s:k_e,j_s:j_e))
+            allocate(dz_if(i_s:i_e,k_s:k_e+1,j_s:j_e))
+            allocate(alpha(i_s:i_e,k_s:k_e,j_s:j_e))
+            allocate(div(i_s:i_e,k_s:k_e,j_s:j_e))
+            allocate( xl( 1:domain%grid%ximages ))
+            allocate( yl( 1:domain%grid%yimages ))
+            xl = 0
+            yl = 0
+            
+            dx = domain%dx
+            dzdx = domain%dzdx(i_s:i_e,k_s:k_e,j_s:j_e) 
+            dzdy = domain%dzdy(i_s:i_e,k_s:k_e,j_s:j_e)
+            jaco = domain%jacobian(i_s:i_e,k_s:k_e,j_s:j_e)
+            
+            dz_if(:,k_s,:) = domain%advection_dz(i_s:i_e,k_s,j_s:j_e)
+            dz_if(:,k_s+1:k_e,:) = (domain%advection_dz(i_s:i_e,k_s+1:k_e,j_s:j_e) + &
+                                   domain%advection_dz(i_s:i_e,k_s:k_e-1,j_s:j_e))/2
+            dz_if(:,k_e+1,:) = domain%advection_dz(i_s:i_e,k_e,j_s:j_e)
+            sigma = dz_if(:,k_s:k_e,:)/dz_if(:,k_s+1:k_e+1,:)
+            
+                    
+            !Calculate how global grid is decomposed for DMDA
+            !subtract halo size from boundaries of each cell to get x/y extent
+            if (domain%grid%yimg == 1) xl(domain%grid%ximg) = domain%grid%nx-hs*2
+            if (domain%grid%ximg == 1) yl(domain%grid%yimg) = domain%grid%ny-hs*2
+        
+            !Wait for all images to contribute their dimension            
+            call CO_MAX(xl)
+            call CO_MAX(yl)
+            
+            !Add points to xy-edges to accomodate ghost-points of DMDA grid
+            !cells at boundaries have 1 extra for ghost-point, and should also be corrected
+            !to have the hs which was falsely removed added back on
+            xl(1) = xl(1)+1+hs
+            xl(domain%grid%ximages) = xl(domain%grid%ximages)+1+hs
+
+            yl(1) = yl(1)+1+hs
+            yl(domain%grid%yimages) = yl(domain%grid%yimages)+1+hs
+            
+        endif
+
+    
     end subroutine
 
 end module wind_iterative

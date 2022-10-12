@@ -27,7 +27,7 @@ module time_step
 
     implicit none
     private
-    public :: step, update_dt
+    public :: step, update_dt, dt_reduce
 
 contains
 
@@ -239,6 +239,22 @@ contains
                             options%time_options%cfl_reduction_factor, &
                             cfl_strictness=options%time_options%cfl_strictness, use_density=.false.)
         endif
+        
+        call dt_reduce(dt, future_seconds, seconds)
+
+    end subroutine update_dt
+    
+    !Wrapper function to enable the I/O Processes to call CO_Min as well
+    subroutine dt_reduce(dt, future_seconds, seconds_in)
+        implicit none
+        type(time_delta_t), intent(inout) :: dt
+        double precision,   intent(inout) :: future_seconds
+        double precision,   intent(in)    :: seconds_in
+
+        double precision :: seconds
+        
+        seconds = seconds_in
+        
         ! perform a reduction across all images to find the minimum time step required
 !#ifndef __INTEL_COMPILER
 !        call CO_MIN(seconds)
@@ -256,7 +272,7 @@ contains
         if (dt%seconds() > future_seconds) call dt%set(seconds=min(future_seconds,120.0D0))
         if (this_image()==1) write(*,*) 'time_step: ',dt%seconds()
 
-    end subroutine update_dt
+    end subroutine dt_reduce
     
 !    subroutine update_dt(dt, options, domain, end_time)
 !        implicit none

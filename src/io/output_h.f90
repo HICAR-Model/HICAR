@@ -19,6 +19,7 @@ module output_interface
   use domain_interface,   only : domain_t
   use meta_data_interface,only : meta_data_t
   use time_object,        only : Time_type, THREESIXTY, GREGORIAN, NOCALENDAR, NOLEAP
+  use options_interface,  only : options_t
 
   implicit none
 
@@ -37,7 +38,7 @@ module output_interface
       ! Store the variables to be written
       ! Note n_variables may be smaller then size(variables) so that it doesn't
       ! have to keep reallocating variables whenever something is added or removed
-      integer, public :: n_variables = 0
+      integer, public :: n_vars = 0
       type(variable_t), public, allocatable :: variables(:)
       ! time variable , publicis stored outside of the variable list... probably need to think about that some
       type(variable_t) :: time
@@ -47,13 +48,21 @@ module output_interface
       logical :: creating = .false.
 
       ! The filename of the netcdf file to write
-      character(len=kMAX_FILE_LENGTH) :: filename
+      character(len=kMAX_FILE_LENGTH), public :: filename, base_file_name
+
+      character(len=49)   :: file_date_format = '(I4,"-",I0.2,"-",I0.2,"_",I0.2,"-",I0.2,"-",I0.2)'
 
       ! the netcdf ID for an open file
-      integer :: ncfile_id
+      integer :: ncfile_id = -1
 
       ! number of dimensions in the file
       integer :: n_dims = 0
+
+      integer :: its, ite, kts, kte, jts, jte
+
+      integer :: output_counter, output_count
+
+      integer :: global_dim_len(3)
 
       ! list of netcdf dimension IDs
       integer :: dim_ids(kMAX_DIMENSIONS)
@@ -64,10 +73,11 @@ module output_interface
 
       procedure, public  :: add_to_output
       procedure, public  :: add_variables
-      procedure, public  :: set_domain
+      procedure, public  :: set_attrs
       procedure, public  :: save_file
+      procedure, public  :: close_file
 
-      procedure, private :: init
+      procedure, public  :: init
       procedure, private :: increase_var_capacity
   end type
 
@@ -77,9 +87,12 @@ module output_interface
       !! Initialize the object (e.g. allocate the variables array)
       !!
       !!----------------------------------------------------------
-      module subroutine init(this)
-          implicit none
-          class(output_t),   intent(inout)  :: this
+      module subroutine init(this, domain, options, its, ite, kts, kte, jts, jte)
+        implicit none
+        class(output_t),  intent(inout)  :: this
+        type(domain_t),   intent(in)     :: domain
+        type(options_t),  intent(in)     :: options
+        integer,          intent(in)     :: its, ite, kts, kte, jts, jte
 
       end subroutine
 
@@ -96,7 +109,7 @@ module output_interface
       !! Set the domain data structure to be used when writing
       !!
       !!----------------------------------------------------------
-      module subroutine set_domain(this, domain)
+      module subroutine set_attrs(this, domain)
           implicit none
           class(output_t),  intent(inout)  :: this
           type(domain_t),   intent(in)     :: domain
@@ -106,34 +119,37 @@ module output_interface
       !! Add a variable to the list of output variables
       !!
       !!----------------------------------------------------------
-      module subroutine add_to_output(this, variable)
+      module subroutine add_to_output(this, in_variable)
           implicit none
           class(output_t),   intent(inout)  :: this
-          type(variable_t),  intent(in)     :: variable
+          type(variable_t),  intent(in)     :: in_variable
       end subroutine
 
       !>----------------------------------------------------------
       !! Add multiple variables to the list of output variables given their integer constant index
       !!
       !!----------------------------------------------------------
-      module subroutine add_variables(this, var_list, domain)
+      module subroutine add_variables(this, var_list)
           implicit none
           class(output_t), intent(inout)  :: this
           integer,         intent(in)     :: var_list(:)
-          type(domain_t),  intent(in)     :: domain
       end subroutine
 
       !>----------------------------------------------------------
       !! Save a new timestep (time) to the file "filename"
       !!
       !!----------------------------------------------------------
-      module subroutine save_file(this, filename, current_step, time)
+      module subroutine save_file(this, time, par_comms)
           implicit none
           class(output_t),  intent(inout) :: this
-          character(len=*), intent(in)    :: filename
-          integer,          intent(in)    :: current_step
           type(Time_type),  intent(in)    :: time
+          integer,          intent(in)    :: par_comms
       end subroutine
+
+    module subroutine close_file(this)
+        implicit none
+        class(output_t),   intent(inout)  :: this
+    end subroutine
 
   end interface
 end module

@@ -32,6 +32,7 @@ module initialization
     use wind,                       only : update_winds
     use wind_iterative,             only : init_iter_winds
     use icar_constants,             only : kITERATIVE_WINDS
+    use ioclient_interface,         only : ioclient_t
 
     ! use io_routines,                only : io_read, &
     !                                        io_write3d,io_write3di, io_write
@@ -44,16 +45,16 @@ module initialization
 
     implicit none
     private
-    public::init_model, init_physics
+    public::init_model, init_physics, init_model_state
 
 contains
-    subroutine init_model(options,domain,boundary,add_cond)
+    subroutine init_model(options,domain,boundary)
         implicit none
         type(options_t), intent(inout) :: options
         type(domain_t),  intent(inout) :: domain
-        type(boundary_t),intent(inout) :: boundary ,add_cond ! forcing and external file(s) for init conditions
+        type(boundary_t),intent(inout) :: boundary ! forcing and external file(s) for init conditions
 
-        integer :: omp_get_max_threads, num_threads, ierr
+        integer :: omp_get_max_threads, num_threads
 
 #if defined(_OPENMP)
         num_threads = omp_get_max_threads()
@@ -79,6 +80,50 @@ contains
 
         if (this_image()==1) write(*,*) "Initializing boundary condition data structure"
         call boundary%init(options,domain%latitude%data_2d,domain%longitude%data_2d,domain%variables_to_force)
+
+
+        ! initialize the atmospheric helper utilities
+        call init_atm_utilities(options)
+        
+        if (options%physics%windtype==kITERATIVE_WINDS) call init_iter_winds(domain)
+
+        if (this_image()==1) write(*,'(/ A)') "Finished basic initialization"
+        if (this_image()==1) write(*,'(A /)') "---------------------------------------"
+
+    end subroutine init_model
+
+    subroutine init_physics(options, domain)
+        implicit none
+        type(options_t), intent(inout) :: options
+        type(domain_t),  intent(inout) :: domain
+
+        if (this_image()==1) write(*,*) "Updating initial winds"
+        call update_winds(domain, options)
+
+        ! call init_physics(options, domain)
+
+        ! call setup_bias_correction(options,domain)
+
+        ! initialize microphysics code (e.g. compute look up tables in Thompson et al)
+        call mp_init(options) !this could easily be moved to init_model...
+
+        call init_convection(domain,options)
+
+        call pbl_init(domain,options)
+
+        call radiation_init(domain,options)
+
+        call lsm_init(domain,options)
+
+        call adv_init(domain,options)
+
+    end subroutine init_physics
+
+    subroutine init_model_state(options,domain,boundary,add_cond)
+        implicit none
+        type(options_t), intent(inout) :: options
+        type(domain_t),  intent(inout) :: domain
+        type(boundary_t),intent(inout) :: boundary ,add_cond ! forcing and external file(s) for init conditions
 
         ! if (this_image()==1) then
         !     write(*,*) "options%parameters%external_files: ", trim(options%parameters%external_files)
@@ -116,44 +161,9 @@ contains
             call domain%calculate_delta_terrain(boundary, options)
 
         endif
-
-
-        if (this_image()==1) write(*,*) "Updating initial winds"
-        if (options%physics%windtype==kITERATIVE_WINDS) call init_iter_winds()
-
-        call update_winds(domain, options)
-
-        ! initialize the atmospheric helper utilities
-        call init_atm_utilities(options)
-
-        ! call init_physics(options, domain)
-
-        ! call setup_bias_correction(options,domain)
-        if (this_image()==1) write(*,'(/ A)') "Finished basic initialization"
-        if (this_image()==1) write(*,'(A /)') "---------------------------------------"
-
-    end subroutine init_model
-
-    subroutine init_physics(options, domain)
-        implicit none
-        type(options_t), intent(inout) :: options
-        type(domain_t),  intent(inout) :: domain
-
-        ! initialize microphysics code (e.g. compute look up tables in Thompson et al)
-        call mp_init(options) !this could easily be moved to init_model...
-
-        call init_convection(domain,options)
-
-        call pbl_init(domain,options)
-
-        call radiation_init(domain,options)
-
-        call lsm_init(domain,options)
-
-        call adv_init(domain,options)
-
-    end subroutine init_physics
-
+    end subroutine init_model_state
+    
+    
     subroutine welcome_message()
         implicit none
 

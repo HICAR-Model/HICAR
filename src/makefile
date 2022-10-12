@@ -249,7 +249,7 @@ ifeq ($(MODE), debugompslow)
 		LINK= -fopenmp -lgomp
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-c -g -m 0 -hfp3 -h omp develop -R bcsp -M 399
+		COMP=-c -g -m 0 -hfp2 -h omp develop -R bcsp -M 399
 		LINK=-fopenmp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
@@ -266,8 +266,8 @@ ifeq ($(MODE), debugomp)
 		 # -Wall -Wno-unused-variable -Wno-unused-dummy-argument
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-O1 -c -g
-		LINK=
+		COMP=-c -g -h omp develop
+		LINK=-fopenmp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
 	endif
@@ -315,7 +315,10 @@ ifeq ($(COMPILER), intel)
 		CAF_FLAG=-coarray=single
 	else
 		CAF_FLAG=-coarray=distributed
-		LINKER=mpiifort
+		CAF_LINK=-L${CAF_DIR}
+		ifneq ($(F90), ftn)
+			LINKER=mpif90
+		endif
 	endif
 endif
 
@@ -381,6 +384,12 @@ OBJS=	\
 		$(BUILD)atm_utilities.o		\
 		$(BUILD)co_utilities.o		\
 		$(BUILD)default_output_metadata.o\
+		$(BUILD)ioserver_h.o                      \
+		$(BUILD)ioserver_obj.o                      \
+		$(BUILD)ioclient_h.o                      \
+		$(BUILD)ioclient_obj.o                      \
+		$(BUILD)reader_h.o                      \
+		$(BUILD)reader_obj.o                      \
 		$(BUILD)output_h.o			\
 		$(BUILD)output_obj.o		\
 		$(BUILD)wind.o				\
@@ -636,7 +645,7 @@ $(BUILD)%.o: $(MAIN)%.f90
 ###################################################################
 
 $(BUILD)driver.o:$(MAIN)driver.f90 $(BUILD)time_step.o $(BUILD)domain_h.o $(BUILD)timer_h.o \
-					$(BUILD)output_h.o $(BUILD)boundary_h.o $(BUILD)init.o $(BUILD)options_h.o \
+					$(BUILD)ioserver_h.o $(BUILD)ioclient_h.o $(BUILD)boundary_h.o $(BUILD)init.o $(BUILD)options_h.o \
 					$(BUILD)restart_h.o $(BUILD)wind_iterative.o
 
 ###################################################################
@@ -683,8 +692,16 @@ $(BUILD)restart_h.o: $(IO)restart_h.f90 $(BUILD)domain_h.o $(BUILD)output_h.o $(
 
 $(BUILD)restart.o: $(IO)restart.f90 $(BUILD)restart_h.o $(BUILD)time_h.o $(BUILD)io_routines.o $(BUILD)icar_constants.o
 
-$(BUILD)output_h.o: $(IO)output_h.f90 $(BUILD)icar_constants.o $(BUILD)variable_h.o $(BUILD)grid_h.o $(BUILD)meta_data_h.o $(BUILD)domain_h.o
+$(BUILD)ioserver_h.o: $(IO)ioserver_h.f90 $(BUILD)icar_constants.o $(BUILD)time_h.o $(BUILD)output_h.o $(BUILD)options_h.o $(BUILD)reader_h.o $(BUILD)variable_h.o $(BUILD)boundary_h.o $(BUILD)domain_h.o
+$(BUILD)ioserver_obj.o: $(IO)ioserver_obj.f90 $(BUILD)ioserver_h.o $(BUILD)debug_utils.o $(BUILD)timer_h.o
 
+$(BUILD)ioclient_h.o: $(IO)ioclient_h.f90 $(BUILD)icar_constants.o  $(BUILD)time_h.o $(BUILD)variable_h.o $(BUILD)boundary_h.o $(BUILD)domain_h.o
+$(BUILD)ioclient_obj.o: $(IO)ioclient_obj.f90 $(BUILD)ioclient_h.o $(BUILD)debug_utils.o
+
+$(BUILD)reader_h.o: $(IO)reader_h.f90 $(BUILD)icar_constants.o $(BUILD)options_h.o $(BUILD)boundary_h.o $(BUILD)time_h.o
+$(BUILD)reader_obj.o: $(IO)reader_obj.f90 $(BUILD)reader_h.o $(BUILD)debug_utils.o $(BUILD)time_io.o $(BUILD)variable_h.o
+
+$(BUILD)output_h.o: $(IO)output_h.f90 $(BUILD)icar_constants.o $(BUILD)variable_h.o $(BUILD)grid_h.o $(BUILD)meta_data_h.o $(BUILD)domain_h.o
 $(BUILD)output_obj.o: $(IO)output_obj.f90 $(BUILD)output_h.o $(BUILD)default_output_metadata.o $(BUILD)time_h.o $(BUILD)debug_utils.o
 
 
