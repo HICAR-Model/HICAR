@@ -721,7 +721,7 @@ $(BUILD)domain_h.o: $(OBJECTS)domain_h.f90 $(BUILD)options_h.o $(BUILD)exchangea
 					$(BUILD)time_io.o 	$(BUILD)io_routines.o
 
 $(BUILD)domain_obj.o: $(OBJECTS)domain_obj.f90 $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)grid_h.o 	\
-					$(BUILD)string.o $(BUILD)assertions.o $(BUILD)geo_reader.o 							\
+					$(BUILD)string.o $(BUILD)assertions.o $(BUILD)geo_reader.o $(BUILD)meta_data_h.o	\
 					$(BUILD)atm_utilities.o $(BUILD)io_routines.o $(BUILD)co_utilities.o 				\
 					$(BUILD)array_utilities.o $(BUILD)vinterp.o $(BUILD)wind_surf.o
 

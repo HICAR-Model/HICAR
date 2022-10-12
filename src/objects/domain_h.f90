@@ -248,7 +248,8 @@ module domain_interface
     type(tendencies_type) :: tend
 
     type(var_dict_t) :: variables_to_force
-
+    type(var_dict_t) :: vars_to_out
+    
     ! Array listing variables to advect with pointers to local data
     type(var_dict_t) :: adv_vars
 
