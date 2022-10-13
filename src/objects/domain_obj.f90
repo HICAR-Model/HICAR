@@ -857,6 +857,18 @@ contains
         if (0<opt%vars_to_allocate( kVARS%znu) )                        allocate(this%znu(kms:kme),   source=0.0)
         if (0<opt%vars_to_allocate( kVARS%znw) )                        allocate(this%znw(kms:kme),   source=0.0)
 
+		!! MJ added for needed new vars for FSM
+		!! note that, in lsm_driver, it is alreaddy decieded if we need these vars or not..so it should be here..
+        !if (0<opt%vars_to_allocate( kVARS%FSM_slopemu) )				allocate(this%FSM_slopemu                (ims:ime, jms:jme))!,          source=0.0)        
+        if (0<opt%vars_to_allocate( kVARS%runoff) )      				call setup(this%runoff,    	this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%snowdepth) )      	  		call setup(this%snowdepth,  this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%Tsnow) )      	  			call setup(this%Tsnow,    	this%grid_snow)        
+        if (0<opt%vars_to_allocate( kVARS%Sice) )      	  				call setup(this%Sice,    	this%grid_snow)        
+        if (0<opt%vars_to_allocate( kVARS%Sliq) )      	  				call setup(this%Sliq,    	this%grid_snow)        
+        if (0<opt%vars_to_allocate( kVARS%albs) )      	  				call setup(this%albs,    	this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%Ds) )      	  				call setup(this%Ds,    	    this%grid_snow)        
+        if (0<opt%vars_to_allocate( kVARS%fsnow) )      	  			call setup(this%fsnow,    	this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%Nsnow) )      	  			call setup(this%Nsnow,    	this%grid2d)        
 
     end subroutine
 
@@ -2388,7 +2400,7 @@ contains
             this%soil_totalmoisture%data_2d = 0
             if (associated(this%soil_water_content%data_3d)) then
                 do i=1, nsoil
-                    this%soil_totalmoisture%data_2d = this%soil_totalmoisture%data_2d + this%soil_water_content%data_3d(:,i,:) * soil_thickness(i)
+                    this%soil_totalmoisture%data_2d = this%soil_totalmoisture%data_2d + this%soil_water_content%data_3d(:,i,:) * soil_thickness(i) * 1000 !! MJ added
                 enddo
             endif
         endif
@@ -2459,12 +2471,41 @@ contains
         if (associated(this%snow_albedo_prev%data_2d)) this%snow_albedo_prev%data_2d=0.65
         if (associated(this%storage_lake%data_2d)) this%storage_lake%data_2d=0
 
-
-
-
-
+		call read_land_variables_FSM(this, options)
+		!stop
     end subroutine read_land_variables
 
+
+    !>------------------------------------------------------------
+    !! setting up vars for FSM in addition to what is done in read_land_variables...reading from high-res file
+    !!
+    !! @param domain    Model domain structure
+    !!
+    !!------------------------------------------------------------
+    subroutine read_land_variables_FSM(this, options)
+        implicit none
+        class(domain_t), intent(inout)  :: this
+        type(options_t), intent(in)     :: options
+
+        integer :: i, nsoil, j !J added
+        real, allocatable :: temporary_data(:,:), temporary_data_3d(:,:,:), temporary_data2(:,:) !J added
+        real :: snow_thickness_FSM(3)
+       
+
+        ! these will all be udpated by either forcing data or the land model, but initialize to sensible values to avoid breaking other initialization routines
+        if (associated(this%runoff%data_2d)) 	this%runoff%data_2d=0.
+        if (associated(this%snowdepth%data_2d)) this%snowdepth%data_2d=0.
+        if (associated(this%Tsnow%data_3d)) this%Tsnow%data_3d=273.15
+        if (associated(this%Sice%data_3d)) this%Sice%data_3d=0.
+        if (associated(this%Sliq%data_3d)) this%Sliq%data_3d=0.
+        if (associated(this%albs%data_2d)) this%albs%data_2d=0.
+        if (associated(this%Ds%data_3d)) this%Ds%data_3d=0.
+        if (associated(this%fsnow%data_2d)) this%fsnow%data_2d=0.
+        if (associated(this%Nsnow%data_2d)) this%Nsnow%data_2d=0.
+ 
+    
+    end subroutine read_land_variables_FSM
+    
     !> -------------------------------
     !! Initialize various internal variables that need forcing data first, e.g. temperature, pressure on interface, exner, ...
     !!
