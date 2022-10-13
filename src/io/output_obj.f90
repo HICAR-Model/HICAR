@@ -86,6 +86,8 @@ contains
 
         call flush(output_unit)
 
+        if (.not.this%block_checked) call block_hunter(this)
+
         ! store output
         call save_data(this, this%output_counter, time)
         
@@ -101,6 +103,83 @@ contains
         endif
 
     end subroutine
+    
+    !See if this outputer has 'blocks', or a piece of it which it should not write
+    !This can occur due to using only images on a given node, which results in stepped
+    !patterns if the output is not appropriately treated
+    !
+    !The goal of the routine is to set all start and cnt object fields so that either
+    !(1) if there is no block, the standard fields contain the whole bounds of the object
+    !(2) if there is a block, the standard fields contain the continuous block of the object
+    ! and the 'b' fields contain the discontinuous block
+    subroutine block_hunter(this)
+        class(output_t),  intent(inout) :: this
+
+        integer :: i_s, i_e, k_s, k_e, j_s, j_e, n_x, n_y
+        integer :: i_s_b, i_e_b, j_s_b, j_e_b
+        integer :: i_s_b2, i_e_b2, j_s_b2, j_e_b2
+
+        real, allocatable, dimension(:,:) :: datas
+        logical :: blocked_LL, blocked_UR
+        
+        this%block_checked = .True.
+        this%is_blocked = .False.
+        blocked_LL = .False.
+        blocked_UR = .False.
+
+        i_s_b = 2; i_e_b = 1; j_s_b = 2; j_e_b = 1;
+        i_s_b2 = 2; i_e_b2 = 1; j_s_b2 = 2; j_e_b2 = 1;
+
+        i_s = this%its
+        i_e = this%ite
+        j_s = this%jts
+        j_e = this%jte
+        k_s = this%kts
+        k_e = this%kte
+
+        n_x = i_e - i_s + 1
+        n_y = j_e - j_s + 1
+
+        if (this%variables(1)%three_d) then
+            datas = this%variables(1)%data_3d(:,1,:)
+        else if (this%variables(1)%two_d) then
+            datas = this%variables(1)%data_2d(:,:)
+        endif
+        !Check each corner to see where this starts
+        !LL
+        if (datas(1,1) == kEMPT_BUFF) then
+            i_s_b = findloc(datas(:,1),kEMPT_BUFF,dim=1,back=.True.) + 1
+            i_e_b = i_e
+            j_e_b = findloc(datas(1,:),kEMPT_BUFF,dim=1,back=.True.) + j_s - 1
+            j_s_b = j_s
+            blocked_LL = .True.
+        endif
+        !UR
+        if (datas(n_x,n_y) == kEMPT_BUFF) then
+            i_s_b2 = i_s 
+            i_e_b2 = findloc(datas(:,n_y),kEMPT_BUFF,dim=1,back=.False.) - 1
+            j_e_b2 = j_e 
+            j_s_b2 = findloc(datas(n_x,:),kEMPT_BUFF,dim=1,back=.False.) + j_s + 1
+            blocked_UR = .True.
+        endif
+        
+        if (blocked_LL) j_s = j_e_b+1
+        if (blocked_UR) j_e = j_s_b2-1
+        
+        this%start_3d = (/ i_s, j_s, k_s /)
+        this%cnt_3d = (/ (i_e-i_s+1), (j_e-j_s+1), (k_e-k_s+1)  /)
+        this%cnt_2d = (/ (i_e-i_s+1), (j_e-j_s+1) /)
+
+        !Compute block start and cnts accordingly
+        this%start_3d_b = (/ i_s_b, j_s_b, k_s /)
+        this%cnt_3d_b = (/ (i_e_b-i_s_b+1), (j_e_b-j_s_b+1), (k_e-k_s+1)  /)
+        this%cnt_2d_b = (/ (i_e_b-i_s_b+1), (j_e_b-j_s_b+1) /)
+            
+        this%start_3d_b2 = (/ i_s_b2, j_s_b2, k_s /)
+        this%cnt_3d_b2 = (/ (i_e_b2-i_s_b2+1), (j_e_b2-j_s_b2+1), (k_e-k_s+1)  /)
+        this%cnt_2d_b2 = (/ (i_e_b2-i_s_b2+1), (j_e_b2-j_s_b2+1) /)
+        
+    end subroutine block_hunter
     
     subroutine open_file(this, time, par_comms)
         class(output_t),  intent(inout) :: this
@@ -455,64 +534,107 @@ contains
         class(output_t), intent(in) :: this
         integer,         intent(in) :: current_step
         type(Time_type), intent(in) :: time
-        integer :: i, i_s, i_e, k_s, k_e, j_s, j_e
+        
+        integer :: i, k_s, k_e
 
-
-        integer :: start_three_D_t(4)
-        integer :: start_two_D_t(3)
-        integer :: cnt_3d(3)
+        integer :: start_three_D_t(4), start_three_D_t_b(4), start_three_D_t_b2(4)
+        integer :: start_two_D_t(3), start_two_D_t_b(3), start_two_D_t_b2(3)
+        integer :: cnt_3d(3), cnt_3d_b(3), cnt_3d_b2(3)
         integer :: cnt_2d(2)
+        integer :: v_i_s, v_i_e, v_j_s, v_j_e
+        integer :: v_i_s_b, v_i_e_b, v_j_s_b, v_j_e_b
+        integer :: v_i_s_b2, v_i_e_b2, v_j_s_b2, v_j_e_b2
 
+        v_i_s = this%start_3d(1) - this%its + 1
+        v_i_e = v_i_s + this%cnt_3d(1) - 1
+        
+        v_j_s = this%start_3d(2) - this%jts + 1
+        v_j_e = v_j_s + this%cnt_3d(2) - 1
+
+        v_i_s_b = this%start_3d_b(1) - this%its + 1
+        v_i_e_b = v_i_s_b + this%cnt_3d_b(1) - 1
+        
+        v_j_s_b = this%start_3d_b(2) - this%jts + 1
+        v_j_e_b = v_j_s_b + this%cnt_3d_b(2) - 1
+        
+        v_i_s_b2 = this%start_3d_b2(1) - this%its + 1
+        v_i_e_b2 = v_i_s_b2 + this%cnt_3d_b2(1) - 1
+        
+        v_j_s_b2 = this%start_3d_b2(2) - this%jts + 1
+        v_j_e_b2 = v_j_s_b2 + this%cnt_3d_b2(2) - 1
 
         do i=1,this%n_vars
             associate(var => this%variables(i))
-                i_s = this%its
-                i_e = this%ite
-                j_s = this%jts
-                j_e = this%jte
-        
+                k_s = this%kts
+                k_e = var%dim_len(3)
+            
+                
                 !if (i_e == this%global_dim_len(1)) i_e = i_e + var%xstag
                 !if (j_e == this%global_dim_len(2)) j_e = j_e + var%ystag
 
                 call check_ncdf( nf90_var_par_access(this%ncfile_id, var%var_id, nf90_collective))
 
                 if (var%three_d) then
-                    k_s = this%kts
-                    k_e = var%dim_len(3)
+                    start_three_D_t = (/ this%start_3d(1), this%start_3d(2), this%start_3d(3), current_step /)
+                    cnt_3d = (/ this%cnt_3d(1), this%cnt_3d(2), (k_e-k_s+1) /)
                     
-                    start_three_D_t = (/ i_s, j_s, k_s, current_step /)
-                    cnt_3d = (/ (i_e-i_s+1), (j_e-j_s+1), (k_e-k_s+1)  /)
-                    !write(*,*) start_three_D_t
-                    !write(*,*) cnt_3d
-                    !write(*,*) 'lbound data_3d, ax1:  ',lbound(var%data_3d,1)
-                    !write(*,*) 'ubound data_3d, ax1:  ',ubound(var%data_3d,1)
-                    !write(*,*) 'lbound data_3d, ax2:  ',lbound(var%data_3d,2)
-                    !write(*,*) 'ubound data_3d, ax2:  ',ubound(var%data_3d,2)
-                    !write(*,*) 'lbound data_3d, ax3:  ',lbound(var%data_3d,3)
-                    !write(*,*) 'ubound data_3d, ax3:  ',ubound(var%data_3d,3)
+                    start_three_D_t_b = (/ this%start_3d_b(1), this%start_3d_b(2), this%start_3d_b(3), current_step /)
+                    cnt_3d_b = (/ this%cnt_3d_b(1), this%cnt_3d_b(2), (k_e-k_s+1) /)
+                        
+                    start_three_D_t_b2 = (/ this%start_3d_b2(1), this%start_3d_b2(2), this%start_3d_b2(3), current_step /)
+                    cnt_3d_b2 = (/ this%cnt_3d_b2(1), this%cnt_3d_b2(2), (k_e-k_s+1) /)
 
                     if (var%unlimited_dim) then
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            reshape(var%data_3d, shape=cnt_3d, order=[1,3,2]), &
+                            reshape(var%data_3d(v_i_s:v_i_e,:,v_j_s:v_j_e), shape=cnt_3d, order=[1,3,2]), &
                                         start_three_D_t, count=(/cnt_3d(1), cnt_3d(2), cnt_3d(3), 1/)), "saving:"//trim(var%name) )
-                    elseif (this%creating) then
+                                        
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            reshape(var%data_3d,  &
-                            shape=cnt_3d, order=[1,3,2]), start=(/ start_three_D_t(1), start_three_D_t(2), start_three_D_t(3) /),&
-                            count=cnt_3d ), "saving:"//trim(var%name) )
-                    endif
+                            reshape(var%data_3d(v_i_s_b:v_i_e_b,:,v_j_s_b:v_j_e_b), shape=cnt_3d_b, order=[1,3,2]), &
+                                        start_three_D_t_b, count=(/cnt_3d_b(1), cnt_3d_b(2), (k_e-k_s+1), 1/)), "saving:"//trim(var%name) )
 
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
+                            reshape(var%data_3d(v_i_s_b2:v_i_e_b2,:,v_j_s_b2:v_j_e_b2), shape=cnt_3d_b2, order=[1,3,2]), &
+                                        start_three_D_t_b2, count=(/cnt_3d_b2(1), cnt_3d_b2(2), (k_e-k_s+1), 1/)), "saving:"//trim(var%name) )
+
+                    elseif (this%creating) then
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, reshape(var%data_3d(v_i_s:v_i_e,:,v_j_s:v_j_e),  &
+                            shape=this%cnt_3d, order=[1,3,2]), start=this%start_3d,&
+                            count=this%cnt_3d ), "saving:"//trim(var%name) )
+                            
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, reshape(var%data_3d(v_i_s_b:v_i_e_b,:,v_j_s_b:v_j_e_b),  &
+                            shape=cnt_3d_b, order=[1,3,2]), start=this%start_3d_b,&
+                            count=cnt_3d_b ), "saving:"//trim(var%name) )
+                            
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, reshape(var%data_3d(v_i_s_b2:v_i_e_b2,:,v_j_s_b2:v_j_e_b2),  &
+                            shape=cnt_3d_b2, order=[1,3,2]), start=this%start_3d_b2,&
+                            count=cnt_3d_b2 ), "saving:"//trim(var%name) )
+
+                    endif
+                    
                 elseif (var%two_d) then
-                    start_two_D_t = (/ i_s, j_s, current_step /)
-                    cnt_2d = (/ (i_e-i_s+1), (j_e-j_s+1) /)
+                    start_two_D_t = (/ this%start_3d(1), this%start_3d(2), current_step /)
+                    start_two_D_t_b = (/ this%start_3d_b(1), this%start_3d_b(2), current_step /)
+                    start_two_D_t_b2 = (/ this%start_3d_b2(1), this%start_3d_b2(2), current_step /)
 
                     if (var%unlimited_dim) then
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d, &
-                                start_two_D_t,count=(/ cnt_2d(1), cnt_2d(2), 1/)), "saving:"//trim(var%name) )
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s:v_i_e,v_j_s:v_j_e), &
+                                start_two_D_t,count=(/ this%cnt_2d(1), this%cnt_2d(2), 1/)), "saving:"//trim(var%name) )
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b), &
+                                start_two_D_t_b,count=(/ this%cnt_2d_b(1), this%cnt_2d_b(2), 1/)), "saving:"//trim(var%name) )
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2), &
+                                start_two_D_t_b2,count=(/ this%cnt_2d_b2(1), this%cnt_2d_b2(2), 1/)), "saving:"//trim(var%name) )
+
                     elseif (this%creating) then
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d, &
-                                    start=(/ start_two_D_t(1), start_two_D_t(2) /), &
-                                    count=cnt_2d), "saving:"//trim(var%name) )
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s:v_i_e,v_j_s:v_j_e), &
+                                    start=(/ this%start_3d(1), this%start_3d(2) /), &
+                                    count=this%cnt_2d), "saving:"//trim(var%name) )
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b), &
+                                    start=(/ this%start_3d_b(1), this%start_3d_b(2) /), &
+                                    count=this%cnt_2d_b), "saving:"//trim(var%name) )
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2), &
+                                    start=(/ this%start_3d_b2(1), this%start_3d_b2(2) /), &
+                                    count=this%cnt_2d_b2), "saving:"//trim(var%name) )
                     endif
                 endif
             end associate
