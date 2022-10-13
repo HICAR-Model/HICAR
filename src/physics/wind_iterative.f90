@@ -95,6 +95,7 @@ contains
 
         !call KSPSetTolerances(ksp,conv_tol,PETSC_DEFAULT_REAL,PETSC_DEFAULT_REAL,PETSC_DEFAULT_INTEGER,ierr)
         call KSPSetType(ksp,KSPBCGS,ierr);
+        
         call DMDACreate3d(domain%IO_comms,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DMDA_STENCIL_BOX, &
                           (domain%ide+2),(domain%kde+2),(domain%jde+2),domain%grid%ximages,one,domain%grid%yimages,one,one, &
                           xl, PETSC_NULL_INTEGER,yl,da,ierr)

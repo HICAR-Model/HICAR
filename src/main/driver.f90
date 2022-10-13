@@ -156,6 +156,7 @@ program icar
                 call domain%interpolate_forcing(boundary, update=.True.)
                 call input_timer%stop()
                 call domain%diagnostic_update(options)
+                
                 call wind_timer%start()
                 call update_winds(domain, options)
                 call wind_timer%stop()
@@ -185,6 +186,7 @@ program icar
             if (this_image()==1) write(*,*) "  Next Output= ", trim(next_output%as_string())
             if (this_image()==1) write(*,*) "  output         : ", trim(output_timer%as_string())
             if (this_image()==1) write(*,*) "  input          : ", trim(input_timer%as_string())
+            if (this_image()==1) write(*,*) "  wind           : ", trim(wind_timer%as_string())
 
             ! this is the meat of the model physics, run all the physics for the current time step looping over internal timesteps
             if (.not.(options%wind%wind_only)) then
@@ -277,29 +279,25 @@ contains
     subroutine split_processes(exec_team)
         implicit none
         integer, intent(inout) :: exec_team
-        integer :: n, k
+        integer :: n, k, name_len, ierr, node_name_i, node_names(num_images())
+        character(len=MPI_MAX_PROCESSOR_NAME) :: node_name
         
-        !kNUM_SERVERS = max(min(ceiling(0.05*num_images()),10),2)
-        !kNUM_COMPUTE = num_images()-kNUM_SERVERS
-        !If we are the 2nd process on a node (how to find this out?), or if there is only 1 process on a node
-        !make us the parent
+        node_names = 0
+        node_name_i = 0
         
-        !if (mod(this_image(),(num_images()/kNUM_SERVERS)) == 0) then
-        !    if (this_image() <= nint(num_images())) then
-        !        exec_team = kIO_TEAM_READ
-        !    else
-        !        exec_team = kIO_TEAM_WRITE
-        !    endif
-        !else
-        !    exec_team = kCOMPUTE_TEAM
-        !endif
-
+        call MPI_Get_processor_name(node_name, name_len, ierr)
         
-        !Assign one io process per node, up to 10 processes
-        kNUM_SERVERS = ceiling(num_images()/36.0) !min(ceiling(0.05*num_images()),10)
+        do n = 1,name_len
+            node_name_i = node_name_i + ichar(node_name(n:n))
+        enddo
+        node_names(this_image()) = node_name_i
+        call co_max(node_names)
+        
+        
+        kNUM_PROC_PER_NODE = count(node_names==node_names(1))
+        !Assign one io process per node, this results in best co-array transfer times
+        kNUM_SERVERS = ceiling(num_images()*1.0/kNUM_PROC_PER_NODE)
         kNUM_COMPUTE = num_images()-kNUM_SERVERS
-        !If we are the 2nd process on a node (how to find this out?), or if there is only 1 process on a node
-        !make us the parent
         
         if (mod(this_image(),(num_images()/kNUM_SERVERS)) == 0) then
             exec_team = kIO_TEAM
@@ -314,7 +312,6 @@ contains
             DOM_IMG_INDX(n) = k
             k = k+1
         enddo
-        if (this_image()==1) write(*,*) DOM_IMG_INDX
         !form team(team_num,exec_team)
         
     end subroutine split_processes
