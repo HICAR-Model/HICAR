@@ -96,7 +96,6 @@ contains
 
         associate(list => this%variables)
             
-            
         ! loop through the list of variables that need to be read in
         call list%reset_iterator()
         n = 1

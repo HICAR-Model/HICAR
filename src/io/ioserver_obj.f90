@@ -104,28 +104,28 @@ contains
         else
             best = abs(1 - ( x / y ))
         endif
+  
+        !do i=kNUM_SERVERS,1,-1
+        !    if (mod(kNUM_SERVERS,i)==0) then
+        !        ysplit = i
+        !        xsplit = kNUM_SERVERS / i
 
-        do i=kNUM_SERVERS,1,-1
-            if (mod(kNUM_SERVERS,i)==0) then
-                ysplit = i
-                xsplit = kNUM_SERVERS / i
+        !        x = (nx/float(xsplit))
+        !        y = (ny/float(ysplit))
 
-                x = (nx/float(xsplit))
-                y = (ny/float(ysplit))
+        !        if (y > x) then
+        !            current = abs(1 - ( y / x ))
+        !        else
+        !            current = abs(1 - ( x / y ))
+        !        endif
 
-                if (y > x) then
-                    current = abs(1 - ( y / x ))
-                else
-                    current = abs(1 - ( x / y ))
-                endif
-
-                if (current < best) then
-                    best = current
-                    xs = xsplit
-                    ys = ysplit
-                endif
-            endif
-        enddo
+        !        if (current < best) then
+        !            best = current
+        !            xs = xsplit
+        !            ys = ysplit
+        !        endif
+        !    endif
+        !enddo
         !On exit, xs and ys have the number of servers in each direction
         
         row_slice = nint(ny*1.0/ys)
@@ -152,14 +152,16 @@ contains
         mins = abs(j_e-j_e_w)
         j_e = j_e_w(minloc(mins,dim=1))
     
-        do n = 1,size(i_s_w)
-            passed_children(n) = .False.
+        !do n = 1,size(i_s_w)
+        !    passed_children(n) = .False.
             
-            if ( (i_s_w(n) >= i_s) .and. (i_e_w(n) <= i_e) .and. &
-                 (j_s_w(n) >= j_s) .and. (j_e_w(n) <= j_e)) then
-                passed_children(n) = .True.
-            endif
-        enddo
+        !    if ( (i_s_w(n) >= i_s) .and. (i_e_w(n) <= i_e) .and. &
+        !         (j_s_w(n) >= j_s) .and. (j_e_w(n) <= j_e)) then
+        !        passed_children(n) = .True.
+        !    endif
+        !enddo
+        passed_children = .False.
+        passed_children(max((this_image()-(kNUM_PROC_PER_NODE-1)),1):(this_image()-1)) = .True.
         
         allocate(this%children(count(passed_children)))
         allocate(this%iswc(count(passed_children)))
@@ -230,11 +232,10 @@ contains
         real, allocatable, intent(in)     :: write_buffer(:,:,:,:)[:]
 
         integer :: i, n, nx, ny
-        type(timer_t)   :: timer
         ! Loop through child images and send chunks of buffer array to each one
         
-
-        call timer%start()
+        this%parent_write_buffer = kEMPT_BUFF
+        
         do i=1,size(this%children)
             n = this%children(i)
             nx = this%iewc(i) - this%iswc(i) + 1
@@ -242,13 +243,8 @@ contains
             this%parent_write_buffer(:,this%iswc(i):this%iewc(i),:,this%jswc(i):this%jewc(i)) = &
                 write_buffer(:,1:nx,:,1:ny)[n]
         enddo
-        call timer%stop()
-        write(*,*) 'write co-array timer:  ',trim(timer%as_string())
         
-        call timer%start()
         call this%outputer%save_file(time,this%IO_comms)        
-        call timer%stop()
-        write(*,*) 'write file timer:  ',trim(timer%as_string())
 
     end subroutine 
     
@@ -262,16 +258,10 @@ contains
 
         real, allocatable, dimension(:,:,:,:) :: parent_read_buffer
         integer :: i, n, nx, ny
-        type(timer_t)   :: timer
 
         ! read file into buffer array
-        call timer%start()
         call this%reader%read_next_step(parent_read_buffer,this%IO_comms)
-        call timer%stop()
-        write(*,*) 'read file timer:  ',trim(timer%as_string())
-        call timer%reset()
         
-        call timer%start()
         ! Loop through child images and send chunks of buffer array to each one
         do i=1,size(this%children)
             n = this%children(i)
@@ -280,8 +270,6 @@ contains
             read_buffer(:,1:nx,:,1:ny)[n] = &
                     parent_read_buffer(:,this%isrc(i):this%ierc(i),:,this%jsrc(i):this%jerc(i))
         enddo
-        call timer%stop()
-        write(*,*) 'read co-array timer:  ',trim(timer%as_string())
 
     end subroutine 
 

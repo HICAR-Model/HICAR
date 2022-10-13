@@ -14,6 +14,9 @@ module icar_constants
     integer, allocatable :: DOM_IMG_INDX(:)
     integer :: kNUM_SERVERS = 0
     integer :: kNUM_COMPUTE = 0
+    integer :: kNUM_PROC_PER_NODE = 0
+    !Flag-value to indicate a part of a read-write buffer which was never filled
+    real, parameter :: kEMPT_BUFF = -123456789.0
     
     ! string lengths
     integer, parameter :: kMAX_FILE_LENGTH = 1024

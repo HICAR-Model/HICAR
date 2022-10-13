@@ -2645,6 +2645,8 @@ contains
         class(domain_t), intent(inout) :: this
         type(options_t), intent(inout) :: options
 
+        integer :: i
+        
         ! List the variables that are required to be allocated for any domain
         call options%alloc_vars(                                                    &
                      [kVARS%z,                      kVARS%z_interface,              &
@@ -2669,6 +2671,11 @@ contains
                       kVARS%u_latitude,             kVARS%u_longitude,              &
                       kVARS%v_latitude,             kVARS%v_longitude               ])
 
+        do i=1, size(options%io_options%vars_for_output)
+            if ((options%io_options%vars_for_output(i) > 0) .and. (options%vars_to_allocate(i) <= 0)) then
+                options%io_options%vars_for_output(i) = 0
+            endif
+        enddo
 
     end subroutine var_request
 

@@ -46,6 +46,8 @@ module output_interface
       ! store status of the object
       logical :: is_initialized = .false.
       logical :: creating = .false.
+      logical :: block_checked = .false.
+      logical :: is_blocked = .false.
 
       ! The filename of the netcdf file to write
       character(len=kMAX_FILE_LENGTH), public :: filename, base_file_name
@@ -57,6 +59,12 @@ module output_interface
 
       ! number of dimensions in the file
       integer :: n_dims = 0
+
+      integer :: start_3d(3), cnt_3d(3), cnt_2d(2)
+      
+      !same as above, but for block, if present
+      integer :: start_3d_b(3), cnt_3d_b(3), cnt_2d_b(2)
+      integer :: start_3d_b2(3), cnt_3d_b2(3), cnt_2d_b2(2)
 
       integer :: its, ite, kts, kte, jts, jte
 
