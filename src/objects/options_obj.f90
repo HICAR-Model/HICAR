@@ -1767,10 +1767,12 @@ contains
         integer :: urban_category                    ! index that defines the urban category in LU_Categories
         integer :: ice_category                      ! index that defines the ice category in LU_Categories
         integer :: water_category                    ! index that defines the water category in LU_Categories
+        logical :: surface_diagnostics               ! MJ added: true means that temeprature_2m is calculated using sensible heat flux otherwise it is read from the first grid at 10 m
+													 ! ..this mean the first layer thickness in z-direction shoud be 20 m for which the center is at 10 m
 
         ! define the namelist
         namelist /lsm_parameters/ LU_Categories, update_interval, monthly_vegfrac, &
-                                  urban_category, ice_category, water_category
+                                  urban_category, ice_category, water_category, surface_diagnostics !! MJ added
 
          ! because adv_options could be in a separate file
          if (options%parameters%use_lsm_options) then
@@ -1784,6 +1786,7 @@ contains
         LU_Categories   = "MODIFIED_IGBP_MODIS_NOAH"
         update_interval = 300 ! 5 minutes
         monthly_vegfrac = .False.
+        surface_diagnostics = .False. !! MJ added
 
         ! default values for these will be set after reading LU_Categories
         urban_category  = -1
@@ -1806,7 +1809,7 @@ contains
         lsm_options%urban_category  = urban_category
         lsm_options%ice_category    = ice_category
         lsm_options%water_category  = water_category
-
+        lsm_options%surface_diagnostics  = surface_diagnostics !! MJ added
         ! copy the data back into the global options data structure
         options%lsm_options = lsm_options
     end subroutine lsm_parameters_namelist
