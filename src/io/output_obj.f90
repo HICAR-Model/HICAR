@@ -411,6 +411,16 @@ contains
         if (0<var_list( kVARS%temperature_interface) )      call this%add_to_output( get_metadata( kVARS%temperature_interface ))
         if (0<var_list( kVARS%tend_swrad) )                 call this%add_to_output( get_metadata( kVARS%tend_swrad      ))
 
+	!! MJ added for needed new vars for FSM
+        if (0<var_list( kVARS%runoff) )                     call this%add_to_output( get_metadata( kVARS%runoff ))
+        if (0<var_list( kVARS%snowdepth) )                  call this%add_to_output( get_metadata( kVARS%snowdepth ))
+        if (0<var_list( kVARS%Tsnow) )              	      call this%add_to_output( get_metadata( kVARS%Tsnow ))
+        if (0<var_list( kVARS%Sice) )              	      call this%add_to_output( get_metadata( kVARS%Sice ))
+        if (0<var_list( kVARS%Sliq) )              	      call this%add_to_output( get_metadata( kVARS%Sliq ))
+        if (0<var_list( kVARS%albs) )              	      call this%add_to_output( get_metadata( kVARS%albs ))
+        if (0<var_list( kVARS%Ds) )              	      call this%add_to_output( get_metadata( kVARS%Ds ))
+        if (0<var_list( kVARS%fsnow) )              	      call this%add_to_output( get_metadata( kVARS%fsnow ))
+        if (0<var_list( kVARS%Nsnow) )              	      call this%add_to_output( get_metadata( kVARS%Nsnow ))
     end subroutine
 
     subroutine add_global_attributes(this)

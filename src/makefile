@@ -86,27 +86,22 @@ ifeq ($(PE_ENV),CRAY)
 endif
 
 ifndef FFTW
-	FFTW=/usr/local
+		FFTW=/usr/local
+		ifdef FFTW_DIR
+			FFTW = ${FFTW_DIR}
+		endif	
 endif
 FFTW_PATH = ${FFTW}
 LIBFFT = -L${FFTW_PATH}/lib -lm -lfftw3
 INCFFT = -I${FFTW_PATH}/include
 
-ifdef FFTW_DIR
-        FFTW_PATH = ${FFTW_DIR}
-        LIBFFT = -L${FFTW_DIR} -lm -lfftw3
-endif
-ifdef FFTW_INC
-        INCFFT = -I${FFTW_INC}
-endif
 
 ifndef NETCDF
-        NETCDF=/usr/local
-        ifdef NETCDF_DIR
-                NETCDF=${NETCDF_DIR}
-        endif
+	NETCDF=/usr/local
+    ifdef NETCDF_DIR
+		NETCDF=${NETCDF_DIR}
+    endif
 endif
-
 NCDF_PATH = ${NETCDF}
 LIBNETCDF = -L$(NCDF_PATH)/lib -lnetcdff -lnetcdf
 INCNETCDF = -I$(NCDF_PATH)/include
@@ -116,17 +111,30 @@ ifdef PETSC_DIR
 	include $(PETSC)/lib/petsc/conf/variables
 endif
 
-ifdef NETCDFF
-       LIBNETCDF += -L$(NETCDFF)/lib
-       INCNETCDF += -I$(NETCDFF)/include
-endif
-
 USE_ASSERTIONS:=.false.
 
 ifeq ($(ASSERTIONS),)
   USE_ASSERTIONS:=.true.
 endif
 
+
+
+
+##################################
+ifndef FSM
+	FSM=${HOME}
+	ifdef FSM_DIR
+		FSM=${FSM_DIR}
+    endif
+endif
+FSM_PATH = ${FSM}
+LIBFSM= -L$(FSM_PATH)/lib/FSM_interface -lFSM_interface
+INFSM=-I$(FSM_PATH)/include/FSM_interface/build
+##################################
+
+#MJ added:
+#IN_MPI_FFF=-I/usr/lib/x86_64-linux-gnu/openmpi/include -pthread -I/usr/lib/x86_64-linux-gnu/openmpi/lib
+#LIB_MPI_FFF=-L/usr/lib/x86_64-linux-gnu/openmpi/lib -lmpi_usempif08 -lmpi_usempi_ignore_tkr -lmpi_mpifh -lmpi
 
 ########################################################################################
 # Try to find the machine information
@@ -333,8 +341,8 @@ ASSERT=-DUSE_ASSERTIONS=$(USE_ASSERTIONS)
 ###################################################################
 # copy required libraries into a directory accessible on compute nodes and set LD_RUN_PATH e.g.
 # export LD_RUN_PATH=$LD_RUN_PATH:/path/to/netcdf/libraries/lib:/path/to/fftw/libraries/lib
-LFLAGS=$(LINK) $(PROF) $(CAF_FLAG) $(CAF_LINK) $(LIBNETCDF) $(LIBFFT) $(PETSC_LIB)
-FFLAGS=$(COMP) $(PROF) $(CAF_FLAG) $(PREPROC) -DVERSION=\"$(GIT_VERSION)\" $(INCNETCDF) $(INCFFT) $(PETSC_FC_INCLUDES)  $(MODOUTPUT) $(ASSERT)
+LFLAGS=$(LINK) $(PROF) $(CAF_FLAG) $(CAF_LINK) $(LIBNETCDF) $(LIBFFT) $(PETSC_LIB) $(LIBFSM) 
+FFLAGS=$(COMP) $(PROF) $(CAF_FLAG) $(PREPROC) -DVERSION=\"$(GIT_VERSION)\" $(INCNETCDF) $(INCFFT) $(PETSC_FC_INCLUDES)  $(MODOUTPUT) $(ASSERT) $(INFSM)
 
 $(info $$NODENAME    = ${NODENAME})
 $(info $$FC          = ${F90})
@@ -344,6 +352,9 @@ $(info $$GIT_VERSION = ${GIT_VERSION})
 $(info $$COMP        = ${COMP})
 $(info $$LINK        = ${LINK})
 $(info $$MODE        = ${MODE})
+$(info $$FSM_PATH   = ${FSM_DIR})
+$(info $$LFLAGS   = ${LFLAGS})
+$(info $$FFLAGS   = ${FFLAGS})
 
 
 
@@ -421,6 +432,7 @@ OBJS=	\
 		$(BUILD)advect.o			\
 		$(BUILD)adv_mpdata.o                        \
 		$(BUILD)lsm_driver.o		\
+		$(BUILD)lsm_FSMdrv.o		\
 		$(BUILD)lsm_noahdrv.o		\
 		$(BUILD)lsm_noahlsm.o		\
 		$(BUILD)lsm_noahmpdrv.o  \
@@ -574,6 +586,7 @@ caf_no_forcing_test: $(BUILD)test_caf_no_forcing.o							\
 					$(BUILD)advect.o		 $(BUILD)data_structures.o	\
 					$(BUILD)vinterp.o		 $(BUILD)array_utilities.o	\
 					$(BUILD)lsm_driver.o	\
+					$(BUILD)lsm_FSMdrv.o	\
 					$(BUILD)lsm_noahdrv.o 	 $(BUILD)lsm_noahlsm.o \
 					$(BUILD)lsm_noahmpdrv.o  $(BUILD)lsm_noahmplsm.o \
 					$(BUILD)water_simple.o
@@ -839,7 +852,7 @@ $(BUILD)lsm_driver.o: $(PHYS)lsm_driver.f90 $(BUILD)data_structures.o \
 						$(BUILD)lsm_noahmpdrv.o $(BUILD)lsm_noahmplsm.o \
 						$(BUILD)water_simple.o $(BUILD)icar_constants.o \
 						$(BUILD)domain_h.o $(BUILD)options_h.o			\
-						$(BUILD)atm_utilities.o $(BUILD)ra_simple.o
+						$(BUILD)atm_utilities.o $(BUILD)ra_simple.o $(BUILD)lsm_FSMdrv.o
 
 # $(BUILD)lsm_basic.o $(BUILD)lsm_simple.o
 
@@ -862,6 +875,14 @@ $(BUILD)lsm_noahmplsm.o: $(PHYS)lsm_noahmplsm.f90 $(BUILD)lsm_noahmp_gecros.o \
 $(BUILD)lsm_noahmp_gecros.o: $(PHYS)lsm_noahmp_gecros.f90
 
 $(BUILD)lsm_noahmp_glacier.o: $(PHYS)lsm_noahmp_glacier.f90
+
+# J added
+$(BUILD)lsm_FSMdrv.o: $(PHYS)lsm_FSMdrv.f90 $(BUILD)data_structures.o \
+						$(BUILD)lsm_noahdrv.o $(BUILD)lsm_noahlsm.o \
+						$(BUILD)lsm_noahmpdrv.o $(BUILD)lsm_noahmplsm.o \
+						$(BUILD)water_simple.o $(BUILD)icar_constants.o \
+						$(BUILD)domain_h.o $(BUILD)options_h.o			\
+						$(BUILD)atm_utilities.o $(BUILD)ra_simple.o
 
 ###################################################################
 #	Planetary Boundary Layer code
