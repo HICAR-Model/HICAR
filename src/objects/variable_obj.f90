@@ -82,6 +82,14 @@ contains
             endif
 
         endif
+        this%xstag = 0
+        this%ystag = 0
+
+        if ((grid%ns_halo_nx - (grid%nx_global / grid%ximages + 1)) > 0) then
+            this%xstag = 1
+        else if ((grid%ew_halo_ny - (grid%ny_global / grid%yimages + 1)) > 0) then
+            this%ystag = 1
+        endif
 
     end subroutine
 

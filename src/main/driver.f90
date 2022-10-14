@@ -42,7 +42,7 @@ program icar
     type(options_t) :: options
     type(domain_t)  :: domain
     type(boundary_t):: boundary, add_cond
-    type(event_type)  :: write_ev[*], read_ev[*]
+    type(event_type)  :: written_ev[*], write_ev[*], read_ev[*]
     type(output_t)  :: restart_dataset
     type(output_t)  :: output_dataset
     type(ioserver_t)  :: ioserver
@@ -204,6 +204,7 @@ program icar
             if ((domain%model_time + small_time_delta) >= next_output) then
                 if (this_image()==1) write(*,*) "Writing output file"
                 call output_timer%start()
+                EVENT WAIT (written_ev)
                 call ioclient%push(domain, write_buffer)
                 EVENT POST (write_ev[ioclient%server])
                 next_output = next_output + options%io_options%output_dt
@@ -214,7 +215,7 @@ program icar
     case (kIO_TEAM)
         do while (next_input <= options%parameters%end_time .or. next_output <= options%parameters%end_time)
             !If we have more time to the next output, do input now
-            if (next_output >= next_input) then
+            if (next_output + small_time_delta >= next_input) then
                 call ioserver%read_file(boundary, read_buffer)
                 do i = 1,ioserver%n_children
                     EVENT POST (read_ev[ioserver%children(i)])
@@ -227,9 +228,12 @@ program icar
             endif
         
             !If we have more time to the next output, do input now
-            if (next_input >= next_output) then
+            if (next_input + small_time_delta >= next_output) then
                 EVENT WAIT (write_ev, UNTIL_COUNT = ioserver%n_children)
                 call ioserver%write_file(domain, next_output, write_buffer)
+                do i = 1,ioserver%n_children
+                    EVENT POST (written_ev[ioserver%children(i)])
+                enddo
                 next_output = next_output + options%io_options%output_dt
             endif
         enddo
@@ -432,8 +436,8 @@ contains
         call co_max(n_w)
         call co_max(n_r)
         !Initialize read/write buffers. They are coarrays, defined by the comax of the read and write bounds for each compute image
-        allocate(write_buffer(n_w,1:nx_w,1:nz_w,1:ny_w)[*])
-        allocate(read_buffer(n_r,1:nx_r,1:nz_r,1:ny_r)[*])
+        allocate(write_buffer(n_w,1:nx_w+1,1:nz_w,1:ny_w+1)[*])
+        allocate(read_buffer(n_r,1:nx_r+1,1:nz_r,1:ny_r+1)[*])
     end subroutine init_IO
 
     

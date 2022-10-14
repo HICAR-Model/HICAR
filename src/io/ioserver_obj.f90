@@ -58,7 +58,8 @@ contains
             if(this%outputer%variables(n)%dim_len(3) > this%k_e_w) this%k_e_w = this%outputer%variables(n)%dim_len(3)
         enddo
 
-        allocate(this%parent_write_buffer(this%n_w,this%i_s_w:this%i_e_w,this%k_s_w:this%k_e_w,this%j_s_w:this%j_e_w))
+        
+        allocate(this%parent_write_buffer(this%n_w,this%i_s_w:this%i_e_w+1,this%k_s_w:this%k_e_w,this%j_s_w:this%j_e_w+1))
         
         do n = 1,this%n_w
             !if(this%outputer%variables(n)%name == options%io_options%vars_for_output) then
@@ -231,19 +232,24 @@ contains
         type(Time_type),  intent(in)      :: time
         real, allocatable, intent(in)     :: write_buffer(:,:,:,:)[:]
 
-        integer :: i, n, nx, ny
+        integer :: i, n, nx, ny, i_s_w, i_e_w, j_s_w, j_e_w
         ! Loop through child images and send chunks of buffer array to each one
         
         this%parent_write_buffer = kEMPT_BUFF
-        
         do i=1,size(this%children)
             n = this%children(i)
-            nx = this%iewc(i) - this%iswc(i) + 1
-            ny = this%jewc(i) - this%jswc(i) + 1            
-            this%parent_write_buffer(:,this%iswc(i):this%iewc(i),:,this%jswc(i):this%jewc(i)) = &
+            
+            i_s_w = this%iswc(i); i_e_w = this%iewc(i)
+            j_s_w = this%jswc(i); j_e_w = this%jewc(i)
+            if (domain%ide == i_e_w) i_e_w = i_e_w+1 !Add extra to accomodate staggered vars
+            if (domain%jde == j_e_w) j_e_w = j_e_w+1 !Add extra to accomodate staggered vars
+            nx = i_e_w - i_s_w + 1
+            ny = j_e_w - j_s_w + 1
+
+            this%parent_write_buffer(:,i_s_w:i_e_w,:,j_s_w:j_e_w) = &
                 write_buffer(:,1:nx,:,1:ny)[n]
         enddo
-        
+
         call this%outputer%save_file(time,this%IO_comms)        
 
     end subroutine 
