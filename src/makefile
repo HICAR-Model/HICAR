@@ -111,6 +111,11 @@ ifdef PETSC_DIR
 	include $(PETSC)/lib/petsc/conf/variables
 endif
 
+ifdef NETCDFF
+       LIBNETCDF += -L$(NETCDFF)/lib
+       INCNETCDF += -I$(NETCDFF)/include
+endif
+
 USE_ASSERTIONS:=.false.
 
 ifeq ($(ASSERTIONS),)
