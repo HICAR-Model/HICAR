@@ -119,12 +119,11 @@ contains
         integer :: i_s_b2, i_e_b2, j_s_b2, j_e_b2
 
         real, allocatable, dimension(:,:) :: datas
-        logical :: blocked_LL, blocked_UR
         
         this%block_checked = .True.
         this%is_blocked = .False.
-        blocked_LL = .False.
-        blocked_UR = .False.
+        this%blocked_LL = .False.
+        this%blocked_UR = .False.
 
         i_s_b = 2; i_e_b = 1; j_s_b = 2; j_e_b = 1;
         i_s_b2 = 2; i_e_b2 = 1; j_s_b2 = 2; j_e_b2 = 1;
@@ -151,7 +150,7 @@ contains
             i_e_b = i_e
             j_e_b = findloc(datas(1,:),kEMPT_BUFF,dim=1,back=.True.) + j_s - 1
             j_s_b = j_s
-            blocked_LL = .True.
+            this%blocked_LL = .True.
         endif
         !UR
         if (datas(nx,ny) == kEMPT_BUFF) then
@@ -159,18 +158,18 @@ contains
             i_e_b2 = findloc(datas(:,ny),kEMPT_BUFF,dim=1,back=.False.) - 1
             j_e_b2 = j_e 
             j_s_b2 = findloc(datas(nx,:),kEMPT_BUFF,dim=1,back=.False.) + j_s + 1
-            blocked_UR = .True.
+            this%blocked_UR = .True.
         endif
         
-        if (blocked_LL) j_s = j_e_b+1
-        if (blocked_UR) j_e = j_s_b2-1
+        if (this%blocked_LL) j_s = j_e_b+1
+        if (this%blocked_UR) j_e = j_s_b2-1
         
         this%start_3d = (/ i_s, j_s, k_s /)
         this%cnt_3d = (/ (i_e-i_s+1), (j_e-j_s+1), (k_e-k_s+1)  /)
         this%cnt_2d = (/ (i_e-i_s+1), (j_e-j_s+1) /)
 
         !Compute block start and cnts accordingly
-        if (blocked_LL) then
+        if (this%blocked_LL) then
             this%start_3d_b = (/ i_s_b, j_s_b, k_s /)
             this%cnt_3d_b = (/ (i_e_b-i_s_b+1), (j_e_b-j_s_b+1), (k_e-k_s+1)  /)
             this%cnt_2d_b = (/ (i_e_b-i_s_b+1), (j_e_b-j_s_b+1) /)
@@ -179,7 +178,7 @@ contains
             this%cnt_3d_b = (/ 0, 0, 0  /)
             this%cnt_2d_b = (/ 0, 0 /)
         endif 
-        if (blocked_UR) then
+        if (this%blocked_UR) then
             this%start_3d_b2 = (/ i_s_b2, j_s_b2, k_s /)
             this%cnt_3d_b2 = (/ (i_e_b2-i_s_b2+1), (j_e_b2-j_s_b2+1), (k_e-k_s+1)  /)
             this%cnt_2d_b2 = (/ (i_e_b2-i_s_b2+1), (j_e_b2-j_s_b2+1) /)
@@ -544,6 +543,7 @@ contains
         integer,         intent(in) :: current_step
         type(Time_type), intent(in) :: time
         
+        real, allocatable :: var_3d(:,:,:)
         integer :: i, k_s, k_e
 
         integer :: start_three_D_t(4), start_three_D_t_b(4), start_three_D_t_b2(4)
@@ -553,7 +553,7 @@ contains
         integer :: v_i_s, v_i_e, v_j_s, v_j_e
         integer :: v_i_s_b, v_i_e_b, v_j_s_b, v_j_e_b
         integer :: v_i_s_b2, v_i_e_b2, v_j_s_b2, v_j_e_b2
-
+    
 
         do i=1,this%n_vars
             associate(var => this%variables(i))
@@ -597,28 +597,37 @@ contains
                 v_j_s_b2 = this%start_3d_b2(2) - this%jts + 1
                 v_j_e_b2 = v_j_s_b2 + cnt_3d_b2(2) - 1
                 
+                !Safety checks so that we don't index outside of the lower array bound (can happen if no block)
+                v_i_s_b = max(v_i_s_b,1)
+                v_i_e_b = max(v_i_e_b,1)
+
+                v_j_s_b = max(v_j_s_b,1)
+                v_j_e_b = max(v_j_e_b,1)
+                
+                v_i_s_b2 = max(v_i_s_b2,1)
+                v_i_e_b2 = max(v_i_e_b2,1)
+
+                v_j_s_b2 = max(v_j_s_b2,1)
+                v_j_e_b2 = max(v_j_e_b2,1)
                 call check_ncdf( nf90_var_par_access(this%ncfile_id, var%var_id, nf90_collective))
 
                 if (var%three_d) then
+                    var_3d = reshape(var%data_3d, &
+                        shape=(/ ubound(var%data_3d,1), ubound(var%data_3d,3), ubound(var%data_3d,2) /), order=[1,3,2])
                     if (var%unlimited_dim) then
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            reshape(var%data_3d(v_i_s:v_i_e,:,v_j_s:v_j_e), shape=cnt_3d, order=[1,3,2]), &
-                                        start_three_D_t, count=(/cnt_3d(1), cnt_3d(2), cnt_3d(3), 1/)), "saving:"//trim(var%name) )
+                            var_3d(v_i_s:v_i_e,v_j_s:v_j_e,:), start_three_D_t, count=(/cnt_3d(1), cnt_3d(2), cnt_3d(3), 1/)), "saving:"//trim(var%name) )
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            reshape(var%data_3d(v_i_s_b:v_i_e_b,:,v_j_s_b:v_j_e_b), shape=cnt_3d_b, order=[1,3,2]), &
-                                        start_three_D_t_b, count=(/cnt_3d_b(1), cnt_3d_b(2), (k_e-k_s+1), 1/)), "saving:"//trim(var%name) )
+                            var_3d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b,:), start_three_D_t_b, count=(/cnt_3d_b(1), cnt_3d_b(2), (k_e-k_s+1), 1/)), "saving:"//trim(var%name) )
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            reshape(var%data_3d(v_i_s_b2:v_i_e_b2,:,v_j_s_b2:v_j_e_b2), shape=cnt_3d_b2, order=[1,3,2]), &
-                                        start_three_D_t_b2, count=(/cnt_3d_b2(1), cnt_3d_b2(2), (k_e-k_s+1), 1/)), "saving:"//trim(var%name) )
+                            var_3d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2,:), start_three_D_t_b2, count=(/cnt_3d_b2(1), cnt_3d_b2(2), (k_e-k_s+1), 1/)), "saving:"//trim(var%name) )
                     elseif (this%creating) then
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, reshape(var%data_3d(v_i_s:v_i_e,:,v_j_s:v_j_e),  &
-                            shape=cnt_3d, order=[1,3,2]), start=this%start_3d,&
-                            count=cnt_3d ), "saving:"//trim(var%name) )
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, reshape(var%data_3d(v_i_s_b:v_i_e_b,:,v_j_s_b:v_j_e_b),  &
-                            shape=cnt_3d_b, order=[1,3,2]), start=this%start_3d_b,&
-                            count=cnt_3d_b ), "saving:"//trim(var%name) )
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, reshape(var%data_3d(v_i_s_b2:v_i_e_b2,:,v_j_s_b2:v_j_e_b2),  &
-                            shape=cnt_3d_b2, order=[1,3,2]), start=this%start_3d_b2,&
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, var_3d(v_i_s:v_i_e,v_j_s:v_j_e,:), &
+                            start=this%start_3d,count=cnt_3d ), "saving:"//trim(var%name) )
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, var_3d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b,:), &
+                            start=this%start_3d_b,count=cnt_3d_b ), "saving:"//trim(var%name) )
+                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
+                            var_3d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2,:), start=this%start_3d_b2,&
                             count=cnt_3d_b2 ), "saving:"//trim(var%name) )
                     endif
                 elseif (var%two_d) then
