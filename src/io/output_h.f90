@@ -48,6 +48,8 @@ module output_interface
       logical :: creating = .false.
       logical :: block_checked = .false.
       logical :: is_blocked = .false.
+      logical :: blocked_LL = .false.
+      logical :: blocked_UR = .false.
 
       ! The filename of the netcdf file to write
       character(len=kMAX_FILE_LENGTH), public :: filename, base_file_name
