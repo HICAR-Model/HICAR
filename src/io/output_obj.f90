@@ -618,36 +618,36 @@ contains
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
                             var_3d(v_i_s:v_i_e,v_j_s:v_j_e,:), start_three_D_t, count=(/cnt_3d(1), cnt_3d(2), cnt_3d(3), 1/)), "saving:"//trim(var%name) )
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            var_3d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b,:), start_three_D_t_b, count=(/cnt_3d_b(1), cnt_3d_b(2), (k_e-k_s+1), 1/)), "saving:"//trim(var%name) )
+                            var_3d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b,:), start_three_D_t_b, count=(/cnt_3d_b(1), cnt_3d_b(2), (k_e-k_s+1), 1/)), "saving LL block:"//trim(var%name) )
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            var_3d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2,:), start_three_D_t_b2, count=(/cnt_3d_b2(1), cnt_3d_b2(2), (k_e-k_s+1), 1/)), "saving:"//trim(var%name) )
+                            var_3d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2,:), start_three_D_t_b2, count=(/cnt_3d_b2(1), cnt_3d_b2(2), (k_e-k_s+1), 1/)), "saving UR block:"//trim(var%name) )
                     elseif (this%creating) then
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, var_3d(v_i_s:v_i_e,v_j_s:v_j_e,:), &
                             start=this%start_3d,count=cnt_3d ), "saving:"//trim(var%name) )
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, var_3d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b,:), &
-                            start=this%start_3d_b,count=cnt_3d_b ), "saving:"//trim(var%name) )
+                            start=this%start_3d_b,count=cnt_3d_b ), "saving LL block:"//trim(var%name) )
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
                             var_3d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2,:), start=this%start_3d_b2,&
-                            count=cnt_3d_b2 ), "saving:"//trim(var%name) )
+                            count=cnt_3d_b2 ), "saving UR block:"//trim(var%name) )
                     endif
                 elseif (var%two_d) then
                     if (var%unlimited_dim) then
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s:v_i_e,v_j_s:v_j_e), &
                                 start_two_D_t,count=(/ cnt_3d(1), cnt_3d(2), 1/)), "saving:"//trim(var%name) )
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b), &
-                                start_two_D_t_b,count=(/ cnt_3d_b(1), cnt_3d_b(2), 1/)), "saving:"//trim(var%name) )
+                                start_two_D_t_b,count=(/ cnt_3d_b(1), cnt_3d_b(2), 1/)), "saving LL block:"//trim(var%name) )
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2), &
-                                start_two_D_t_b2,count=(/ cnt_3d_b2(1), cnt_3d_b2(2), 1/)), "saving:"//trim(var%name) )
+                                start_two_D_t_b2,count=(/ cnt_3d_b2(1), cnt_3d_b2(2), 1/)), "saving UR block:"//trim(var%name) )
                     elseif (this%creating) then
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s:v_i_e,v_j_s:v_j_e), &
                                     start=(/ this%start_3d(1), this%start_3d(2) /), &
                                     count=(/ cnt_3d(1), cnt_3d(2) /)), "saving:"//trim(var%name) )
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b), &
                                     start=(/ this%start_3d_b(1), this%start_3d_b(2) /), &
-                                    count=(/ cnt_3d_b(1), cnt_3d_b(2) /)), "saving:"//trim(var%name) )
+                                    count=(/ cnt_3d_b(1), cnt_3d_b(2) /)), "saving LL block:"//trim(var%name) )
                         call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2), &
                                     start=(/ this%start_3d_b2(1), this%start_3d_b2(2) /), &
-                                    count=(/ cnt_3d_b2(1), cnt_3d_b2(2) /)), "saving:"//trim(var%name) )
+                                    count=(/ cnt_3d_b2(1), cnt_3d_b2(2) /)), "saving UR block:"//trim(var%name) )
                     endif
                 endif
             end associate

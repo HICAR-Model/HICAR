@@ -290,15 +290,15 @@ contains
         node_name_i = 0
         
         call MPI_Get_processor_name(node_name, name_len, ierr)
-        
         do n = 1,name_len
-            node_name_i = node_name_i + ichar(node_name(n:n))
+            node_name_i = node_name_i + ichar(node_name(n:n))*n*10
         enddo
         node_names(this_image()) = node_name_i
         call co_max(node_names)
         
         
         kNUM_PROC_PER_NODE = count(node_names==node_names(1))
+
         !Assign one io process per node, this results in best co-array transfer times
         kNUM_SERVERS = ceiling(num_images()*1.0/kNUM_PROC_PER_NODE)
         kNUM_COMPUTE = num_images()-kNUM_SERVERS
