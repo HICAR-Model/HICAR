@@ -2674,6 +2674,7 @@ contains
         do i=1, size(options%io_options%vars_for_output)
             if ((options%io_options%vars_for_output(i) > 0) .and. (options%vars_to_allocate(i) <= 0)) then
                 options%io_options%vars_for_output(i) = 0
+                if (this_image()==1) write(*,*) i
             endif
         enddo
 

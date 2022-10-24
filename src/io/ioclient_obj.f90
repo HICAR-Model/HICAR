@@ -39,9 +39,9 @@ contains
         this%k_s_w = domain%kts; this%k_e_w = domain%kte
         this%j_s_w = domain%jts; this%j_e_w = domain%jte
         if (domain%ims == domain%ids) this%i_s_w = domain%ids
-        if (domain%ime == domain%ide) this%i_e_w = domain%ide   !+1 !Add extra to accomodate staggered vars
+        if (domain%ime == domain%ide) this%i_e_w = domain%ide !Add extra to accomodate staggered vars
         if (domain%jms == domain%jds) this%j_s_w = domain%jds
-        if (domain%jme == domain%jde) this%j_e_w = domain%jde   !+1 !Add extra to accomodate staggered vars
+        if (domain%jme == domain%jde) this%j_e_w = domain%jde !Add extra to accomodate staggered vars
 
     
     end subroutine init
@@ -59,13 +59,12 @@ contains
         real, intent(inout), allocatable   :: write_buffer(:,:,:,:)[:]
         
         type(variable_t) :: var
-        integer :: i, n, nx, ny
+        integer :: i, n, nx, ny, i_s_w, i_e_w, j_s_w, j_e_w
         
         !Send domain fields to parent ca_write_buffer
         associate(list => domain%vars_to_out)
+        
         n = 1
-        nx = this%i_e_w - this%i_s_w + 1
-        ny = this%j_e_w - this%j_s_w + 1
 
         ! loop through the list of variables that need to be read in
         call list%reset_iterator()
@@ -78,12 +77,19 @@ contains
             if (var%computed) then
                 cycle
             else
+                i_s_w = this%i_s_w; i_e_w = this%i_e_w
+                j_s_w = this%j_s_w; j_e_w = this%j_e_w
+                if (domain%ime == domain%ide) i_e_w = i_e_w+var%xstag !Add extra to accomodate staggered vars
+                if (domain%jme == domain%jde) j_e_w = j_e_w+var%ystag !Add extra to accomodate staggered vars
+                nx = i_e_w - i_s_w + 1
+                ny = j_e_w - j_s_w + 1
+                
                 if (var%two_d) then
                     write_buffer(n,1:nx,1,1:ny) = &
-                            var%data_2d(this%i_s_w:this%i_e_w,this%j_s_w:this%j_e_w)
+                            var%data_2d(i_s_w:i_e_w,j_s_w:j_e_w)
                 else
                     write_buffer(n,1:nx,:,1:ny) = &
-                            var%data_3d(this%i_s_w:this%i_e_w,:,this%j_s_w:this%j_e_w)
+                            var%data_3d(i_s_w:i_e_w,:,j_s_w:j_e_w)
                 endif
                 n = n+1
             endif
