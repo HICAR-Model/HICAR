@@ -202,7 +202,7 @@ contains
 		
 		  do j = 1, NY_HICAR
 			do i = 1, Nx_HICAR
-				if ( isnan(H_(i,j)) .or. abs(H_(i,j))>300 ) write(*,*),"img-H222",i,j,this_image(), H_(i,j), Tsrf(i,j), Ta(i,j), Ua(i,j), KH_(i,j)
+				if ( isnan(H_(i,j)) .or. abs(H_(i,j))>300 ) write(*,*) "img-H222",i,j,this_image(), H_(i,j), Tsrf(i,j), Ta(i,j), Ua(i,j), KH_(i,j)
 				!if ( isnan(Ua(i,j)) .or. abs(Ua(i,j))>20 .or. Ua(i,j)<0) write(*,*),"befDr-Ua",i,j,this_image(), Ua(i,j), Tsrf(i,j), Ta(i,j), KH_(i,j), H_(i,j), windspd(i,j)
 			end do
 		  end do
