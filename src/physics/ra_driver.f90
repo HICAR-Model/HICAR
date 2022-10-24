@@ -187,7 +187,7 @@ contains
         real, allocatable :: qc(:,:,:),qi(:,:,:), qs(:,:,:), cldfra(:,:,:)
         real, allocatable :: xland(:,:)
 
-        logical :: f_qr, f_qc, f_qi, f_qs, f_qg, f_qv, f_qndrop
+        logical :: f_qr, f_qc, f_qi, F_QI2, F_QI3, f_qs, f_qg, f_qv, f_qndrop
         integer :: mp_options
 
         ims = domain%grid%ims
@@ -239,6 +239,8 @@ contains
         cldfra=0
         albedo=0.17
         F_QI=.false.
+        F_QI2 = .false.
+        F_QI3 = .false.
         F_QC=.false.
         F_QR=.false.
         F_QS=.false.
@@ -253,9 +255,13 @@ contains
         F_QV=associated(domain%water_vapor%data_3d )
         !F_QG=associated(domain%graupel_mass%data_3d )
         F_QNDROP=associated(domain%cloud_number%data_3d)
+        F_QI2=associated(domain%ice2_mass%data_3d)
+        F_QI3=associated(domain%ice3_mass%data_3d)
 
         if (F_QC) qc(:,:,:) = domain%cloud_water_mass%data_3d
         if (F_QI) qi(:,:,:) = domain%cloud_ice_mass%data_3d
+        if (F_QI2) qi(:,:,:) = qi + domain%ice2_mass%data_3d
+        if (F_QI3) qi(:,:,:) = qi + domain%ice3_mass%data_3d
         if (F_QS) qs(:,:,:) = domain%snow_mass%data_3d
 
         mp_options=0
