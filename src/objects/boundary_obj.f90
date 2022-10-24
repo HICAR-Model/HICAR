@@ -246,8 +246,6 @@ contains
         !These bounds are then extended by 1 in each direction to accomodate bilinear interpolation
         
         call set_boundary_image(this, temp_lat, temp_lon, domain_lat, domain_lon)
-        call io_write('temp_lat.nc',"lat",temp_lat)
-        call io_write('temp_lon.nc',"lon",temp_lon)
 
         !After finding forcing image indices, subset the lat/lon variables
         allocate(this%lat((this%ite-this%its+1),(this%jte-this%jts+1)))
@@ -288,12 +286,6 @@ contains
         if (this%kte < this%kts) write(*,*) 'image: ',this_image(),'  its: ',this%its,'  ite: ',this%ite,'  jts: ',this%jts,'  jte: ',this%jte
         if (this%jte < this%jts) write(*,*) 'image: ',this_image(),'  its: ',this%its,'  ite: ',this%ite,'  jts: ',this%jts,'  jte: ',this%jte
 
-        
-        write(img_str,'(I4)') this_image()
-        call io_write('best_z.nc',"z",this%z(:,:,:))
-        call io_write(trim(img_str)//".nc", "z", this%z(:,:,:) )
-
-        
         ! call assert(size(var_list) == size(dim_list), "list of variable dimensions must match list of variables")
         do i=1, size(var_list)
             call add_var_to_dict(this, var_list(i), dim_list(i), [(this%ite-this%its+1), nz, (this%jte-this%jts+1)])
