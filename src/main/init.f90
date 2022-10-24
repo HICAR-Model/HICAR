@@ -75,9 +75,6 @@ contains
         if (this_image()==1) write(*,*) "Initializing Domain"
         call domain%init(options)
 
-        if (this_image()==1) call io_write('domain_lat.nc',"lat",domain%latitude%data_2d)
-        if (this_image()==1) call io_write('domain_lon.nc',"lon",domain%longitude%data_2d)
-
         if (this_image()==1) write(*,*) "Initializing boundary condition data structure"
         call boundary%init(options,domain%latitude%data_2d,domain%longitude%data_2d,domain%variables_to_force)
 
