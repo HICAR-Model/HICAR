@@ -402,7 +402,7 @@ contains
                 !After advection, apply tendencies to cells and call diagnostic update. Now MP can be called
                 
                 call exch_timer%start()
-                call domain%halo_exchange_big()
+                call domain%halo_exchange()
                 call exch_timer%stop()
 
                 call adv_timer%start()
