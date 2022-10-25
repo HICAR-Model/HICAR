@@ -46,7 +46,7 @@ contains
         this%kts = kts; this%kte = kte
         this%jts = jts; this%jte = jte
         dims = (/ (this%ite-this%its+1),(this%kte-this%kts+1),(this%jte-this%jts+1) /)
-        
+
         ! the parameters option type can't contain allocatable arrays because it is a coarray
         ! so we need to allocate the vars_to_read and var_dimensions outside of the options type
         call setup_variable_lists(options%parameters%vars_to_read, options%parameters%dim_list, vars_to_read, var_dimensions)
@@ -88,6 +88,7 @@ contains
             err = nf90_open(this%file_list(this%curfile), IOR(nf90_nowrite,NF90_NETCDF4), this%ncfile_id, comm = par_comms, info = MPI_INFO_NULL)
         endif
         
+
         ! setup start/count arrays accordingly
         start_3d = (/ this%its,this%jts,this%kts,this%curstep /)
         start_2d = (/ this%its,this%jts,this%curstep /)
@@ -135,28 +136,28 @@ contains
         implicit none
         type(reader_t),   intent(inout) :: this
 
-
         integer :: steps_in_file
 
         this%curstep = this%curstep + 1 ! this may be all we have to do most of the time
-
         ! check that we haven't stepped passed the end of the current file
         steps_in_file = get_n_timesteps(this, this%time_var, 0)
 
         if (steps_in_file < this%curstep) then
+            ! close current file
+            call check_ncdf(nf90_close(this%ncfile_id), "Closing file "//trim(this%file_list(this%curfile)))
+            this%ncfile_id = -1
+            
             ! if we have, use the next file
             this%curfile = this%curfile + 1
             ! and the first timestep in the next file
             this%curstep = 1
-            
-            ! close current file
-            call check_ncdf(nf90_close(this%ncfile_id), "Closing file "//trim(this%file_list(this%curfile)))
-            this%ncfile_id = -1
+
 
 
             ! if we have run out of input files, stop with an error message
             if (this%curfile > size(this%file_list)) then
-                stop "Ran out of files to process while searching for matching time variable!"
+                if (this_image()==kNUM_PROC_PER_NODE) write(*,*) 'End of file list'
+                !stop "Ran out of files to process while searching for matching time variable!"
             endif
 
         endif

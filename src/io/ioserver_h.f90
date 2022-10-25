@@ -22,8 +22,6 @@ module ioserver_interface
   use boundary_interface, only : boundary_t
   use domain_interface,   only : domain_t
 
-!  use time_object,        only : Time_type, THREESIXTY, GREGORIAN, NOCALENDAR, NOLEAP
-
   implicit none
 
   private
@@ -48,9 +46,8 @@ module ioserver_interface
       type(output_t) :: outputer, rster
       type(reader_t) :: reader
       
-      type(domain_t) :: output_domain
+      type(Time_type), public :: io_time
 
-      
       real, pointer :: parent_write_buffer(:,:,:,:)
 
       ! store status of the object -- are we a parent or child process
@@ -95,7 +92,6 @@ module ioserver_interface
       procedure, public  :: write_file
       procedure, public  :: read_file
       procedure, public  :: close_files
-
       procedure, public  :: init
   end type
 
@@ -140,6 +136,7 @@ module ioserver_interface
       module subroutine close_files(this)
           class(ioserver_t), intent(inout) :: this
       end subroutine
+      
       
   end interface
 end module
