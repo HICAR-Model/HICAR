@@ -32,6 +32,7 @@ contains
         type(options_t) :: fake_options
         
         this%server_id = (this_image()/(num_images()/kNUM_SERVERS))
+        this%io_time = options%parameters%start_time
         if (this%server_id==1) write(*,*) 'Initializing I/O Server'
 
         this%outputer%base_file_name = options%io_options%output_file
@@ -292,7 +293,5 @@ contains
         call this%rster%close_file()
 
     end subroutine 
-
-    
     
 end submodule

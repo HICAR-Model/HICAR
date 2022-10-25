@@ -109,8 +109,6 @@ program icar
         EVENT POST (write_ev[ioclient%server])
         call output_timer%stop()
         next_output = options%parameters%start_time + options%io_options%output_dt
-        next_input = options%parameters%start_time! + options%io_options%input_dt
-
     case(kIO_TEAM)
         call ioserver%read_file(boundary, read_buffer)
         do i = 1,ioserver%n_children
@@ -120,32 +118,36 @@ program icar
         ! This should be no problem since output time steps are likely to overlap with input time steps
         future_dt_seconds = 3000.0D0
         call dt_reduce(phys_dt, future_dt_seconds, 3000.0D0)
+        
+        !We do not do output here so that we can continue straight to reading the next input file and not block the compute processes
         next_output = options%parameters%start_time
-        next_input = options%parameters%start_time !- options%io_options%input_dt
     end select
+    
     call initialization_timer%stop()
+    next_input = options%parameters%start_time + options%io_options%input_dt
 
 
     select case(exec_team)
     case(kCOMPUTE_TEAM)
 
         if (this_image()==1) write(*,*) "Initialization complete, beginning physics integration."
-        do while (domain%model_time < options%parameters%end_time)
+        do while (domain%model_time + small_time_delta < options%parameters%end_time)
 
             ! -----------------------------------------------------
             !
             !  Read input data if necessary
             !
             ! -----------------------------------------------------
-            if ((domain%model_time + small_time_delta) >= next_input) then
+            if ((domain%model_time + small_time_delta + options%io_options%input_dt) >= next_input) then
                 if (this_image()==1) write(*,*) ""
                 if (this_image()==1) write(*,*) " ----------------------------------------------------------------------"
                 if (this_image()==1) write(*,*) "Updating Boundary conditions"
-                next_input = next_input + options%io_options%input_dt
+                
                 call input_timer%start()
 
                 EVENT WAIT (read_ev)
                 call ioclient%receive(boundary, read_buffer)
+                
                 ! after reading all variables that can be read, not compute any remaining variables (e.g. z from p+ps)
                 call boundary%update_computed_vars(options, update=.True.)
 
@@ -170,7 +172,7 @@ program icar
                 ! Make the boundary condition dXdt values into units of [X]/s
                 call domain%update_delta_fields(next_input - domain%model_time)
                 call boundary%update_delta_fields(next_input - domain%model_time)
-            
+                next_input = next_input + options%io_options%input_dt
             endif
 
 
@@ -211,29 +213,40 @@ program icar
                 call output_timer%stop()
             endif
         end do
+        
+        !Wait for final write before ending program
+        EVENT WAIT (written_ev)
+
         if (options%physics%windtype==kITERATIVE_WINDS) call finalize_iter_winds() 
     case (kIO_TEAM)
-        do while (next_input <= options%parameters%end_time .or. next_output <= options%parameters%end_time)
+        do while (step_end(next_input,next_output) <= options%parameters%end_time)
+        
             !If we have more time to the next output, do input now
-            if (next_output + small_time_delta >= next_input) then
+            if ((next_output + options%io_options%input_dt + small_time_delta) >= next_input .and. &
+                next_input <= options%parameters%end_time) then
+                
                 call ioserver%read_file(boundary, read_buffer)
                 do i = 1,ioserver%n_children
                     EVENT POST (read_ev[ioserver%children(i)])
                 enddo
-                !Call dt_reduce to sync co_min call with compute processes. Pass a ridiculously large time step to ensure that it does not contribute to reduction.
+                
+                !Call dt_reduce to sync co_min call with compute processes. 
+                ! Pass a ridiculously large time step to ensure that it does not contribute to reduction.
                 ! This should be no problem since output time steps are likely to overlap with input time steps
                 future_dt_seconds = 3000.0D0
                 call dt_reduce(phys_dt, future_dt_seconds, 3000.0D0)
+                
                 next_input = next_input + options%io_options%input_dt
             endif
-        
-            !If we have more time to the next output, do input now
-            if (next_input + small_time_delta >= next_output) then
+            !If we have more time to the next input, do output now
+            if (next_input + small_time_delta >= (next_output + options%io_options%input_dt)) then
                 EVENT WAIT (write_ev, UNTIL_COUNT = ioserver%n_children)
+                
                 call ioserver%write_file(domain, next_output, write_buffer)
                 do i = 1,ioserver%n_children
                     EVENT POST (written_ev[ioserver%children(i)])
                 enddo
+                
                 next_output = next_output + options%io_options%output_dt
             endif
         enddo
@@ -262,7 +275,7 @@ program icar
         write(*,*) "halo-exchange  : ", trim(exch_timer%as_string())
         write(*,*) "winds          : ", trim(wind_timer%as_string())
     endif
-    
+
 contains
 
     function step_end(time1, time2) result(min_time)
@@ -302,6 +315,13 @@ contains
         !Assign one io process per node, this results in best co-array transfer times
         kNUM_SERVERS = ceiling(num_images()*1.0/kNUM_PROC_PER_NODE)
         kNUM_COMPUTE = num_images()-kNUM_SERVERS
+        
+        if ((mod(kNUM_COMPUTE,2) /= 0) .and. this_image()==1) then
+            write(*,*) 'WARNING: number of compute processes per node is odd-numbered.' 
+            write(*,*) 'One process per node is used for I/O.'
+            write(*,*) 'If the total number of compute processes is odd-numbered,'
+            write(*,*) 'this may lead to errors with domain decomposition'
+        endif
         
         if (mod(this_image(),(num_images()/kNUM_SERVERS)) == 0) then
             exec_team = kIO_TEAM
