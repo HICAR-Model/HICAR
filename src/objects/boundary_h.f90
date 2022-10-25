@@ -58,9 +58,6 @@ module boundary_interface
         procedure :: init_external
         procedure :: update_delta_fields
 
-        procedure :: distribute_update
-        procedure :: distribute_initial_conditions
-
         ! procedure :: find_start_time
         procedure :: init_local
         procedure :: init_local2
@@ -122,16 +119,6 @@ module boundary_interface
         real, dimension(:,:), intent(in)                :: domain_lat
         real, dimension(:,:), intent(in)                :: domain_lon
         type(var_dict_t),     intent(inout)             :: domain_vars
-    end subroutine
-
-    module subroutine distribute_update(this)
-        implicit none
-        class(boundary_t), intent(inout) :: this
-    end subroutine
-
-    module subroutine distribute_initial_conditions(this)
-        implicit none
-        class(boundary_t), intent(inout) :: this
     end subroutine
 
     module subroutine update_delta_fields(this, dt)
