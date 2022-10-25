@@ -1005,7 +1005,7 @@ contains
                               date, calendar, high_res_soil_state, t_is_potential,                       &
                               qv_is_relative_humidity, qv_is_spec_humidity,                              &
                               use_agl_height, agl_cap, start_date, forcing_start_date, end_date,         &
-                              time_varying_z,  longitude_system,            &
+                              time_varying_z,  longitude_system, batched_exch,            &
                               mp_options_filename,      use_mp_options,     &
                               block_options_filename,   use_block_options,  &
                               lt_options_filename,      use_lt_options,     &
