@@ -352,7 +352,9 @@ module domain_interface
     procedure :: halo_send
     procedure :: halo_retrieve
     procedure :: halo_exchange
-    procedure :: halo_exchange_big
+    procedure :: halo_send_batch
+    procedure :: halo_retrieve_batch
+    procedure :: halo_exchange_batch
     procedure :: enforce_limits
 
     procedure :: get_initial_conditions
@@ -422,15 +424,24 @@ module domain_interface
         class(domain_t), intent(inout) :: this
     end subroutine
 
-
     ! Exchange subdomain boundary information
     module subroutine halo_exchange(this)
         implicit none
         class(domain_t), intent(inout) :: this
     end subroutine
 
-    ! Exchange subdomain boundary information efficiently
-    module subroutine halo_exchange_big(this)
+    module subroutine halo_send_batch(this)
+        implicit none
+        class(domain_t), intent(inout) :: this
+    end subroutine
+
+    module subroutine halo_retrieve_batch(this)
+        implicit none
+        class(domain_t), intent(inout) :: this
+    end subroutine
+
+    ! Exchange subdomain boundary information as a batched exchange
+    module subroutine halo_exchange_batch(this)
         implicit none
         class(domain_t), intent(inout) :: this
     end subroutine

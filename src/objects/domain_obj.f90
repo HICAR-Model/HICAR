@@ -277,15 +277,16 @@ contains
         if (0<var_list( kVARS%tend_swrad) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%tend_swrad                  )), this%tend_swrad)
         end associate
 
-        allocate(this%north_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
+        if (options%parameters%batched_exch) then
+            allocate(this%north_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
                             this%kms:this%kme,1:this%grid%halo_size)[*])
-        allocate(this%south_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
+            allocate(this%south_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
                             this%kms:this%kme,1:this%grid%halo_size)[*])
-        allocate(this%east_in(this%adv_vars%n_vars,1:this%grid%halo_size,&
+            allocate(this%east_in(this%adv_vars%n_vars,1:this%grid%halo_size,&
                             this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
-        allocate(this%west_in(this%adv_vars%n_vars,1:this%grid%halo_size,&
+            allocate(this%west_in(this%adv_vars%n_vars,1:this%grid%halo_size,&
                             this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
-
+        endif
     end subroutine set_var_lists
 
 
@@ -543,12 +544,8 @@ contains
 
       call this%halo_retrieve()
     end subroutine
-
-    !> -------------------------------
-    !! Send and get the halos from all exchangable objects to/from their neighbors
-    !!
-    !! -------------------------------
-    module subroutine halo_exchange_big(this)
+    
+    module subroutine halo_send_batch(this)
         class(domain_t), intent(inout) :: this
         type(variable_t) :: var_to_advect
 
@@ -556,7 +553,6 @@ contains
         real, allocatable :: temp_south(:,:,:,:)
         real, allocatable :: temp_east(:,:,:,:)
         real, allocatable :: temp_west(:,:,:,:)
-        
         integer :: n
 
         allocate(temp_north(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
@@ -590,7 +586,14 @@ contains
         if (.not.(this%north_boundary)) this%south_in(:,:,:,:)[this%north_neighbor] = temp_north(:,:,:,:)
         if (.not.(this%west_boundary)) this%east_in(:,:,:,:)[this%west_neighbor] = temp_west(:,:,:,:)
         if (.not.(this%east_boundary)) this%west_in(:,:,:,:)[this%east_neighbor] = temp_east(:,:,:,:)
-        
+
+    end subroutine halo_send_batch
+
+    module subroutine halo_retrieve_batch(this)
+        class(domain_t), intent(inout) :: this
+        type(variable_t) :: var_to_advect
+        integer :: n
+
         sync images( this%neighbors )
 
         call this%adv_vars%reset_iterator()
@@ -610,7 +613,19 @@ contains
                     this%west_in(n,:,:,1:(this%jte-this%jts+1))
             n = n+1
         enddo
+    
+    end subroutine halo_retrieve_batch
 
+    !> -------------------------------
+    !! Send and get the halos from all exchangable objects to/from their neighbors
+    !!
+    !! -------------------------------
+    module subroutine halo_exchange_batch(this)
+        class(domain_t), intent(inout) :: this
+
+        call this%halo_send_batch()
+        
+        call this%halo_retrieve_batch()
     end subroutine
 
 

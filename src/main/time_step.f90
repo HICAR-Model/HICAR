@@ -274,59 +274,6 @@ contains
 
     end subroutine dt_reduce
     
-!    subroutine update_dt(dt, options, domain, end_time)
-!        implicit none
-!        type(time_delta_t), intent(inout) :: dt
-!        type(options_t),    intent(in)    :: options
-!        type(domain_t),     intent(in)    :: domain
-!        type(Time_type),    intent(in)    :: end_time
-
-!        double precision :: seconds
-
-        ! compute internal timestep dt to maintain stability
-        ! courant condition for 3D advection. Note that w is normalized by dx/dz
-
-        ! Note this needs to be performed when advect_density is enabled
-        ! if (options%parameters%advect_density) then
-            ! call dt%set(seconds=compute_dt(domain%dx, domain%ur, domain%vr, domain%wr, domain%rho, domain%dz_inter,&
-            !                 options%time_options%cfl_reduction_factor, cfl_strictness=options%time_options%cfl_strictness,                   &
-            !                 use_density=.True.))
-
-        ! else
-        ! compute the dt to meet the CFL criteria specified given dx, u, v, w, dz
-!        associate(dx         => domain%dx,                              &
-!                  u          => domain%u%data_3d(domain%its:domain%ite+1,:,domain%jts:domain%jte),                     &
-!                  v          => domain%v%data_3d(domain%its:domain%ite,:,domain%jts:domain%jte+1),                     &
-!                  w          => domain%w%data_3d(domain%its:domain%ite,:,domain%jts:domain%jte),                       &
-!                  density    => domain%density%data_3d(domain%its:domain%ite,:,domain%jts:domain%jte),                 &
-!                  dz         => options%parameters%dz_levels,           &
-!                  reduction  => options%time_options%cfl_reduction_factor,&
-!                  strictness => options%time_options%cfl_strictness       &
-!            )
-
-!            seconds = compute_dt(dx, u, v, w, density, dz, reduction, &
-!                                 cfl_strictness=strictness, use_density=.false.)
-
-!        end associate
-        ! endif
-
-!        seconds = compute_dt(dx, u, v, w, density, options%parameters%dz_levels, options%time_options%cfl_reduction_factor, &
-!                                 cfl_strictness=options%time_options%cfl_strictness, use_density=.false.)
-        ! perform a reduction across all images to find the minimum time step required
-!#ifndef __INTEL_COMPILER
-!        call CO_MIN(seconds)
-!#endif
-!#ifdef __INTEL_COMPILER
-!         seconds = dx / 100
-!#endif
-!        call co_min(seconds)
-
-        ! set an upper bound on dt to keep microphysics and convection stable (?)
-        ! store this back in the dt time_delta data structure
-!        call dt%set(seconds=min(seconds,120.0D0))
-
-!    end subroutine update_dt
-
 
     !>------------------------------------------------------------
     !!  Step forward one IO time step.
@@ -397,12 +344,12 @@ contains
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" convect")
 
                 
-                !Call, 'unify tendencies', where all physics tendencies are applied and forcing tendency is applied. Advection tendencies do not need to be calculated as long as
-                ! the input arrays to advect are the same as the start of the time step.
-                !After advection, apply tendencies to cells and call diagnostic update. Now MP can be called
-                
                 call exch_timer%start()
-                call domain%halo_exchange_big()
+                if (options%parameters%batched_exch) then
+                    call domain%halo_exchange_batch()
+                else
+                    call domain%halo_exchange()
+                endif
                 call exch_timer%stop()
 
                 call adv_timer%start()
@@ -415,23 +362,11 @@ contains
                 
                 call mp_timer%start()
 
-                call mp(domain, options, real(dt%seconds()))!, halo=domain%grid%halo_size)
+                call mp(domain, options, real(dt%seconds()))
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp_halo", fix=.True.)
                 call mp_timer%stop()
-                !call domain%halo_send()
+                
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_send", fix=.True.)
-
-                ! call rad(domain, options, real(dt%seconds()), subset=1)
-                ! call lsm(domain, options, real(dt%seconds()))!, subset=1)
-                ! call pbl(domain, options, real(dt%seconds()))!, subset=1)
-                ! call convect(domain, options, real(dt%seconds()), subset=1)
-
-                !call mp(domain, options, real(dt%seconds()), subset=domain%grid%halo_size)
-
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" mp(domain", fix=.True.)
-                !call domain%halo_retrieve()
-                if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_retrieve", fix=.True.)
-
 
                 !If we are in the last ~10 updates of a time step and a variable drops below 0, we have probably over-shot a value of 0. Force back to 0
                 if ((end_time%seconds() - domain%model_time%seconds()) < (dt%seconds()*10)) then
