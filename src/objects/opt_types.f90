@@ -21,6 +21,7 @@ module options_types
         integer::radiation
         integer::convection
         integer::windtype
+        character(len=MAXVARLENGTH) :: phys_suite
     end type physics_type
     
     
@@ -28,7 +29,6 @@ module options_types
     ! store wind solver and parameterization options
     ! ------------------------------------------------
     type wind_type
-        integer :: solver
         logical :: terr_diff
         logical :: Sx
         real    :: Sx_dmax
@@ -264,6 +264,8 @@ module options_types
         logical :: z_is_on_interface    ! if true the z variable is interpreted as residing at model level interfaces
         logical :: advect_density       ! properly incorporate density into the advection calculations.
                                         ! Doesn't play nice with linear winds
+        logical :: batched_exch         ! Whether or not do do halo_exchanges with a batched approached or singular
+        
         logical :: high_res_soil_state  ! read the soil state from the high res input file not the low res file
 
         integer :: buffer               ! buffer to remove from all sides of the high res grid supplied

@@ -69,7 +69,9 @@ contains
         call cu_parameters_namelist(    this%parameters%cu_options_filename,    this)
         call bias_parameters_namelist(  this%parameters%bias_options_filename,  this)
         call rad_parameters_namelist(   this%parameters%rad_options_filename,   this)
-
+        
+        if (this%physics%phys_suite /= '') call set_phys_suite(this)
+        
         if (this%parameters%restart) then
             ! if (this_image()==1) write(*,*) "  (opt) Restart = ", this%parameters%restart
             call init_restart_options(options_filename, this%parameters)
@@ -509,9 +511,10 @@ contains
         integer :: name_unit
 !       variables to be used in the namelist
         integer :: pbl, lsm, water, mp, rad, conv, adv, wind
-
+        character(len=MAXVARLENGTH) :: phys_suite
+        
 !       define the namelist
-        namelist /physics/ pbl, lsm, water, mp, rad, conv, adv, wind
+        namelist /physics/ pbl, lsm, water, mp, rad, conv, adv, wind, phys_suite
 
 !       default values for physics options (advection+linear winds+simple_microphysics)
         pbl = 0 ! 0 = no PBL,
@@ -552,7 +555,8 @@ contains
                 ! 2 = terrain induced horizontal accelleration
                 ! 3 = Adjustment to horizontal winds to reduce divergence, based on technique from O'brien et al., 1970
                 ! 4 = Mass-conserving wind solver based on variational calculus technique, requires PETSc
-                
+        phys_suite = ''
+        
 !       read the namelist
         open(io_newunit(name_unit), file=filename)
         read(name_unit,nml=physics)
@@ -567,6 +571,7 @@ contains
         options%physics%microphysics  = mp
         options%physics%radiation     = rad
         options%physics%windtype      = wind
+        options%physics%phys_suite    = trim(phys_suite)
 
     end subroutine physics_namelist
 
@@ -982,7 +987,7 @@ contains
                    high_res_soil_state, use_agl_height, time_varying_z, t_is_potential, qv_is_spec_humidity, &
                    qv_is_relative_humidity, &
                    use_mp_options, use_lt_options, use_adv_options, use_lsm_options, use_bias_correction, &
-                   use_block_options, use_cu_options, use_rad_options
+                   use_block_options, use_cu_options, use_rad_options, batched_exch
 
         character(len=MAXFILELENGTH) :: date, calendar, start_date, forcing_start_date, end_date
         integer :: year, month, day, hour, minute, second
@@ -1045,7 +1050,8 @@ contains
         end_date            = ""
         time_varying_z      = .False.
         longitude_system    = kMAINTAIN_LON
-
+        batched_exch        = .False.
+        
         ! flag set to read specific parameterization options
         use_mp_options=.False.
         mp_options_filename = filename
@@ -1164,6 +1170,7 @@ contains
         options%warning_level    = warning_level
         options%use_agl_height   = use_agl_height
         options%agl_cap          = agl_cap
+        options%batched_exch     = batched_exch
 
         options%qv_is_relative_humidity = qv_is_relative_humidity
         options%qv_is_spec_humidity= qv_is_spec_humidity
@@ -2097,16 +2104,14 @@ contains
         
         integer :: name_unit                            ! logical unit number for namelist
         !Define parameters
-        integer :: solver, roughness
+        integer :: roughness
         logical :: terr_diff, Sx, wind_only
         real    :: Sx_dmax
         
         !Make name-list
-        namelist /wind/ solver, terr_diff, Sx, wind_only, Sx_dmax, roughness
+        namelist /wind/ terr_diff, Sx, wind_only, Sx_dmax, roughness
         
         !Set defaults
-        solver = 0 ! 0 = Simple kinematic method (balance uvw),
-                   ! 1 = O'brien method, forcing winds to 0 at model top and back-itterating
         terr_diff = .False.
         Sx = .False.
         roughness = 0 ! No roughness correction, the only one implemented so far
@@ -2122,7 +2127,6 @@ contains
         
         
         !Store into options object
-        options%wind%solver = solver
         options%wind%terr_diff = terr_diff
         options%wind%Sx = Sx
         options%wind%Sx_dmax = Sx_dmax
@@ -2162,4 +2166,20 @@ contains
         options%time_options%cfl_reduction_factor = cfl_reduction_factor
         options%time_options%RK3 = RK3
     end subroutine time_parameters_namelist
+    
+    
+    subroutine set_phys_suite(options)
+        implicit none
+        type(options_t),    intent(inout) :: options
+    
+        select case (options%physics%phys_suite)
+            case('HICAR')
+                !Add base HICAR options here
+                options%physics%windtype = 4
+                options%wind%Sx = .True.
+
+        end select
+    
+    end subroutine
+    
 end submodule
