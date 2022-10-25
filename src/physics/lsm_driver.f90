@@ -112,7 +112,7 @@ contains
         implicit none
         type(options_t),intent(inout) :: options
 
-        if (options%physics%landsurface == kLSM_NOAH .or. options%physics%landsurface == kLSM_BASIC .or. options%physics%landsurface == kLSM_FSM) then
+        if (options%physics%landsurface == kLSM_NOAH .or. options%physics%landsurface == kLSM_BASIC) then
             call options%alloc_vars( &
                          [kVARS%water_vapor, kVARS%potential_temperature, kVARS%precipitation, kVARS%temperature,       &
                          kVARS%exner, kVARS%dz_interface, kVARS%density, kVARS%pressure_interface, kVARS%shortwave,     &
@@ -195,31 +195,36 @@ contains
                          ! kVARS%soil_type, kVARS%land_mask, kVARS%vegetation_fraction]
         endif
 
-        if (options%physics%watersurface > 1) then
+
+
+        if (options%physics%landsurface == kLSM_FSM) then
             call options%alloc_vars( &
-                         [kVARS%sst, kVARS%ustar, kVARS%surface_pressure, kVARS%water_vapor,            &
-                         kVARS%temperature, kVARS%sensible_heat, kVARS%latent_heat, kVARS%land_mask,    &
-                         kVARS%humidity_2m, kVARS%temperature_2m, kVARS%skin_temperature, kVARS%u_10m, kVARS%v_10m])
+                         [kVARS%water_vapor, kVARS%potential_temperature, kVARS%precipitation, kVARS%temperature,       &
+                         kVARS%exner, kVARS%dz_interface, kVARS%density, kVARS%pressure_interface, kVARS%shortwave,     &
+                         kVARS%longwave, kVARS%vegetation_fraction, kVARS%canopy_water, kVARS%snow_water_equivalent,    &
+                         kVARS%skin_temperature, kVARS%soil_water_content, kVARS%soil_temperature, kVARS%terrain,       &
+                         kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
+                         kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
+                         kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%ustar,        &
+                         kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg,                                        &
+                         kVARS%veg_type, kVARS%soil_type, kVARS%land_mask,												&
+						 & ! needed for FSM
+						 kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow  ])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
 
              call options%restart_vars( &
-                         [kVARS%sst, kVARS%potential_temperature, kVARS%water_vapor, kVARS%skin_temperature,        &
-                         kVARS%surface_pressure, kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m,  &
-                         kVARS%humidity_2m, kVARS%temperature_2m])
+                         [kVARS%water_vapor, kVARS%potential_temperature, kVARS%precipitation, kVARS%temperature,       &
+                         kVARS%density, kVARS%pressure_interface, kVARS%shortwave,                                      &
+                         kVARS%longwave, kVARS%canopy_water, kVARS%snow_water_equivalent,                               &
+                         kVARS%skin_temperature, kVARS%soil_water_content, kVARS%soil_temperature, kVARS%terrain,       &
+                         kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
+                         kVARS%snow_height,                                                                             &  ! BK 2020/10/26
+                         kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
+                         kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%veg_type,		&
+                         & ! needed for FSM
+                         kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow  ])
         endif
-
-		!! MJ added for needed new vars for FSM
-		!! note that this is in addition to what normal lsm uses
-		!! note that we should take care of restart and output later
-		!! note that it can go to a separate function
-		if (options%physics%landsurface==kLSM_FSM) then !options%physics%landsurface > 1
-		
-			call options%alloc_vars( &
-						 [kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow  ]) !J added.... this is needed to define the vars...
-			call options%restart_vars( &
-						 [kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow  ])  !J added.... this is need for the output
-		endif
 		
     end subroutine lsm_var_request
 
@@ -1362,7 +1367,7 @@ contains
             endif
 
 
-			!! MJ added: this lock is for FSM as lsm..
+			!! MJ added: this block is for FSM as lsm..
 			if (options%physics%landsurface == kLSM_FSM) then
 				current_precipitation = (domain%accumulated_precipitation%data_2d-RAINBL)+(domain%precipitation_bucket-rain_bucket)*kPRECIP_BUCKET_SIZE ! this total prep=rainfall+snowfall in kg m-2
 				current_snow = (domain%accumulated_snowfall%data_2d-SNOWBL)+(domain%snowfall_bucket-snow_bucket)*kPRECIP_BUCKET_SIZE ! snowfall in kg m-2
