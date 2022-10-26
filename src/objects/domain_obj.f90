@@ -274,7 +274,17 @@ contains
         if (0<var_list( kVARS%cosine_zenith_angle) )        call this%vars_to_out%add_var( trim( get_varname( kVARS%cosine_zenith_angle          )), this%cosine_zenith_angle)
         if (0<var_list( kVARS%land_emissivity) )            call this%vars_to_out%add_var( trim( get_varname( kVARS%land_emissivity              )), this%land_emissivity)
         if (0<var_list( kVARS%temperature_interface) )      call this%vars_to_out%add_var( trim( get_varname( kVARS%temperature_interface        )), this%temperature_interface)
-        if (0<var_list( kVARS%tend_swrad) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%tend_swrad                  )), this%tend_swrad)
+        if (0<var_list( kVARS%tend_swrad) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%tend_swrad                   )), this%tend_swrad)
+        !! MJ added for FSM:
+        if (0<var_list( kVARS%runoff) )                     call this%vars_to_out%add_var( trim( get_varname( kVARS%runoff                       )), this%runoff)
+        if (0<var_list( kVARS%snowdepth) )                  call this%vars_to_out%add_var( trim( get_varname( kVARS%snowdepth                    )), this%snowdepth)
+        if (0<var_list( kVARS%Tsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%Tsnow                        )), this%Tsnow)
+        if (0<var_list( kVARS%Sice) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%Sice                         )), this%Sice)
+        if (0<var_list( kVARS%Sliq) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%Sliq                         )), this%Sliq)
+        if (0<var_list( kVARS%albs) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%albs                         )), this%albs)
+        if (0<var_list( kVARS%Ds) )                         call this%vars_to_out%add_var( trim( get_varname( kVARS%Ds                           )), this%Ds)
+        if (0<var_list( kVARS%fsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%fsnow                        )), this%fsnow)
+        if (0<var_list( kVARS%Nsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%Nsnow                        )), this%Nsnow)        
         end associate
 
         allocate(this%north_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
