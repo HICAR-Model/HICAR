@@ -63,6 +63,7 @@ contains
         class(domain_t), intent(inout) :: this
         type(options_t), intent(in)    :: options
 
+        integer :: var_list(kMAX_STORAGE_VARS)
 
         if (options%vars_to_advect(kVARS%water_vapor)>0) call this%adv_vars%add_var('qv', this%water_vapor%meta_data)
         
@@ -88,7 +89,7 @@ contains
         if (options%vars_to_advect(kVARS%ice3_c)>0) call this%adv_vars%add_var('ice3_c', this%ice3_c%meta_data)   
 
  
-        associate(var_list => options%io_options%vars_for_output)
+        var_list = options%io_options%vars_for_output + options%vars_for_restart
         if (0<var_list( kVARS%u) )                          call this%vars_to_out%add_var( trim( get_varname( kVARS%u                            )), this%u%meta_data)
         if (0<var_list( kVARS%v) )                          call this%vars_to_out%add_var( trim( get_varname( kVARS%v                            )), this%v%meta_data)
         if (0<var_list( kVARS%w) )                          call this%vars_to_out%add_var( trim( get_varname( kVARS%w                            )), this%w%meta_data)
@@ -191,6 +192,7 @@ contains
         if (0<var_list( kVARS%snow_age_factor) )            call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_age_factor              )), this%snow_age_factor)
         if (0<var_list( kVARS%snow_height) )                call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_height                  )), this%snow_height)
         if (0<var_list( kVARS%skin_temperature) )           call this%vars_to_out%add_var( trim( get_varname( kVARS%skin_temperature             )), this%skin_temperature)
+        if (0<var_list( kVARS%sst) )                        call this%vars_to_out%add_var( trim( get_varname( kVARS%sst                          )), this%sst)
         if (0<var_list( kVARS%soil_water_content) )         call this%vars_to_out%add_var( trim( get_varname( kVARS%soil_water_content           )), this%soil_water_content)
         if (0<var_list( kVARS%eq_soil_moisture) )           call this%vars_to_out%add_var( trim( get_varname( kVARS%eq_soil_moisture             )), this%eq_soil_moisture)
         if (0<var_list( kVARS%smc_watertable_deep) )        call this%vars_to_out%add_var( trim( get_varname( kVARS%smc_watertable_deep          )), this%smc_watertable_deep)
@@ -254,6 +256,7 @@ contains
         if (0<var_list( kVARS%storage_gw) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%storage_gw                   )), this%storage_gw)
         if (0<var_list( kVARS%storage_lake) )               call this%vars_to_out%add_var( trim( get_varname( kVARS%storage_lake                 )), this%storage_lake)
         if (0<var_list( kVARS%roughness_z0) )               call this%vars_to_out%add_var( trim( get_varname( kVARS%roughness_z0                 )), this%roughness_z0)
+        !if (0<var_list( kVARS%veg_type) )                   call this%vars_to_out%add_var( trim( get_varname( kVARS%veg_type                     )), this%veg_type)
         if (0<var_list( kVARS%mass_leaf) )                  call this%vars_to_out%add_var( trim( get_varname( kVARS%mass_leaf                    )), this%mass_leaf)
         if (0<var_list( kVARS%mass_root) )                  call this%vars_to_out%add_var( trim( get_varname( kVARS%mass_root                    )), this%mass_root)
         if (0<var_list( kVARS%mass_stem) )                  call this%vars_to_out%add_var( trim( get_varname( kVARS%mass_stem                    )), this%mass_stem)
@@ -275,7 +278,6 @@ contains
         if (0<var_list( kVARS%land_emissivity) )            call this%vars_to_out%add_var( trim( get_varname( kVARS%land_emissivity              )), this%land_emissivity)
         if (0<var_list( kVARS%temperature_interface) )      call this%vars_to_out%add_var( trim( get_varname( kVARS%temperature_interface        )), this%temperature_interface)
         if (0<var_list( kVARS%tend_swrad) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%tend_swrad                  )), this%tend_swrad)
-        end associate
 
         if (options%parameters%batched_exch) then
             allocate(this%north_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
@@ -2645,10 +2647,10 @@ contains
                       kVARS%u_latitude,             kVARS%u_longitude,              &
                       kVARS%v_latitude,             kVARS%v_longitude               ])
 
+        !clean output var list
         do i=1, size(options%io_options%vars_for_output)
             if ((options%io_options%vars_for_output(i) > 0) .and. (options%vars_to_allocate(i) <= 0)) then
                 options%io_options%vars_for_output(i) = 0
-                if (this_image()==1) write(*,*) i
             endif
         enddo
 

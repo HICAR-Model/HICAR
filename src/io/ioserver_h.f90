@@ -41,9 +41,9 @@ module ioserver_interface
       ! have to keep reallocating variables whenever something is added or removed
       integer, public :: n_input_variables, n_output_variables, n_children, IO_comms
       integer, public :: server_id = -1
-      type(variable_t), public, allocatable :: variables(:)
+
       ! time variable , publicis stored outside of the variable list... probably need to think about that some
-      type(output_t) :: outputer, rster
+      type(output_t) :: outputer
       type(reader_t) :: reader
       
       type(Time_type), public :: io_time
@@ -70,11 +70,15 @@ module ioserver_interface
 
       integer, allocatable, dimension(:) :: isrc, ierc, ksrc, kerc, jsrc, jerc, iswc, iewc, kswc, kewc, jswc, jewc
       
-      integer, public ::  i_s_w, i_e_w, k_s_w, k_e_w, j_s_w, j_e_w, n_w, i_s_r, i_e_r, k_s_r, k_e_r, j_s_r, j_e_r, n_r
+      integer, public ::  i_s_w, i_e_w, k_s_w, k_e_w, j_s_w, j_e_w, n_w, i_s_r, i_e_r, k_s_r, k_e_r, j_s_r, j_e_r, n_r, n_restart
       integer :: restart_counter = 0
       integer :: output_counter = 0
       integer :: frames_per_outfile, restart_count
-
+      
+      !the indices of the output buffer corresponding to the restart vars
+      integer, public, allocatable :: out_var_indices(:), rst_var_indices(:)
+      !the names of the restart vars, indexed the same as the above array
+      character(len=kMAX_NAME_LENGTH), public, allocatable :: rst_var_names(:)
 
       ! The filename of the netcdf file to write
       character(len=kMAX_FILE_LENGTH) :: output_file_name, restart_file_name
@@ -91,6 +95,7 @@ module ioserver_interface
 
       procedure, public  :: write_file
       procedure, public  :: read_file
+      procedure, public  :: read_restart_file
       procedure, public  :: close_files
       procedure, public  :: init
   end type
@@ -103,9 +108,9 @@ module ioserver_interface
       !!----------------------------------------------------------
       module subroutine init(this, domain, options, isrc, ierc, ksrc, kerc, jsrc, jerc, iswc, iewc, kswc, kewc, jswc, jewc)
           implicit none
-          class(ioserver_t),   intent(inout)  :: this
-          type(domain_t),   intent(in)        :: domain
-          type(options_t), intent(in) :: options
+          class(ioserver_t),   intent(inout) :: this
+          type(domain_t),      intent(inout) :: domain
+          type(options_t),     intent(in)    :: options
           integer, allocatable, dimension(:), intent(in) :: isrc, ierc, ksrc, kerc, jsrc, jerc, iswc, iewc, kswc, kewc, jswc, jewc
 
       end subroutine
@@ -114,10 +119,9 @@ module ioserver_interface
       !! Increase the size of the variables array if necessary
       !!
       !!----------------------------------------------------------
-      module subroutine write_file(this, domain, time, write_buffer)
+      module subroutine write_file(this, time, write_buffer)
           implicit none
           class(ioserver_t),   intent(inout)  :: this
-          type(domain_t),   intent(in)        :: domain
           type(Time_type),  intent(in)        :: time
           real, allocatable, intent(in)       :: write_buffer(:,:,:,:)[:]
       end subroutine
@@ -126,11 +130,17 @@ module ioserver_interface
       !! Set the domain data structure to be used when writing
       !!
       !!----------------------------------------------------------
-      module subroutine read_file(this, forcing, read_buffer)
+      module subroutine read_file(this, read_buffer)
           implicit none
-          class(ioserver_t),  intent(inout)  :: this
-          type(boundary_t),   intent(inout)  :: forcing
+          class(ioserver_t), intent(inout)   :: this
           real, allocatable, intent(inout)   :: read_buffer(:,:,:,:)[:]
+      end subroutine
+      
+      ! Same as above, but for restart file
+      module subroutine read_restart_file(this, options, write_buffer)
+          class(ioserver_t),   intent(inout) :: this
+          type(options_t),     intent(in)    :: options
+          real, intent(inout), allocatable   :: write_buffer(:,:,:,:)[:]
       end subroutine
 
       module subroutine close_files(this)

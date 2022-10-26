@@ -15,7 +15,7 @@
 submodule(ioserver_interface) ioserver_implementation
   use debug_module,             only : check_ncdf
   use iso_fortran_env
-  use timer_interface,    only : timer_t
+  use output_metadata,          only : get_metadata, get_varindx
 
   implicit none
 
@@ -23,47 +23,40 @@ contains
 
 
     module subroutine init(this, domain, options, isrc, ierc, ksrc, kerc, jsrc, jerc, iswc, iewc, kswc, kewc, jswc, jewc)
-        class(ioserver_t),   intent(inout)  :: this
-        type(domain_t),   intent(in)        :: domain
-        type(options_t), intent(in) :: options
+        class(ioserver_t),  intent(inout)  :: this
+        type(domain_t),     intent(inout)  :: domain
+        type(options_t),    intent(in)     :: options
         integer, allocatable, dimension(:), intent(in) :: isrc, ierc, ksrc, kerc, jsrc, jerc, iswc, iewc, kswc, kewc, jswc, jewc
-
-        integer ::  n, globalComm, splitComm, color, ierr
-        type(options_t) :: fake_options
+        integer ::  n, var_indx, out_i, rst_i
+        
         
         this%server_id = (this_image()/(num_images()/kNUM_SERVERS))
         this%io_time = options%parameters%start_time
         if (this%server_id==1) write(*,*) 'Initializing I/O Server'
 
-        this%outputer%base_file_name = options%io_options%output_file
-        this%restart_count = options%io_options%restart_count
-        this%rster%base_file_name = options%io_options%restart_out_file
-        
         call decompose(this, isrc, ierc, ksrc, kerc, jsrc, jerc, iswc, iewc, kswc, kewc, jswc, jewc)
 
+
+        !Setup reading capability
         call this%reader%init(this%i_s_r,this%i_e_r,this%k_s_r,this%k_e_r,this%j_s_r,this%j_e_r,options)
         this%n_children = size(this%children)
         this%n_r = this%reader%n_vars
 
-        !call this%rster%set_domain(domain)
-        !call this%rster%add_variables(options%vars_for_restart, domain)
 
-        
+        !Setup writing capability
         call this%outputer%init(domain,options,this%i_s_w,this%i_e_w,this%k_s_w,this%k_e_w,this%j_s_w,this%j_e_w)
-        !write(*,*) 'outputter inited:   ', size(options%io_options%vars_for_output)
-
+        
         this%n_w = this%outputer%n_vars
 
         !determine if we need to increase our k index due to some very large soil field
         do n = 1,this%n_w
             if(this%outputer%variables(n)%dim_len(3) > this%k_e_w) this%k_e_w = this%outputer%variables(n)%dim_len(3)
         enddo
-
         
+        !Link local buffer to the outputer variables
         allocate(this%parent_write_buffer(this%n_w,this%i_s_w:this%i_e_w+1,this%k_s_w:this%k_e_w,this%j_s_w:this%j_e_w+1))
         
         do n = 1,this%n_w
-            !if(this%outputer%variables(n)%name == options%io_options%vars_for_output) then
             if(this%outputer%variables(n)%three_d) then
                 this%outputer%variables(n)%data_3d => this%parent_write_buffer(n,:,:,:)
             else
@@ -71,10 +64,27 @@ contains
             endif
         enddo
 
-        if (options%parameters%restart) then
-            if (this%server_id==1) write(*,*) "Reading restart data"
-                ! call restart_model(domain, this%rster, options)
-        endif
+        !Setup arrays for information about accessing variables from write buffer
+        allocate(this%out_var_indices(count(options%io_options%vars_for_output > 0)))
+        allocate(this%rst_var_indices(count(options%vars_for_restart > 0)))
+        allocate(this%rst_var_names(count(options%vars_for_restart > 0)))
+
+        out_i = 1
+        rst_i = 1
+        
+        do n=1,this%n_w
+            var_indx = get_varindx(this%outputer%variables(n)%name)
+            if (options%io_options%vars_for_output(var_indx) > 0) then
+                this%out_var_indices(out_i) = n
+                out_i = out_i + 1
+            endif
+            if (options%vars_for_restart(var_indx) > 0) then
+                this%rst_var_indices(rst_i) = n
+                this%rst_var_names(rst_i) = this%outputer%variables(n)%name
+                rst_i = rst_i + 1
+            endif
+        enddo
+
 
     end subroutine
     
@@ -220,16 +230,11 @@ contains
 
     end subroutine decompose
     
-    ! This subroutine has two functions, depending on the process which calls it
-    ! For child processes, they send their domain output vars to the output coarray
-    ! buffer of the parent process, and set a flag on themselves that they are ready for output
-    ! For parent processes, they wait until all children report that they are ready for output
-    ! Then, the parent process hands this coarray to the outputer object, which performs
-    ! parallel I/O with the other parent processes.
-    module subroutine write_file(this, domain, time, write_buffer)
+    ! This subroutine gathers the write buffers of its children 
+    ! compute processes and then writes them to the output file
+    module subroutine write_file(this, time, write_buffer)
         implicit none
         class(ioserver_t), intent(inout)  :: this
-        type(domain_t),   intent(in)      :: domain
         type(Time_type),  intent(in)      :: time
         real, allocatable, intent(in)     :: write_buffer(:,:,:,:)[:]
 
@@ -237,13 +242,13 @@ contains
         ! Loop through child images and send chunks of buffer array to each one
         
         this%parent_write_buffer = kEMPT_BUFF
-        do i=1,size(this%children)
+        do i=1,this%n_children
             n = this%children(i)
             
             i_s_w = this%iswc(i); i_e_w = this%iewc(i)
             j_s_w = this%jswc(i); j_e_w = this%jewc(i)
-            if (domain%ide == i_e_w) i_e_w = i_e_w+1 !Add extra to accomodate staggered vars
-            if (domain%jde == j_e_w) j_e_w = j_e_w+1 !Add extra to accomodate staggered vars
+            i_e_w = i_e_w+1 !Add extra to accomodate staggered vars
+            j_e_w = j_e_w+1 !Add extra to accomodate staggered vars
             nx = i_e_w - i_s_w + 1
             ny = j_e_w - j_s_w + 1
 
@@ -251,16 +256,15 @@ contains
                 write_buffer(:,1:nx,:,1:ny)[n]
         enddo
 
-        call this%outputer%save_file(time,this%IO_comms)        
+        call this%outputer%save_out_file(time,this%IO_comms,this%out_var_indices,this%rst_var_indices)        
 
     end subroutine 
+
     
     ! This subroutine calls the read file function from the input object
-    ! and then passes the read-in data to the coarray fields on the 
-    ! child forcing objects
-    module subroutine read_file(this, forcing, read_buffer)
+    ! and then passes the read-in data to the read buffer
+    module subroutine read_file(this, read_buffer)
         class(ioserver_t), intent(inout) :: this
-        type(boundary_t), intent(inout)  :: forcing
         real, intent(inout), allocatable :: read_buffer(:,:,:,:)[:]
 
         real, allocatable, dimension(:,:,:,:) :: parent_read_buffer
@@ -270,7 +274,7 @@ contains
         call this%reader%read_next_step(parent_read_buffer,this%IO_comms)
         
         ! Loop through child images and send chunks of buffer array to each one
-        do i=1,size(this%children)
+        do i=1,this%n_children
             n = this%children(i)
             nx = this%ierc(i) - this%isrc(i) + 1
             ny = this%jerc(i) - this%jsrc(i) + 1
@@ -279,6 +283,78 @@ contains
         enddo
 
     end subroutine 
+
+    ! Same as above, but for restart file
+    module subroutine read_restart_file(this, options, write_buffer)
+        class(ioserver_t),   intent(inout) :: this
+        type(options_t),     intent(in)    :: options
+        real, intent(inout), allocatable   :: write_buffer(:,:,:,:)[:]
+
+        integer :: i, n, nx, ny, i_s_w, i_e_w, j_s_w, j_e_w
+        integer :: ncid, var_id, dimid_3d(4), nz, err, varid, start_3d(4), cnt_3d(4), start_2d(3), cnt_2d(3)
+        real, allocatable :: data3d(:,:,:,:)
+        type(variable_t)  :: var
+        character(len=kMAX_NAME_LENGTH) :: name
+        
+        err = nf90_open(options%io_options%restart_in_file, IOR(nf90_nowrite,NF90_NETCDF4), ncid, comm = this%IO_comms, info = MPI_INFO_NULL)
+        
+        ! setup start/count arrays accordingly
+        start_3d = (/ this%i_s_w,this%j_s_w,this%k_s_w,options%io_options%restart_step_in_file /)
+        start_2d = (/ this%i_s_w,this%j_s_w,options%io_options%restart_step_in_file /)
+        cnt_3d = (/ (this%i_e_w-this%i_s_w+1),(this%j_e_w-this%j_s_w+1),(this%k_e_w-this%k_s_w+1),1 /)
+        cnt_2d = (/ (this%i_e_w-this%i_s_w+1),(this%j_e_w-this%j_s_w+1),1 /)
+
+        this%parent_write_buffer = kEMPT_BUFF
+
+        do i = 1,size(this%rst_var_indices)
+            n = this%rst_var_indices(i)
+            name = this%rst_var_names(i)
+            var = get_metadata(get_varindx(name))
+            
+            call check_ncdf( nf90_inq_varid(ncid, name, var_id), " Getting var ID for "//trim(name))
+            call check_ncdf( nf90_var_par_access(ncid, var_id, nf90_collective))
+            
+            
+            nx = cnt_3d(1) + var%xstag
+            ny = cnt_3d(2) + var%ystag
+
+            if (var%three_d) then
+                ! Get length of z dim
+                call check_ncdf( nf90_inquire_variable(ncid, var_id, dimids = dimid_3d), " Getting dim IDs for "//trim(name))
+                call check_ncdf( nf90_inquire_dimension(ncid, dimid_3d(3), len = nz), " Getting z dim len for "//trim(name))
+                
+                if (allocated(data3d)) deallocate(data3d)
+                allocate(data3d(nx,ny,nz,1))
+                call check_ncdf( nf90_get_var(ncid, var_id, data3d, start=start_3d, count=(/ nx, ny, nz /)), " Getting 3D var "//trim(name))
+
+                this%parent_write_buffer(n,this%i_s_w:this%i_e_w+var%xstag,1:nz,this%j_s_w:this%j_e_w+var%ystag) = &
+                        reshape(data3d(:,:,:,1), shape=[nx,nz,ny], order=[1,3,2])
+            else if (var%two_d) then
+                call check_ncdf( nf90_get_var(ncid, var_id, this%parent_write_buffer(n,this%i_s_w:this%i_e_w+var%xstag,1,this%j_s_w:this%j_e_w+var%ystag), &
+                        start=start_2d, count=(/ nx, ny /)), " Getting 2D "//trim(name))
+            endif
+        end do
+        
+        call check_ncdf(nf90_close(ncid), "Closing file "//trim(options%io_options%restart_in_file))
+        
+        
+        ! Loop through child images and send chunks of buffer array to each one
+        do i=1,this%n_children
+            n = this%children(i)
+
+            i_s_w = this%iswc(i); i_e_w = this%iewc(i)
+            j_s_w = this%jswc(i); j_e_w = this%jewc(i)
+            i_e_w = i_e_w+1 !Add extra to accomodate staggered vars
+            j_e_w = j_e_w+1 !Add extra to accomodate staggered vars
+            nx = i_e_w - i_s_w + 1
+            ny = j_e_w - j_s_w + 1
+
+            write_buffer(:,1:nx,:,1:ny)[n] = &
+                    this%parent_write_buffer(:,i_s_w:i_e_w,:,j_s_w:j_e_w)
+        enddo
+
+    end subroutine 
+
 
     ! This function closes all open file handles. Files are left open by default
     ! to minimize I/O calls. When the program exits, this must be called
@@ -289,8 +365,7 @@ contains
         
         ! close files
         call this%reader%close_file()
-        call this%outputer%close_file()
-        call this%rster%close_file()
+        call this%outputer%close_files()
 
     end subroutine 
     

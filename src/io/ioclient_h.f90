@@ -17,6 +17,7 @@ module ioclient_interface
   use variable_interface, only : variable_t
   use boundary_interface, only : boundary_t
   use domain_interface,   only : domain_t
+  use options_interface,  only : options_t
 
 !  use time_object,        only : Time_type, THREESIXTY, GREGORIAN, NOCALENDAR, NOLEAP
 
@@ -52,10 +53,16 @@ module ioclient_interface
       integer :: output_counter = 0
       integer :: frames_per_outfile, restart_count
 
+      !the indices of the output buffer corresponding to the restart vars
+      integer, public, allocatable :: out_var_indices(:), rst_var_indices(:)
+      !the names of the restart vars, indexed the same as the above array
+      character(len=kMAX_NAME_LENGTH), public, allocatable :: rst_var_names(:)
+
   contains
 
       procedure, public  :: push
       procedure, public  :: receive
+      procedure, public  :: receive_rst
 
       procedure, public  :: init
   end type
@@ -66,15 +73,16 @@ module ioclient_interface
       !! Initialize the object (e.g. allocate the variables array)
       !!
       !!----------------------------------------------------------
-      module subroutine init(this, domain, forcing)
+      module subroutine init(this, domain, forcing, options)
           implicit none
           class(ioclient_t),  intent(inout)  :: this
-          type(domain_t),     intent(in)     :: domain
+          type(domain_t),     intent(inout)  :: domain
           type(boundary_t),   intent(in)     :: forcing
+          type(options_t),    intent(in)     :: options
       end subroutine
 
       !>----------------------------------------------------------
-      !! Increase the size of the variables array if necessary
+      !! Push output data to IO buffer
       !!
       !!----------------------------------------------------------
       module subroutine push(this, domain, write_buffer)
@@ -85,7 +93,7 @@ module ioclient_interface
       end subroutine
 
       !>----------------------------------------------------------
-      !! Set the domain data structure to be used when writing
+      !! Receive input data
       !!
       !!----------------------------------------------------------
       module subroutine receive(this, forcing, read_buffer)
@@ -94,6 +102,18 @@ module ioclient_interface
           type(boundary_t), intent(inout)  :: forcing
           real, intent(in), allocatable    :: read_buffer(:,:,:,:)[:]
       end subroutine
+
+      !>----------------------------------------------------------
+      !! Receive restart data
+      !!
+      !!----------------------------------------------------------
+      module subroutine receive_rst(this, domain, write_buffer)
+          implicit none
+          class(ioclient_t), intent(inout) :: this
+          type(domain_t),   intent(inout)  :: domain
+          real, intent(in), allocatable    :: write_buffer(:,:,:,:)[:]
+      end subroutine
+
 
       module subroutine close_files(this)
           class(ioclient_t), intent(inout) :: this

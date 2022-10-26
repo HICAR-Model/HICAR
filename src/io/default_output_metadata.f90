@@ -232,6 +232,29 @@ contains
     end function get_varname
 
     !>------------------------------------------------------------
+    !! Get metadata variable name associated with a given index
+    !!
+    !! Sets the internal data pointer to point to the input data provided
+    !!------------------------------------------------------------
+    function get_varindx(var_name) result(indx)
+        implicit none
+        character(len=kMAX_NAME_LENGTH), intent(in) :: var_name       
+        integer                                     :: indx  ! function result
+
+        ! initialize the module level constant data structure
+        if (.not.allocated(var_meta)) call init_var_meta()
+
+        do indx = 1, kMAX_STORAGE_VARS
+            if (var_meta(indx)%name == var_name) return
+        enddo
+
+        if (indx>kMAX_STORAGE_VARS) then
+            stop "Invalid variable metadata requested"
+        endif
+
+    end function get_varindx
+
+    !>------------------------------------------------------------
     !! Initialize the module level master data structure
     !!
     !!------------------------------------------------------------
@@ -2674,6 +2697,19 @@ contains
             var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "surface_temperature"),                 &
+                               attribute_t("units",         "K"),                                   &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  Land surface radiative skin temperature
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%sst))
+            var%name        = "sst"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "Sea Surface Temperature"),                 &
                                attribute_t("units",         "K"),                                   &
                                attribute_t("coordinates",   "lat lon")]
         end associate

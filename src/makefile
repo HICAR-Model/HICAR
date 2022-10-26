@@ -362,8 +362,6 @@ OBJS=	\
 		$(BUILD)timer_obj.o			\
 		$(BUILD)opt_types.o			\
 		$(BUILD)time_io.o       	\
-		$(BUILD)restart_h.o			\
-		$(BUILD)restart.o	  		\
 		$(BUILD)options_h.o			\
 		$(BUILD)options_obj.o   	\
 		$(BUILD)meta_data_h.o		\
@@ -646,7 +644,7 @@ $(BUILD)%.o: $(MAIN)%.f90
 
 $(BUILD)driver.o:$(MAIN)driver.f90 $(BUILD)time_step.o $(BUILD)domain_h.o $(BUILD)timer_h.o \
 					$(BUILD)ioserver_h.o $(BUILD)ioclient_h.o $(BUILD)boundary_h.o $(BUILD)init.o $(BUILD)options_h.o \
-					$(BUILD)restart_h.o $(BUILD)wind_iterative.o
+					$(BUILD)wind_iterative.o
 
 ###################################################################
 #	Options Object
@@ -687,10 +685,6 @@ $(BUILD)exchangeable_obj.o: $(OBJECTS)exchangeable_obj.f90 $(BUILD)exchangeable_
 $(BUILD)exchangeable_h.o: $(OBJECTS)exchangeable_h.f90 $(BUILD)grid_h.o $(BUILD)variable_h.o $(BUILD)assertions.o
 
 $(BUILD)default_output_metadata.o: $(IO)default_output_metadata.f90 $(BUILD)icar_constants.o $(BUILD)variable_h.o $(BUILD)exchangeable_h.o $(BUILD)meta_data_h.o
-
-$(BUILD)restart_h.o: $(IO)restart_h.f90 $(BUILD)domain_h.o $(BUILD)output_h.o $(BUILD)options_h.o
-
-$(BUILD)restart.o: $(IO)restart.f90 $(BUILD)restart_h.o $(BUILD)time_h.o $(BUILD)io_routines.o $(BUILD)icar_constants.o
 
 $(BUILD)ioserver_h.o: $(IO)ioserver_h.f90 $(BUILD)icar_constants.o $(BUILD)time_h.o $(BUILD)output_h.o $(BUILD)options_h.o $(BUILD)reader_h.o $(BUILD)variable_h.o $(BUILD)boundary_h.o $(BUILD)domain_h.o
 $(BUILD)ioserver_obj.o: $(IO)ioserver_obj.f90 $(BUILD)ioserver_h.o $(BUILD)debug_utils.o $(BUILD)timer_h.o
