@@ -78,7 +78,6 @@ contains
         type(variable_t)  :: var
         character(len=kMAX_NAME_LENGTH) :: name
         integer :: nx, ny, nz, err, varid, n, start_3d(4), cnt_3d(4), start_2d(3), cnt_2d(3)
-        type(timer_t)   :: timer
 
         if (allocated(buffer)) deallocate(buffer)
         allocate(buffer(this%n_vars,this%its:this%ite,this%kts:this%kte,this%jts:this%jte))

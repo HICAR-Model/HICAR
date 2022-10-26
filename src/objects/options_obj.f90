@@ -57,7 +57,7 @@ contains
         call wind_namelist(         options_filename,   this)
         call var_namelist(          options_filename,   this%parameters)
         call parameters_namelist(   options_filename,   this%parameters)
-        call io_namelist(           options_filename,   this%io_options)
+        call io_namelist(           options_filename,   this)
         call model_levels_namelist( options_filename,   this%parameters)
 
         call time_parameters_namelist(         options_filename,   this)
@@ -72,11 +72,7 @@ contains
         
         if (this%physics%phys_suite /= '') call set_phys_suite(this)
         
-        if (this%parameters%restart) then
-            ! if (this_image()==1) write(*,*) "  (opt) Restart = ", this%parameters%restart
-            call init_restart_options(options_filename, this%parameters)
-            this%parameters%start_time = this%parameters%restart_time
-        endif
+        if (this%parameters%restart) this%parameters%start_time = this%io_options%restart_time
 
         call filename_namelist(options_filename, this%parameters)
 
@@ -399,105 +395,6 @@ contains
     end subroutine options_check
 
 
-    !> ------------------
-    !!  Determine the filename to be used for this particular image/process based on the restart filename, restart time, and image number
-    !!
-    !!  Uses the same calculation that is used to get the output filename when writing.
-    !! -------------------
-    function get_image_filename(image_number, initial_filename, restart_time) result(file_name)
-        implicit none
-        integer,            intent(in) :: image_number
-        character(len=*),   intent(in) :: initial_filename
-        type(Time_type),    intent(in) :: restart_time
-
-        character(len=kMAX_FILE_LENGTH) :: file_name
-        integer :: n, i
-
-        character(len=49)   :: file_date_format = '(I4,"-",I0.2,"-",I0.2,"_",I0.2,"-",I0.2,"-",I0.2)'
-
-        write(file_name, '(A,I6.6,"_",A,".nc")') trim(initial_filename), image_number, trim(restart_time%as_string(file_date_format))
-
-        n = len(trim(file_name))
-        file_name(n-10:n-9) = "00"
-
-    end function get_image_filename
-
-
-    !> -------------------------------
-    !! Initialize the restart options
-    !!
-    !! Reads the restart namelist if this is a restart run
-    !!
-    !! -------------------------------
-    subroutine init_restart_options(filename, options)
-        ! initialize the restart specifications
-        ! read in the namelist, and calculate the restart_step if appropriate
-        character(len=*),               intent(in)    :: filename    ! name of the file containing the restart namelist
-        type(parameter_options_type),   intent(inout) :: options     ! options data structure to store output
-
-        ! Local variables
-        character(len=MAXFILELENGTH) :: restart_file    ! file name to read restart data from
-        integer :: restart_step                         ! time step relative to the start of the restart file
-        integer :: restart_date(6)                      ! date to restart
-        integer :: name_unit                            ! logical unit number for namelist
-        type(Time_type) :: restart_time, time_at_step   ! restart date as a modified julian day
-        real :: input_steps_per_day                     ! number of input time steps per day (for calculating restart_time)
-
-        namelist /restart_info/ restart_step, restart_file, restart_date
-
-        restart_date=[-999,-999,-999,-999,-999,-999]
-        restart_step=-999
-
-        open(io_newunit(name_unit), file=filename)
-        read(name_unit,nml=restart_info)
-        close(name_unit)
-
-        if (minval(restart_date)<0) then
-            if (this_image()==1) write(*,*) "------ Invalid restart_date ERROR ------"
-            stop "restart_date must be specified in the namelist"
-        endif
-
-        ! calculate the modified julian day for th restart date given
-        call restart_time%init(options%calendar)
-        call restart_time%set(restart_date(1), restart_date(2), restart_date(3), &
-                              restart_date(4), restart_date(5), restart_date(6))
-
-        ! find the time step that most closely matches the requested restart time (<=)
-        restart_file = get_image_filename(this_image(), restart_file, restart_time)
-        restart_step = find_timestep_in_file(restart_file, 'time', restart_time, time_at_step)
-
-        ! check to see if we actually udpated the restart date and print if in a more verbose mode
-        if (options%debug) then
-            if (restart_time /= time_at_step) then
-                if (this_image()==1) write(*,*) " updated restart date: ", trim(time_at_step%as_string())
-            endif
-        endif
-
-        restart_time = time_at_step
-
-        if (options%debug) then
-            if (this_image()==1) write(*,*) " ------------------ "
-            if (this_image()==1) write(*,*) "RESTART INFORMATION"
-            if (this_image()==1) write(*,*) "mjd",         restart_time%mjd()
-            if (this_image()==1) write(*,*) "date:",       trim(restart_time%as_string())
-            if (this_image()==1) write(*,*) "date",        restart_date
-            if (this_image()==1) write(*,*) "file",   trim(restart_file)
-            if (this_image()==1) write(*,*) "forcing step",restart_step
-            if (this_image()==1) write(*,*) " ------------------ "
-        endif
-
-        ! save the parameters in the master options structure
-        options%restart_step_in_file = restart_step
-        options%restart_file         = restart_file
-        options%restart_date         = restart_date
-        options%restart_time         = restart_time
-
-        if (options%debug) then
-            if (this_image()==1) write(*,*) " step in restart file",options%restart_step_in_file
-        endif
-
-    end subroutine init_restart_options
-
 
     !> -------------------------------
     !! Read physics options to use from a namelist file
@@ -603,25 +500,37 @@ contains
     subroutine io_namelist(filename, options)
         implicit none
         character(len=*),             intent(in)    :: filename
-        type(io_options_type),        intent(inout) :: options
+        type(options_t),              intent(inout) :: options
 
         integer :: name_unit, i, j, status, frames_per_outfile
         real    :: outputinterval, restartinterval, inputinterval
 
-        character(len=kMAX_FILE_LENGTH) :: output_file, restart_out_file
+        ! Local variables
+        character(len=kMAX_FILE_LENGTH) :: output_file, restart_out_file, restart_in_file
         character(len=kMAX_NAME_LENGTH) :: names(kMAX_STORAGE_VARS)
         character (len=MAXFILELENGTH) :: output_file_frequency
+        
+        integer :: restart_step                         ! time step relative to the start of the restart file
+        integer :: restart_date(6)                      ! date to restart
+        type(Time_type) :: restart_time, time_at_step   ! restart date as a modified julian day        
+        real :: input_steps_per_day                     ! number of input time steps per day (for calculating restart_time)
 
         namelist /io_list/ names, outputinterval, restartinterval, inputinterval, frames_per_outfile, &
-                               output_file, restart_out_file, output_file_frequency
+                               output_file, restart_out_file, restart_in_file, output_file_frequency, restart_step, restart_date
+
+        restart_date=[-999,-999,-999,-999,-999,-999]
+        restart_step=-999
 
         output_file         = "icar_out_"
-        restart_out_file        = "icar_rst_"
+        restart_out_file    = "icar_rst_"
+        restart_in_file     = "icar_rst_"
+        restart_step        = 1
+        
         names(:)            = ""
-        restartinterval     =  24 ! in units of outputintervals
         inputinterval       =  3600
         outputinterval      =  3600
         frames_per_outfile  =  24
+        restartinterval     =  24 ! in units of outputintervals
 
         open(io_newunit(name_unit), file=filename)
         read(name_unit, nml=io_list)
@@ -631,50 +540,95 @@ contains
             if (trim(names(j)) /= "") then
                 do i=1, kMAX_STORAGE_VARS
                     if (trim(get_varname(i)) == trim(names(j))) then
-                        call add_to_varlist(options%vars_for_output, [i])
+                        call add_to_varlist(options%io_options%vars_for_output, [i])
                     endif
                 enddo
             endif
         enddo
 
         if (trim(output_file_frequency) /= "") then
-            options%output_file_frequency = output_file_frequency
+            options%io_options%output_file_frequency = output_file_frequency
         else
             ! if outputing at half-day or longer intervals, create monthly files
             if (outputinterval>=43200) then
-                options%output_file_frequency="monthly"
+                options%io_options%output_file_frequency="monthly"
             ! if outputing at half-hour or longer intervals, create daily files
             else if (outputinterval>=1800) then
-                options%output_file_frequency="daily"
+                options%io_options%output_file_frequency="daily"
             ! otherwise create a new output file every timestep
             else
-                options%output_file_frequency="every step"
+                options%io_options%output_file_frequency="every step"
+            endif
+        endif
+        
+
+        options%io_options%in_dt      = inputinterval
+        call options%io_options%input_dt%set(seconds=inputinterval)
+
+        options%io_options%out_dt     = outputinterval
+        call options%io_options%output_dt%set(seconds=outputinterval)
+
+        options%io_options%rst_dt = outputinterval * restartinterval
+        call options%io_options%restart_dt%set(seconds=options%io_options%rst_dt)
+
+        !if (restartinterval>0) then
+        options%io_options%restart_count = restartinterval
+        !else
+        !    options%io_options%restart_count = max(24, nint(restartinterval))
+        !endif
+        
+        options%io_options%frames_per_outfile = frames_per_outfile
+
+        options%io_options%output_file = output_file
+        options%io_options%restart_out_file = restart_out_file
+
+        !If the user did not ask for a restart run, leave the function now
+        if (.not.(options%parameters%restart)) return
+        
+        if (minval(restart_date)<0) then
+            if (this_image()==1) write(*,*) "------ Invalid restart_date ERROR ------"
+            stop "restart_date must be specified in the namelist"
+        endif
+
+        ! calculate the modified julian day for th restart date given
+        call restart_time%init(options%parameters%calendar)
+        call restart_time%set(restart_date(1), restart_date(2), restart_date(3), &
+                              restart_date(4), restart_date(5), restart_date(6))
+                              
+        write(options%io_options%restart_in_file, '(A,A,".nc")')    &
+                trim(restart_in_file),   &
+                trim(restart_time%as_string('(I4,"-",I0.2,"-",I0.2,"_",I0.2,"-",I0.2,"-",I0.2)'))
+
+        ! find the time step that most closely matches the requested restart time (<=)
+        restart_step = find_timestep_in_file(options%io_options%restart_in_file, 'time', restart_time, time_at_step)
+
+        ! check to see if we actually udpated the restart date and print if in a more verbose mode
+        if (options%parameters%debug) then
+            if (restart_time /= time_at_step) then
+                if (this_image()==1) write(*,*) " updated restart date: ", trim(time_at_step%as_string())
             endif
         endif
 
-        options%in_dt      = inputinterval
-        call options%input_dt%set(seconds=inputinterval)
+        restart_time = time_at_step
 
-        options%out_dt     = outputinterval
-        call options%output_dt%set(seconds=outputinterval)
+        ! save the parameters in the master options structure
+        options%io_options%restart_step_in_file = restart_step
+        options%io_options%restart_date         = restart_date
+        options%io_options%restart_time         = restart_time
 
-        options%rst_dt = outputinterval * restartinterval
-        call options%restart_dt%set(seconds=options%rst_dt)
 
-        if (restartinterval<0) then
-            options%restart_count = restartinterval
-        else
-            options%restart_count = max(24, nint(restartinterval))
+        if (options%parameters%debug) then
+            if (this_image()==1) write(*,*) " ------------------ "
+            if (this_image()==1) write(*,*) "RESTART INFORMATION"
+            if (this_image()==1) write(*,*) "mjd",         options%io_options%restart_time%mjd()
+            if (this_image()==1) write(*,*) "date:",       trim(options%io_options%restart_time%as_string())
+            if (this_image()==1) write(*,*) "date",        options%io_options%restart_date
+            if (this_image()==1) write(*,*) "file:",   trim(options%io_options%restart_in_file)
+            if (this_image()==1) write(*,*) "forcing step",options%io_options%restart_step_in_file
+            if (this_image()==1) write(*,*) " ------------------ "
         endif
-        
-        options%frames_per_outfile = frames_per_outfile
-
-        options%output_file = output_file
-        options%restart_out_file = restart_out_file
-
 
     end subroutine io_namelist
-
 
     !> -------------------------------
     !! Initialize the variable names to be read
@@ -2139,7 +2093,7 @@ contains
     subroutine time_parameters_namelist(filename, options)
         implicit none
         character(len=*),             intent(in)    :: filename
-        type(options_t),    intent(inout) :: options
+        type(options_t),              intent(inout) :: options
         
         integer :: name_unit                            ! logical unit number for namelist
         !Define parameters

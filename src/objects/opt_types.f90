@@ -179,7 +179,7 @@ module options_types
     type io_options_type
 
         ! file names
-        character (len=MAXFILELENGTH) :: output_file, restart_out_file
+        character (len=MAXFILELENGTH) :: output_file, restart_out_file, restart_in_file
         character (len=MAXFILELENGTH) :: output_file_frequency
         
 
@@ -201,6 +201,11 @@ module options_types
         ! these are the variables that need to be written and read from disk as primary output
         integer :: vars_for_output( kMAX_STORAGE_VARS ) = 0
 
+        ! restart information
+        type(Time_type) :: restart_time ! Date of the restart time step
+        ! integer :: restart_step         ! step in forcing data to begin running
+        integer :: restart_date(6)      ! date to initialize from (y,m,d, h,m,s)
+        integer :: restart_step_in_file ! step in restart file to initialize from
 
     end type io_options_type
 
@@ -212,7 +217,7 @@ module options_types
         character (len=MAXVARLENGTH) :: version,comment
 
         ! file names
-        character (len=MAXFILELENGTH) :: init_conditions_file, linear_mask_file, nsq_calibration_file, external_files, restart_file
+        character (len=MAXFILELENGTH) :: init_conditions_file, linear_mask_file, nsq_calibration_file, external_files
 
         character (len=MAXFILELENGTH), dimension(:), allocatable :: boundary_files, ext_wind_files
 
@@ -275,11 +280,6 @@ module options_types
         integer :: wind_iterations      ! number of time to iterate for wind=3 option
         integer :: ext_winds_nfiles     ! number of extrenal wind filenames to read from namelist
 
-        ! restart information
-        type(Time_type) :: restart_time ! Date of the restart time step
-        ! integer :: restart_step         ! step in forcing data to begin running
-        integer :: restart_date(6)      ! date to initialize from (y,m,d, h,m,s)
-
         ! various real parameters/options
         real :: dx                      ! grid cell width [m]
         real :: dxlow                   ! forcing model grid cell width [m]
@@ -297,8 +297,6 @@ module options_types
         type(Time_type) :: start_time   ! Date to start running the model
         type(Time_type) :: end_time     ! End point for the model simulation
         
-        integer :: restart_step_in_file ! step in restart file to initialize from
-
         real :: t_offset                ! offset to temperature because WRF outputs potential temperature-300
 
         ! note this can't be allocatable because gfortran does not support allocatable components inside derived type coarrays...

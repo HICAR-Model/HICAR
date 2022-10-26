@@ -232,7 +232,6 @@ contains
                         kVARS%rain_number_concentration, kVARS%rain_in_air,  &
                         kVARS%ice_number_concentration,  kVARS%graupel_in_air, &
                         kVARS%snow_number_concentration, kVARS%graupel_number_concentration, &
-                        kVARS%tend_qr, kVARS%tend_qs, kVARS%tend_qi,                   &
                         kVARS%re_cloud, kVARS%re_ice, kVARS%re_snow   ] )
 
 

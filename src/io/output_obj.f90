@@ -1,5 +1,5 @@
 submodule(output_interface) output_implementation
-  use output_metadata,          only : get_metadata
+  use output_metadata,          only : get_metadata, get_varindx
   use debug_module,             only : check_ncdf
   use iso_fortran_env,          only : output_unit
 
@@ -8,10 +8,10 @@ submodule(output_interface) output_implementation
 contains
 
 
-    module subroutine init(this,domain,options, its, ite, kts, kte, jts, jte)
+    module subroutine init(this, domain, options, its, ite, kts, kte, jts, jte)
         implicit none
         class(output_t),  intent(inout)  :: this
-        type(domain_t),   intent(in)     :: domain
+        type(domain_t),   intent(inout)  :: domain
         type(options_t),  intent(in)     :: options
         integer,          intent(in)     :: its, ite, kts, kte, jts, jte
         
@@ -23,23 +23,23 @@ contains
         this%n_dims      = 0
         this%is_initialized = .True.
         this%output_counter = 1
-        this%output_count = options%io_options%frames_per_outfile
+        this%restart_counter = 1
         this%its = its; this%ite = ite; this%kts = kts; this%kte = kte; this%jts = jts; this%jte = jte
         this%global_dim_len = (/domain%ide, domain%jde, domain%kde /)
-        
+
         call set_attrs(this, domain)
-        call add_variables(this, options%io_options%vars_for_output)
         
+        this%base_out_file_name = options%io_options%output_file
+        this%output_count = options%io_options%frames_per_outfile
+        this%base_rst_file_name = options%io_options%restart_out_file
+        this%restart_count = options%io_options%restart_count
         
-        
-        !do i=1, size(options%io_options%vars_for_output)
-        !    if (options%io_options%vars_for_output(i) > 0) then
-        !        call this%add_to_output( get_metadata( i ))
-        !    endif
-        !enddo
+        write(this%output_fn, '(A,A,".nc")')    &
+                trim(this%base_out_file_name),   &
+                trim(options%parameters%start_time%as_string(this%file_date_format))
 
-        !call open_file(this,options%parameters%start_time)
-
+        call this%add_variables(domain%vars_to_out)
+        
     end subroutine
 
     module subroutine set_attrs(this, domain)
@@ -53,55 +53,103 @@ contains
 
     end subroutine
 
-
     module subroutine add_to_output(this, in_variable)
         class(output_t),   intent(inout) :: this
         type(variable_t),  intent(in) :: in_variable
         
         type(variable_t) :: variable
+        integer :: n
         
         variable = in_variable
         
         if (variable%dim_len(3)<=0) variable%dim_len(3) = this%kte
-            
         if (this%n_vars == size(this%variables)) call this%increase_var_capacity()
 
         this%n_vars = this%n_vars + 1
-
         this%variables(this%n_vars) = variable
-
-        !if (associated(variable%data_2d).or.associated(variable%data_3d)) then
-
-        !endif
 
     end subroutine
 
-
-    module subroutine save_file(this, time, par_comms)
+    module subroutine save_out_file(this, time, par_comms, out_var_indices, rst_var_indices)
         class(output_t),  intent(inout) :: this
         type(Time_type),  intent(in)  :: time
         integer,          intent(in)  :: par_comms
+        integer,          intent(in)  :: out_var_indices(:), rst_var_indices(:)
 
-        if (this%ncfile_id < 0) call open_file(this,time, par_comms)
+
+        !Check if we should change the file
+        if (this%output_counter >= this%output_count .and. this%out_ncfile_id > 0) then
+            write(this%output_fn, '(A,A,".nc")')    &
+                trim(this%base_out_file_name),   &
+                trim(time%as_string(this%file_date_format))
+
+            this%output_counter = 1
+            call check_ncdf(nf90_close(this%out_ncfile_id), "Closing output file ")
+            this%out_ncfile_id = -1
+        endif
+
+        this%active_nc_id = this%out_ncfile_id
+                    
+        if (this%active_nc_id < 0) then
+            call open_file(this, this%output_fn, time, par_comms,out_var_indices)
+            this%out_ncfile_id = this%active_nc_id
+        endif
         call flush(output_unit)
 
         if (.not.this%block_checked) call block_hunter(this)
 
         ! store output
-        call save_data(this, this%output_counter, time)
+        call save_data(this, this%output_counter, time, out_var_indices)
         
         !In case we had creating set to true, set to false
         this%creating = .false.
 
-        !Check if we should close the file
-        if (this%output_counter >= this%output_count) then
-            this%output_counter = 1
-            call this%close_file()
+        
+        this%active_nc_id = -1
+        
+        if (this%restart_counter == this%restart_count) then
+            call check_ncdf(nf90_close(this%out_ncfile_id), "Closing output file ")
+            this%out_ncfile_id = -1
+            call save_rst_file(this, time, par_comms, rst_var_indices)     
+            this%restart_counter = 1
         else
-            this%output_counter = this%output_counter + 1
+            this%restart_counter = this%restart_counter+1
         endif
+        
+        this%output_counter = this%output_counter + 1
 
     end subroutine
+    
+    subroutine save_rst_file(this, time, par_comms, rst_var_indices)
+        class(output_t),  intent(inout) :: this
+        type(Time_type),  intent(in)  :: time
+        integer,          intent(in)  :: par_comms
+        integer,          intent(in)  :: rst_var_indices(:)
+
+        this%active_nc_id = this%rst_ncfile_id
+        
+        if (this%active_nc_id < 0) then
+            write(this%restart_fn, '(A,A,".nc")')    &
+                trim(this%base_rst_file_name),   &
+                trim(time%as_string(this%file_date_format))
+
+            call open_file(this, this%restart_fn, time, par_comms,rst_var_indices)
+            this%rst_ncfile_id = this%active_nc_id
+        endif
+
+        ! store output
+        call save_data(this, 1, time, rst_var_indices)
+        
+        !In case we had creating set to true, set to false
+        this%creating = .false.
+
+        !Close the file
+        call check_ncdf(nf90_close(this%rst_ncfile_id), "Closing restart file ")
+        this%rst_ncfile_id = -1
+        
+        this%active_nc_id = -1
+    end subroutine
+
     
     !See if this outputer has 'blocks', or a piece of it which it should not write
     !This can occur due to using only images on a given node, which results in stepped
@@ -189,236 +237,55 @@ contains
         endif
     end subroutine block_hunter
     
-    subroutine open_file(this, time, par_comms)
-        class(output_t),  intent(inout) :: this
-        type(Time_type),  intent(in)    :: time
-        integer,          intent(in)    :: par_comms
+    subroutine open_file(this, filename, time, par_comms, var_indx_list)
+        class(output_t),                 intent(inout) :: this
+        character(len=kMAX_FILE_LENGTH), intent(in)    :: filename
+
+        type(Time_type),                 intent(in)    :: time
+        integer,                         intent(in)    :: par_comms
+        integer,                         intent(in)    :: var_indx_list(:)
 
         integer :: err
         
-        write(this%filename, '(A,A,".nc")')    &
-            trim(this%base_file_name),   &
-            trim(time%as_string(this%file_date_format))
-
         ! open file
-        err = nf90_open(this%filename, IOR(NF90_WRITE,NF90_NETCDF4), this%ncfile_id, comm = par_comms, info = MPI_INFO_NULL)
+        err = nf90_open(filename, IOR(NF90_WRITE,NF90_NETCDF4), this%active_nc_id, comm = par_comms, info = MPI_INFO_NULL)
         if (err /= NF90_NOERR) then
-            call check_ncdf( nf90_create(this%filename, IOR(NF90_CLOBBER,NF90_NETCDF4), this%ncfile_id, comm = par_comms, info = MPI_INFO_NULL), "Opening:"//trim(this%filename))
+            call check_ncdf( nf90_create(filename, IOR(NF90_CLOBBER,NF90_NETCDF4), this%active_nc_id, comm = par_comms, info = MPI_INFO_NULL), "Opening:"//trim(filename))
             this%creating=.True.
         else
             ! in case we need to add a new variable when setting up variables
-            call check_ncdf(nf90_redef(this%ncfile_id), "Setting redefine mode for: "//trim(this%filename))
+            call check_ncdf(nf90_redef(this%active_nc_id), "Setting redefine mode for: "//trim(filename))
         endif
 
         !This command cuts down on write time and must be done once the file is opened
-        call check_ncdf( nf90_set_fill(this%ncfile_id, nf90_nofill, err), "Setting fill mode to none")
+        call check_ncdf( nf90_set_fill(this%active_nc_id, nf90_nofill, err), "Setting fill mode to none")
 
         ! define variables or find variable IDs (and dimensions)
-        call setup_variables(this, time)
+        call setup_variables(this, time, var_indx_list)
 
         if (this%creating) then
             ! add global attributes such as the image number, domain dimension, creation time
             call add_global_attributes(this)
         endif
         ! End define mode. This tells netCDF we are done defining metadata.
-        call check_ncdf( nf90_enddef(this%ncfile_id), "end define mode" )
+        call check_ncdf( nf90_enddef(this%active_nc_id), "end define mode" )
     
 
     end subroutine
 
-    module subroutine add_variables(this, var_list)
-        class(output_t), intent(inout)  :: this
-        integer,         intent(in)     :: var_list(:)
+    module subroutine add_variables(this, vars_to_out)
+        class(output_t),  intent(inout)  :: this
+        type(var_dict_t), intent(inout)  :: vars_to_out
 
+        type(variable_t) :: var
 
-
-        if (0<var_list( kVARS%u) )                          call this%add_to_output( get_metadata( kVARS%u ))                        
-        if (0<var_list( kVARS%v) )                          call this%add_to_output( get_metadata( kVARS%v ))                        
-        if (0<var_list( kVARS%w) )                          call this%add_to_output( get_metadata( kVARS%w ))                        
-        if (0<var_list( kVARS%w) )                          call this%add_to_output( get_metadata( kVARS%w_real))                    
-        if (0<var_list( kVARS%nsquared) )                   call this%add_to_output( get_metadata( kVARS%nsquared  ))     
-        if (0<var_list( kVARS%water_vapor) )                call this%add_to_output( get_metadata( kVARS%water_vapor  )) 
-        if (0<var_list( kVARS%potential_temperature) )      call this%add_to_output( get_metadata( kVARS%potential_temperature ))
-        if (0<var_list( kVARS%cloud_water) )                call this%add_to_output( get_metadata( kVARS%cloud_water ))
-        if (0<var_list( kVARS%cloud_number_concentration))  call this%add_to_output( get_metadata( kVARS%cloud_number_concentration))
-        if (0<var_list( kVARS%cloud_ice) )                  call this%add_to_output( get_metadata( kVARS%cloud_ice ))
-        if (0<var_list( kVARS%ice_number_concentration))    call this%add_to_output( get_metadata( kVARS%ice_number_concentration ))
-        if (0<var_list( kVARS%rain_in_air) )                call this%add_to_output( get_metadata( kVARS%rain_in_air               ))    
-        if (0<var_list( kVARS%rain_number_concentration))   call this%add_to_output( get_metadata( kVARS%rain_number_concentration ))    
-        if (0<var_list( kVARS%snow_in_air) )                call this%add_to_output( get_metadata( kVARS%snow_in_air               ))    
-        if (0<var_list( kVARS%snow_number_concentration) )  call this%add_to_output( get_metadata( kVARS%snow_number_concentration ))    
-        if (0<var_list( kVARS%graupel_in_air) )             call this%add_to_output( get_metadata( kVARS%graupel_in_air            ))
-        if (0<var_list( kVARS%graupel_number_concentration))call this%add_to_output( get_metadata( kVARS%graupel_number_concentration ))
-        if (0<var_list( kVARS%ice1_a))                      call this%add_to_output( get_metadata( kVARS%ice1_a ))                   
-        if (0<var_list( kVARS%ice1_c))                      call this%add_to_output( get_metadata( kVARS%ice1_c ))                   
-        if (0<var_list( kVARS%ice2_mass))                   call this%add_to_output( get_metadata( kVARS%ice2_mass  ))   
-        if (0<var_list( kVARS%ice2_number))                 call this%add_to_output( get_metadata( kVARS%ice2_number ))       
-        if (0<var_list( kVARS%ice2_a))                      call this%add_to_output( get_metadata( kVARS%ice2_a ))                   
-        if (0<var_list( kVARS%ice2_c))                      call this%add_to_output( get_metadata( kVARS%ice2_c ))                   
-        if (0<var_list( kVARS%ice3_mass))                   call this%add_to_output( get_metadata( kVARS%ice3_mass  ))   
-        if (0<var_list( kVARS%ice3_number))                 call this%add_to_output( get_metadata( kVARS%ice3_number ))        
-        if (0<var_list( kVARS%ice3_a))                      call this%add_to_output( get_metadata( kVARS%ice3_a ))                   
-        if (0<var_list( kVARS%ice3_c))                      call this%add_to_output( get_metadata( kVARS%ice3_c ))                   
-
-        if (0<var_list( kVARS%precipitation) )              call this%add_to_output( get_metadata( kVARS%precipitation  ))
-        if (0<var_list( kVARS%convective_precipitation) )   call this%add_to_output( get_metadata( kVARS%convective_precipitation  ))
-        if (0<var_list( kVARS%snowfall) )                   call this%add_to_output( get_metadata( kVARS%snowfall   ))
-        if (0<var_list( kVARS%graupel) )                    call this%add_to_output( get_metadata( kVARS%graupel         ))
-        if (0<var_list( kVARS%pressure) )                   call this%add_to_output( get_metadata( kVARS%pressure        ))
-        if (0<var_list( kVARS%temperature) )                call this%add_to_output( get_metadata( kVARS%temperature        ))
-        if (0<var_list( kVARS%exner) )                      call this%add_to_output( get_metadata( kVARS%exner        ))
-        if (0<var_list( kVARS%z) )                          call this%add_to_output( get_metadata( kVARS%z        ))
-        if (0<var_list( kVARS%dz_interface) )               call this%add_to_output( get_metadata( kVARS%dz_interface        ))
-        if (0<var_list( kVARS%z_interface) )                call this%add_to_output( get_metadata( kVARS%z_interface        ))
-        if (0<var_list( kVARS%dz) )                         call this%add_to_output( get_metadata( kVARS%dz             ))
-        if (0<var_list( kVARS%density) )                    call this%add_to_output( get_metadata( kVARS%density        ))
-        if (0<var_list( kVARS%pressure_interface) )         call this%add_to_output( get_metadata( kVARS%pressure_interface ))
-        if (0<var_list( kVARS%cloud_fraction) )             call this%add_to_output( get_metadata( kVARS%cloud_fraction   ))
-        if (0<var_list( kVARS%shortwave) )                  call this%add_to_output( get_metadata( kVARS%shortwave        ))
-        if (0<var_list( kVARS%shortwave_direct) )           call this%add_to_output( get_metadata( kVARS%shortwave_direct   ))
-        if (0<var_list( kVARS%shortwave_diffuse) )          call this%add_to_output( get_metadata( kVARS%shortwave_diffuse   ))
-        if (0<var_list( kVARS%longwave) )                   call this%add_to_output( get_metadata( kVARS%longwave        ))
-        if (0<var_list( kVARS%vegetation_fraction) )        call this%add_to_output( get_metadata( kVARS%vegetation_fraction ))
-        if (0<var_list( kVARS%vegetation_fraction_max) )    call this%add_to_output( get_metadata( kVARS%vegetation_fraction_max    ))
-        if (0<var_list( kVARS%vegetation_fraction_out) )    call this%add_to_output( get_metadata( kVARS%vegetation_fraction_out    ))
-        if (0<var_list( kVARS%lai) )                        call this%add_to_output( get_metadata( kVARS%lai        ))
-        if (0<var_list( kVARS%sai) )                        call this%add_to_output( get_metadata( kVARS%sai        ))
-        if (0<var_list( kVARS%crop_type) )                  call this%add_to_output( get_metadata( kVARS%crop_type   ))
-        if (0<var_list( kVARS%date_planting) )              call this%add_to_output( get_metadata( kVARS%date_planting   ))
-        if (0<var_list( kVARS%date_harvest) )               call this%add_to_output( get_metadata( kVARS%date_harvest     ))
-        if (0<var_list( kVARS%growing_season_gdd) )         call this%add_to_output( get_metadata( kVARS%growing_season_gdd ))
-        if (0<var_list( kVARS%irr_frac_total) )             call this%add_to_output( get_metadata( kVARS%irr_frac_total   ))
-        if (0<var_list( kVARS%irr_frac_sprinkler) )         call this%add_to_output( get_metadata( kVARS%irr_frac_sprinkler ))
-        if (0<var_list( kVARS%irr_frac_micro) )             call this%add_to_output( get_metadata( kVARS%irr_frac_micro   ))
-        if (0<var_list( kVARS%irr_frac_flood) )             call this%add_to_output( get_metadata( kVARS%irr_frac_flood   ))
-        if (0<var_list( kVARS%irr_alloc_sprinkler) )        call this%add_to_output( get_metadata( kVARS%irr_alloc_sprinkler    ))
-        if (0<var_list( kVARS%irr_alloc_micro) )            call this%add_to_output( get_metadata( kVARS%irr_alloc_micro   ))
-        if (0<var_list( kVARS%irr_alloc_flood) )            call this%add_to_output( get_metadata( kVARS%irr_alloc_flood   ))
-        if (0<var_list( kVARS%irr_evap_loss_sprinkler) )    call this%add_to_output( get_metadata( kVARS%irr_evap_loss_sprinkler    ))
-        if (0<var_list( kVARS%irr_amt_sprinkler) )          call this%add_to_output( get_metadata( kVARS%irr_amt_sprinkler   ))
-        if (0<var_list( kVARS%irr_amt_micro) )              call this%add_to_output( get_metadata( kVARS%irr_amt_micro     ))
-        if (0<var_list( kVARS%irr_amt_flood) )              call this%add_to_output( get_metadata( kVARS%irr_amt_flood     ))
-        if (0<var_list( kVARS%evap_heat_sprinkler) )        call this%add_to_output( get_metadata( kVARS%evap_heat_sprinkler ))
-        if (0<var_list( kVARS%mass_ag_grain) )              call this%add_to_output( get_metadata( kVARS%mass_ag_grain     ))
-        if (0<var_list( kVARS%growing_degree_days) )        call this%add_to_output( get_metadata( kVARS%growing_degree_days ))
-        if (0<var_list( kVARS%net_ecosystem_exchange) )     call this%add_to_output( get_metadata( kVARS%net_ecosystem_exchange    ))
-        if (0<var_list( kVARS%gross_primary_prod) )         call this%add_to_output( get_metadata( kVARS%gross_primary_prod ))
-        if (0<var_list( kVARS%net_primary_prod) )           call this%add_to_output( get_metadata( kVARS%net_primary_prod   ))
-        if (0<var_list( kVARS%apar) )                       call this%add_to_output( get_metadata( kVARS%apar        ))
-        if (0<var_list( kVARS%photosynthesis_total) )       call this%add_to_output( get_metadata( kVARS%photosynthesis_total    ))
-        if (0<var_list( kVARS%stomatal_resist_total) )      call this%add_to_output( get_metadata( kVARS%stomatal_resist_total    ))
-        if (0<var_list( kVARS%stomatal_resist_sun) )        call this%add_to_output( get_metadata( kVARS%stomatal_resist_sun    ))
-        if (0<var_list( kVARS%stomatal_resist_shade) )      call this%add_to_output( get_metadata( kVARS%stomatal_resist_shade    ))
-        if (0<var_list( kVARS%gecros_state) )               call this%add_to_output( get_metadata( kVARS%gecros_state     ))
-        if (0<var_list( kVARS%canopy_water) )               call this%add_to_output( get_metadata( kVARS%canopy_water     ))
-        if (0<var_list( kVARS%canopy_water_ice) )           call this%add_to_output( get_metadata( kVARS%canopy_water_ice   ))
-        if (0<var_list( kVARS%canopy_water_liquid) )        call this%add_to_output( get_metadata( kVARS%canopy_water_liquid ))
-        if (0<var_list( kVARS%canopy_vapor_pressure) )      call this%add_to_output( get_metadata( kVARS%canopy_vapor_pressure    ))
-        if (0<var_list( kVARS%canopy_temperature) )         call this%add_to_output( get_metadata( kVARS%canopy_temperature ))
-        if (0<var_list( kVARS%canopy_fwet) )                call this%add_to_output( get_metadata( kVARS%canopy_fwet     ))
-        if (0<var_list( kVARS%veg_leaf_temperature) )       call this%add_to_output( get_metadata( kVARS%veg_leaf_temperature    ))
-        if (0<var_list( kVARS%ground_surf_temperature) )    call this%add_to_output( get_metadata( kVARS%ground_surf_temperature    ))
-        if (0<var_list( kVARS%frac_within_gap) )            call this%add_to_output( get_metadata( kVARS%frac_within_gap     ))
-        if (0<var_list( kVARS%frac_between_gap) )           call this%add_to_output( get_metadata( kVARS%frac_between_gap   ))
-        if (0<var_list( kVARS%ground_temperature_bare) )    call this%add_to_output( get_metadata( kVARS%ground_temperature_bare    ))
-        if (0<var_list( kVARS%ground_temperature_canopy) )  call this%add_to_output( get_metadata( kVARS%ground_temperature_canopy    ))
-        if (0<var_list( kVARS%snowfall_ground) )            call this%add_to_output( get_metadata( kVARS%snowfall_ground   ))
-        if (0<var_list( kVARS%rainfall_ground) )            call this%add_to_output( get_metadata( kVARS%rainfall_ground   ))
-        if (0<var_list( kVARS%snow_water_equivalent) )      call this%add_to_output( get_metadata( kVARS%snow_water_equivalent    ))
-        if (0<var_list( kVARS%snow_water_eq_prev) )         call this%add_to_output( get_metadata( kVARS%snow_water_eq_prev ))
-        if (0<var_list( kVARS%snow_albedo_prev) )           call this%add_to_output( get_metadata( kVARS%snow_albedo_prev   ))
-        if (0<var_list( kVARS%snow_temperature) )           call this%add_to_output( get_metadata( kVARS%snow_temperature   ))
-        if (0<var_list( kVARS%snow_layer_depth) )           call this%add_to_output( get_metadata( kVARS%snow_layer_depth   ))
-        if (0<var_list( kVARS%snow_layer_ice) )             call this%add_to_output( get_metadata( kVARS%snow_layer_ice     ))
-        if (0<var_list( kVARS%snow_layer_liquid_water) )    call this%add_to_output( get_metadata( kVARS%snow_layer_liquid_water    ))
-        if (0<var_list( kVARS%snow_age_factor) )            call this%add_to_output( get_metadata( kVARS%snow_age_factor     ))
-        if (0<var_list( kVARS%snow_height) )                call this%add_to_output( get_metadata( kVARS%snow_height   ))
-        if (0<var_list( kVARS%skin_temperature) )           call this%add_to_output( get_metadata( kVARS%skin_temperature   ))
-        if (0<var_list( kVARS%soil_water_content) )         call this%add_to_output( get_metadata( kVARS%soil_water_content ))
-        if (0<var_list( kVARS%eq_soil_moisture) )           call this%add_to_output( get_metadata( kVARS%eq_soil_moisture   ))
-        if (0<var_list( kVARS%smc_watertable_deep) )        call this%add_to_output( get_metadata( kVARS%smc_watertable_deep ))
-        if (0<var_list( kVARS%recharge) )                   call this%add_to_output( get_metadata( kVARS%recharge      ))
-        if (0<var_list( kVARS%recharge_deep) )              call this%add_to_output( get_metadata( kVARS%recharge_deep     ))
-        if (0<var_list( kVARS%soil_temperature) )           call this%add_to_output( get_metadata( kVARS%soil_temperature   ))
-        if (0<var_list( kVARS%latitude) )                   call this%add_to_output( get_metadata( kVARS%latitude      ))
-        if (0<var_list( kVARS%longitude) )                  call this%add_to_output( get_metadata( kVARS%longitude      ))
-        if (0<var_list( kVARS%u_latitude) )                 call this%add_to_output( get_metadata( kVARS%u_latitude      ))
-        if (0<var_list( kVARS%u_longitude) )                call this%add_to_output( get_metadata( kVARS%u_longitude      ))
-        if (0<var_list( kVARS%v_latitude) )                 call this%add_to_output( get_metadata( kVARS%v_latitude      ))
-        if (0<var_list( kVARS%v_longitude) )                call this%add_to_output( get_metadata( kVARS%v_longitude      ))
-        if (0<var_list( kVARS%terrain) )                    call this%add_to_output( get_metadata( kVARS%terrain      ))
-        if (0<var_list( kVARS%sensible_heat) )              call this%add_to_output( get_metadata( kVARS%sensible_heat     ))
-        if (0<var_list( kVARS%latent_heat) )                call this%add_to_output( get_metadata( kVARS%latent_heat      ))
-        if (0<var_list( kVARS%u_10m) )                      call this%add_to_output( get_metadata( kVARS%u_10m        ))
-        if (0<var_list( kVARS%v_10m) )                      call this%add_to_output( get_metadata( kVARS%v_10m        ))
-        if (0<var_list( kVARS%coeff_momentum_drag) )        call this%add_to_output( get_metadata( kVARS%coeff_momentum_drag ))
-        if (0<var_list( kVARS%coeff_heat_exchange) )        call this%add_to_output( get_metadata( kVARS%coeff_heat_exchange ))
-        if (0<var_list( kVARS%surface_rad_temperature) )    call this%add_to_output( get_metadata( kVARS%surface_rad_temperature    ))
-        if (0<var_list( kVARS%temperature_2m) )             call this%add_to_output( get_metadata( kVARS%temperature_2m     ))
-        if (0<var_list( kVARS%humidity_2m) )                call this%add_to_output( get_metadata( kVARS%humidity_2m      ))
-        if (0<var_list( kVARS%temperature_2m_veg) )         call this%add_to_output( get_metadata( kVARS%temperature_2m_veg ))
-        if (0<var_list( kVARS%temperature_2m_bare) )        call this%add_to_output( get_metadata( kVARS%temperature_2m_bare ))
-        if (0<var_list( kVARS%mixing_ratio_2m_veg) )        call this%add_to_output( get_metadata( kVARS%mixing_ratio_2m_veg ))
-        if (0<var_list( kVARS%mixing_ratio_2m_bare) )       call this%add_to_output( get_metadata( kVARS%mixing_ratio_2m_bare ))
-        if (0<var_list( kVARS%surface_pressure) )           call this%add_to_output( get_metadata( kVARS%surface_pressure   ))
-        if (0<var_list( kVARS%rad_absorbed_total) )         call this%add_to_output( get_metadata( kVARS%rad_absorbed_total ))
-        if (0<var_list( kVARS%rad_absorbed_veg) )           call this%add_to_output( get_metadata( kVARS%rad_absorbed_veg   ))
-        if (0<var_list( kVARS%rad_absorbed_bare) )          call this%add_to_output( get_metadata( kVARS%rad_absorbed_bare   ))
-        if (0<var_list( kVARS%rad_net_longwave) )           call this%add_to_output( get_metadata( kVARS%rad_net_longwave   ))
-        if (0<var_list( kVARS%longwave_up) )                call this%add_to_output( get_metadata( kVARS%longwave_up      ))
-        if (0<var_list( kVARS%ground_heat_flux) )           call this%add_to_output( get_metadata( kVARS%ground_heat_flux   ))
-        if (0<var_list( kVARS%soil_deep_temperature) )      call this%add_to_output( get_metadata( kVARS%soil_deep_temperature    ))
-        if (0<var_list( kVARS%evap_canopy) )                call this%add_to_output( get_metadata( kVARS%evap_canopy      ))
-        if (0<var_list( kVARS%evap_soil_surface) )          call this%add_to_output( get_metadata( kVARS%evap_soil_surface   ))
-        if (0<var_list( kVARS%transpiration_rate) )         call this%add_to_output( get_metadata( kVARS%transpiration_rate ))
-        if (0<var_list( kVARS%ch_veg) )                     call this%add_to_output( get_metadata( kVARS%ch_veg      ))
-        if (0<var_list( kVARS%ch_veg_2m) )                  call this%add_to_output( get_metadata( kVARS%ch_veg_2m      ))
-        if (0<var_list( kVARS%ch_bare) )                    call this%add_to_output( get_metadata( kVARS%ch_bare      ))
-        if (0<var_list( kVARS%ch_bare_2m) )                 call this%add_to_output( get_metadata( kVARS%ch_bare_2m      ))
-        if (0<var_list( kVARS%ch_under_canopy) )            call this%add_to_output( get_metadata( kVARS%ch_under_canopy     ))
-        if (0<var_list( kVARS%ch_leaf) )                    call this%add_to_output( get_metadata( kVARS%ch_leaf      ))
-        if (0<var_list( kVARS%sensible_heat_veg) )          call this%add_to_output( get_metadata( kVARS%sensible_heat_veg   ))
-        if (0<var_list( kVARS%sensible_heat_bare) )         call this%add_to_output( get_metadata( kVARS%sensible_heat_bare ))
-        if (0<var_list( kVARS%sensible_heat_canopy) )       call this%add_to_output( get_metadata( kVARS%sensible_heat_canopy    ))
-        if (0<var_list( kVARS%evap_heat_veg) )              call this%add_to_output( get_metadata( kVARS%evap_heat_veg     ))
-        if (0<var_list( kVARS%evap_heat_bare) )             call this%add_to_output( get_metadata( kVARS%evap_heat_bare     ))
-        if (0<var_list( kVARS%evap_heat_canopy) )           call this%add_to_output( get_metadata( kVARS%evap_heat_canopy   ))
-        if (0<var_list( kVARS%transpiration_heat) )         call this%add_to_output( get_metadata( kVARS%transpiration_heat ))
-        if (0<var_list( kVARS%ground_heat_veg) )            call this%add_to_output( get_metadata( kVARS%ground_heat_veg     ))
-        if (0<var_list( kVARS%ground_heat_bare) )           call this%add_to_output( get_metadata( kVARS%ground_heat_bare     ))
-        if (0<var_list( kVARS%net_longwave_veg) )           call this%add_to_output( get_metadata( kVARS%net_longwave_veg     ))
-        if (0<var_list( kVARS%net_longwave_bare) )          call this%add_to_output( get_metadata( kVARS%net_longwave_bare   ))
-        if (0<var_list( kVARS%net_longwave_canopy) )        call this%add_to_output( get_metadata( kVARS%net_longwave_canopy ))
-        if (0<var_list( kVARS%runoff_surface) )             call this%add_to_output( get_metadata( kVARS%runoff_surface     ))
-        if (0<var_list( kVARS%runoff_subsurface) )          call this%add_to_output( get_metadata( kVARS%runoff_subsurface   ))
-        if (0<var_list( kVARS%soil_totalmoisture) )         call this%add_to_output( get_metadata( kVARS%soil_totalmoisture ))
-        if (0<var_list( kVARS%water_table_depth) )          call this%add_to_output( get_metadata( kVARS%water_table_depth   ))
-        if (0<var_list( kVARS%water_aquifer) )              call this%add_to_output( get_metadata( kVARS%water_aquifer     ))
-        if (0<var_list( kVARS%storage_gw) )                 call this%add_to_output( get_metadata( kVARS%storage_gw      ))
-        if (0<var_list( kVARS%storage_lake) )               call this%add_to_output( get_metadata( kVARS%storage_lake      ))
-        if (0<var_list( kVARS%roughness_z0) )               call this%add_to_output( get_metadata( kVARS%roughness_z0      ))
-        if (0<var_list( kVARS%mass_leaf) )                  call this%add_to_output( get_metadata( kVARS%mass_leaf      ))
-        if (0<var_list( kVARS%mass_root) )                  call this%add_to_output( get_metadata( kVARS%mass_root      ))
-        if (0<var_list( kVARS%mass_stem) )                  call this%add_to_output( get_metadata( kVARS%mass_stem      ))
-        if (0<var_list( kVARS%mass_wood) )                  call this%add_to_output( get_metadata( kVARS%mass_wood      ))
-        if (0<var_list( kVARS%soil_carbon_fast) )           call this%add_to_output( get_metadata( kVARS%soil_carbon_fast   ))
-        if (0<var_list( kVARS%soil_carbon_stable) )         call this%add_to_output( get_metadata( kVARS%soil_carbon_stable ))
-        if (0<var_list( kVARS%soil_texture_1) )             call this%add_to_output( get_metadata( kVARS%soil_texture_1     ))
-        if (0<var_list( kVARS%soil_texture_2) )             call this%add_to_output( get_metadata( kVARS%soil_texture_2     ))
-        if (0<var_list( kVARS%soil_texture_3) )             call this%add_to_output( get_metadata( kVARS%soil_texture_3     ))
-        if (0<var_list( kVARS%soil_texture_4) )             call this%add_to_output( get_metadata( kVARS%soil_texture_4     ))
-        if (0<var_list( kVARS%soil_sand_and_clay) )         call this%add_to_output( get_metadata( kVARS%soil_sand_and_clay ))
-        if (0<var_list( kVARS%re_cloud) )                   call this%add_to_output( get_metadata( kVARS%re_cloud        ))
-        if (0<var_list( kVARS%re_ice) )                     call this%add_to_output( get_metadata( kVARS%re_ice        ))
-        if (0<var_list( kVARS%re_snow) )                    call this%add_to_output( get_metadata( kVARS%re_snow        ))
-        if (0<var_list( kVARS%out_longwave_rad) )           call this%add_to_output( get_metadata( kVARS%out_longwave_rad     ))
-        if (0<var_list( kVARS%longwave_cloud_forcing) )     call this%add_to_output( get_metadata( kVARS%longwave_cloud_forcing    ))
-        if (0<var_list( kVARS%shortwave_cloud_forcing) )    call this%add_to_output( get_metadata( kVARS%shortwave_cloud_forcing    ))
-        if (0<var_list( kVARS%cosine_zenith_angle) )        call this%add_to_output( get_metadata( kVARS%cosine_zenith_angle ))
-        if (0<var_list( kVARS%land_emissivity) )            call this%add_to_output( get_metadata( kVARS%land_emissivity     ))
-        if (0<var_list( kVARS%temperature_interface) )      call this%add_to_output( get_metadata( kVARS%temperature_interface ))
-        if (0<var_list( kVARS%tend_swrad) )                 call this%add_to_output( get_metadata( kVARS%tend_swrad      ))
-
+        !Loop through domain vars_to_out, get the var index for the given variable name, and add that var's meta data to local list
+        call vars_to_out%reset_iterator()
+        
+        do while (vars_to_out%has_more_elements())
+            var = vars_to_out%next()
+            call this%add_to_output(get_metadata( get_varindx(var%name) ))
+        end do
     end subroutine
 
     subroutine add_global_attributes(this)
@@ -433,7 +300,7 @@ contains
         character(len=64)       :: err
         integer                 :: ncid
 
-        ncid = this%ncfile_id
+        ncid = this%active_nc_id
 
         err="Creating global attributes"
         call check_ncdf( nf90_put_att(ncid,NF90_GLOBAL,"Conventions","CF-1.6"), trim(err))
@@ -447,7 +314,7 @@ contains
 
         if (this%n_attrs > 0) then
             do i=1,this%n_attrs
-                call check_ncdf( nf90_put_att(   this%ncfile_id,             &
+                call check_ncdf( nf90_put_att(   ncid,             &
                                             NF90_GLOBAL,                &
                                             trim(this%attributes(i)%name),    &
                                             trim(this%attributes(i)%value)),  &
@@ -459,25 +326,22 @@ contains
         date_format='(I4,"/",I2.2,"/",I2.2," ",I2.2,":",I2.2,":",I2.2)'
         write(todays_date_time,date_format) date_time(1:3),date_time(5:7)
 
-        call check_ncdf(nf90_put_att(this%ncfile_id, NF90_GLOBAL,"history","Created:"//todays_date_time//UTCoffset), "global attr")
-        !call check_ncdf(nf90_put_att(this%ncfile_id, NF90_GLOBAL, "image", this_image()))
+        call check_ncdf(nf90_put_att(ncid, NF90_GLOBAL,"history","Created:"//todays_date_time//UTCoffset), "global attr")
+        !call check_ncdf(nf90_put_att(ncid, NF90_GLOBAL, "image", this_image()))
 
     end subroutine add_global_attributes
 
-    subroutine setup_variables(this, time)
+    subroutine setup_variables(this, time, var_indx_list)
         implicit none
         class(output_t), intent(inout) :: this
         type(Time_type), intent(in)    :: time
+        integer, intent(in)            :: var_indx_list(:)
         integer :: i
 
         ! iterate through variables creating or setting up variable IDs if they exist, also dimensions
-        do i=1,this%n_vars
-            ! create all dimensions or find dimension IDs if they exist already
-
-            call setup_dims_for_var(this, this%variables(i))
-
-            call setup_variable(this, this%variables(i))
-            
+        do i=1,size(var_indx_list)            
+            call setup_dims_for_var(this, this%variables(var_indx_list(i)))
+            call setup_variable(this, this%variables(var_indx_list(i)))
         end do
 
         call setup_time_variable(this, time)
@@ -508,7 +372,7 @@ contains
         end select
 
 
-        err = nf90_inq_varid(this%ncfile_id, var%name, var%var_id)
+        err = nf90_inq_varid(this%active_nc_id, var%name, var%var_id)
 
         ! if the variable was not found in the netcdf file then we will define it.
         if (err /= NF90_NOERR) then
@@ -517,19 +381,19 @@ contains
             allocate(var%dim_ids(1))
 
             ! Try to find the dimension ID if it exists already.
-            err = nf90_inq_dimid(this%ncfile_id, trim(var%dimensions(1)), var%dim_ids(1))
+            err = nf90_inq_dimid(this%active_nc_id, trim(var%dimensions(1)), var%dim_ids(1))
 
             ! if the dimension doesn't exist in the file, create it.
             if (err/=NF90_NOERR) then
-                call check_ncdf( nf90_def_dim(this%ncfile_id, trim(var%dimensions(1)), NF90_UNLIMITED, &
+                call check_ncdf( nf90_def_dim(this%active_nc_id, trim(var%dimensions(1)), NF90_UNLIMITED, &
                             var%dim_ids(1) ), "def_dim"//var%dimensions(1) )
             endif
 
-            call check_ncdf( nf90_def_var(this%ncfile_id, var%name, NF90_DOUBLE, var%dim_ids(1), var%var_id), "Defining time" )
-            call check_ncdf( nf90_put_att(this%ncfile_id, var%var_id,"standard_name","time"))
-            call check_ncdf( nf90_put_att(this%ncfile_id, var%var_id,"calendar",trim(calendar)))
-            call check_ncdf( nf90_put_att(this%ncfile_id, var%var_id,"units",time%units()))
-            call check_ncdf( nf90_put_att(this%ncfile_id, var%var_id,"UTCoffset","0"))
+            call check_ncdf( nf90_def_var(this%active_nc_id, var%name, NF90_DOUBLE, var%dim_ids(1), var%var_id), "Defining time" )
+            call check_ncdf( nf90_put_att(this%active_nc_id, var%var_id,"standard_name","time"))
+            call check_ncdf( nf90_put_att(this%active_nc_id, var%var_id,"calendar",trim(calendar)))
+            call check_ncdf( nf90_put_att(this%active_nc_id, var%var_id,"units",time%units()))
+            call check_ncdf( nf90_put_att(this%active_nc_id, var%var_id,"UTCoffset","0"))
 
         endif
         end associate
@@ -537,11 +401,12 @@ contains
     end subroutine setup_time_variable
 
 
-    subroutine save_data(this, current_step, time)
+    subroutine save_data(this, current_step, time, var_indx_list)
         implicit none
         class(output_t), intent(in) :: this
         integer,         intent(in) :: current_step
         type(Time_type), intent(in) :: time
+        integer, intent(in)         :: var_indx_list(:)
         
         real, allocatable :: var_3d(:,:,:)
         integer :: i, k_s, k_e
@@ -555,8 +420,8 @@ contains
         integer :: v_i_s_b2, v_i_e_b2, v_j_s_b2, v_j_e_b2
     
 
-        do i=1,this%n_vars
-            associate(var => this%variables(i))
+        do i=1,size(var_indx_list)
+            associate(var => this%variables(var_indx_list(i)))                
                 k_s = this%kts
                 k_e = var%dim_len(3)
                 
@@ -609,53 +474,61 @@ contains
 
                 v_j_s_b2 = max(v_j_s_b2,1)
                 v_j_e_b2 = max(v_j_e_b2,1)
-                call check_ncdf( nf90_var_par_access(this%ncfile_id, var%var_id, nf90_collective))
+                call check_ncdf( nf90_var_par_access(this%active_nc_id, var%var_id, nf90_collective))
 
                 if (var%three_d) then
                     var_3d = reshape(var%data_3d, &
                         shape=(/ ubound(var%data_3d,1), ubound(var%data_3d,3), ubound(var%data_3d,2) /), order=[1,3,2])
                     if (var%unlimited_dim) then
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            var_3d(v_i_s:v_i_e,v_j_s:v_j_e,:), start_three_D_t, count=(/cnt_3d(1), cnt_3d(2), cnt_3d(3), 1/)), "saving:"//trim(var%name) )
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            var_3d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b,:), start_three_D_t_b, count=(/cnt_3d_b(1), cnt_3d_b(2), (k_e-k_s+1), 1/)), "saving LL block:"//trim(var%name) )
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            var_3d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2,:), start_three_D_t_b2, count=(/cnt_3d_b2(1), cnt_3d_b2(2), (k_e-k_s+1), 1/)), "saving UR block:"//trim(var%name) )
+                        call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id, &
+                            var_3d(v_i_s:v_i_e,v_j_s:v_j_e,k_s:k_e), start_three_D_t, count=(/cnt_3d(1), cnt_3d(2), cnt_3d(3), 1/)), "saving:"//trim(var%name) )
+                        if (this%blocked_UR .or. this%blocked_LL) then
+                            call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id, &
+                                var_3d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b,k_s:k_e), start_three_D_t_b, count=(/cnt_3d_b(1), cnt_3d_b(2), cnt_3d_b(3), 1/)), "saving LL block:"//trim(var%name) )
+                            call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id, &
+                                var_3d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2,k_s:k_e), start_three_D_t_b2, count=(/cnt_3d_b2(1), cnt_3d_b2(2), cnt_3d_b2(3), 1/)), "saving UR block:"//trim(var%name) )
+                        endif
                     elseif (this%creating) then
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, var_3d(v_i_s:v_i_e,v_j_s:v_j_e,:), &
+                        call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id, var_3d(v_i_s:v_i_e,v_j_s:v_j_e,k_s:k_e), &
                             start=this%start_3d,count=cnt_3d ), "saving:"//trim(var%name) )
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, var_3d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b,:), &
-                            start=this%start_3d_b,count=cnt_3d_b ), "saving LL block:"//trim(var%name) )
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id, &
-                            var_3d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2,:), start=this%start_3d_b2,&
-                            count=cnt_3d_b2 ), "saving UR block:"//trim(var%name) )
+                        if (this%blocked_UR .or. this%blocked_LL) then
+                            call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id, var_3d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b,k_s:k_e), &
+                                start=this%start_3d_b,count=cnt_3d_b ), "saving LL block:"//trim(var%name) )
+                            call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id, &
+                                var_3d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2,k_s:k_e), start=this%start_3d_b2,&
+                                count=cnt_3d_b2 ), "saving UR block:"//trim(var%name) )
+                        endif
                     endif
                 elseif (var%two_d) then
                     if (var%unlimited_dim) then
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s:v_i_e,v_j_s:v_j_e), &
+                        call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id,  var%data_2d(v_i_s:v_i_e,v_j_s:v_j_e), &
                                 start_two_D_t,count=(/ cnt_3d(1), cnt_3d(2), 1/)), "saving:"//trim(var%name) )
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b), &
+                        if (this%blocked_UR .or. this%blocked_LL) then
+                            call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id,  var%data_2d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b), &
                                 start_two_D_t_b,count=(/ cnt_3d_b(1), cnt_3d_b(2), 1/)), "saving LL block:"//trim(var%name) )
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2), &
+                            call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id,  var%data_2d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2), &
                                 start_two_D_t_b2,count=(/ cnt_3d_b2(1), cnt_3d_b2(2), 1/)), "saving UR block:"//trim(var%name) )
+                        endif
                     elseif (this%creating) then
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s:v_i_e,v_j_s:v_j_e), &
+                        call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id,  var%data_2d(v_i_s:v_i_e,v_j_s:v_j_e), &
                                     start=(/ this%start_3d(1), this%start_3d(2) /), &
                                     count=(/ cnt_3d(1), cnt_3d(2) /)), "saving:"//trim(var%name) )
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b), &
+                        if (this%blocked_UR .or. this%blocked_LL) then
+                            call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id,  var%data_2d(v_i_s_b:v_i_e_b,v_j_s_b:v_j_e_b), &
                                     start=(/ this%start_3d_b(1), this%start_3d_b(2) /), &
                                     count=(/ cnt_3d_b(1), cnt_3d_b(2) /)), "saving LL block:"//trim(var%name) )
-                        call check_ncdf( nf90_put_var(this%ncfile_id, var%var_id,  var%data_2d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2), &
+                            call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id,  var%data_2d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2), &
                                     start=(/ this%start_3d_b2(1), this%start_3d_b2(2) /), &
                                     count=(/ cnt_3d_b2(1), cnt_3d_b2(2) /)), "saving UR block:"//trim(var%name) )
+                        endif
                     endif
                 endif
             end associate
         end do
         
-        call check_ncdf( nf90_var_par_access(this%ncfile_id, this%time%var_id, nf90_collective))
+        call check_ncdf( nf90_var_par_access(this%active_nc_id, this%time%var_id, nf90_collective))
 
-        call check_ncdf( nf90_put_var(this%ncfile_id, this%time%var_id, dble(time%mjd()), [current_step]),   &
+        call check_ncdf( nf90_put_var(this%active_nc_id, this%time%var_id, dble(time%mjd()), [current_step]),   &
                    "saving:"//trim(this%time%name) )
 
 
@@ -676,13 +549,13 @@ contains
         do i = 1, size(var%dim_ids)
 
             ! Try to find the dimension ID if it exists already.
-            err = nf90_inq_dimid(this%ncfile_id, trim(var%dimensions(i)), var%dim_ids(i))
+            err = nf90_inq_dimid(this%active_nc_id, trim(var%dimensions(i)), var%dim_ids(i))
 
             ! probably the dimension doesn't exist in the file, so we will create it.
             if (err/=NF90_NOERR) then
                 ! assume that the last dimension should be the unlimited dimension (generally a good idea...)
                 if (var%unlimited_dim .and. (i==size(var%dim_ids))) then
-                    call check_ncdf( nf90_def_dim(this%ncfile_id, trim(var%dimensions(i)), NF90_UNLIMITED, &
+                    call check_ncdf( nf90_def_dim(this%active_nc_id, trim(var%dimensions(i)), NF90_UNLIMITED, &
                                 var%dim_ids(i) ), "def_dim"//var%dimensions(i) )
                 else
                     dim_len = this%global_dim_len(i)
@@ -690,7 +563,7 @@ contains
                     if (i == 2) dim_len = dim_len+var%ystag
                     if (i == 3) dim_len = var%dim_len(3)
 
-                    call check_ncdf( nf90_def_dim(this%ncfile_id, var%dimensions(i), dim_len,       &
+                    call check_ncdf( nf90_def_dim(this%active_nc_id, var%dimensions(i), dim_len,       &
                                 var%dim_ids(i) ), "def_dim"//var%dimensions(i) )
                 endif
             endif
@@ -704,17 +577,16 @@ contains
         type(variable_t),  intent(inout) :: var
         integer :: i, n, err
 
-        err = nf90_inq_varid(this%ncfile_id, var%name, var%var_id)
+        err = nf90_inq_varid(this%active_nc_id, var%name, var%var_id)
 
         ! if the variable was not found in the netcdf file then we will define it.
         if (err /= NF90_NOERR) then
-            
-            call check_ncdf( nf90_def_var(this%ncfile_id, var%name, NF90_REAL, var%dim_ids, var%var_id), &
+            call check_ncdf( nf90_def_var(this%active_nc_id, var%name, NF90_REAL, var%dim_ids, var%var_id), &
                         "Defining variable:"//trim(var%name) )
 
             ! setup attributes
             do i=1,size(var%attributes)
-                call check_ncdf( nf90_put_att(this%ncfile_id,                &
+                call check_ncdf( nf90_put_att(this%active_nc_id,                &
                                          var%var_id,                    &
                                          trim(var%attributes(i)%name),        &
                                          trim(var%attributes(i)%value)),      &
@@ -743,13 +615,17 @@ contains
 
     end subroutine
 
-    module subroutine close_file(this)
+    module subroutine close_files(this)
         implicit none
         class(output_t),   intent(inout)  :: this
 
-        if (this%ncfile_id > 0) then
-            call check_ncdf(nf90_close(this%ncfile_id), "Closing file ")
-            this%ncfile_id = -1
+        if (this%out_ncfile_id > 0) then
+            call check_ncdf(nf90_close(this%out_ncfile_id), "Closing output file ")
+            this%out_ncfile_id = -1
+        endif
+        if (this%rst_ncfile_id > 0) then
+            call check_ncdf(nf90_close(this%rst_ncfile_id), "Closing restart file ")
+            this%rst_ncfile_id = -1
         endif
 
     end subroutine

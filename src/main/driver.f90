@@ -18,7 +18,7 @@
 !!-----------------------------------------
 program icar
     use mpi
-    use, intrinsic              :: iso_fortran_env
+    use iso_fortran_env
     use options_interface,  only : options_t
     use domain_interface,   only : domain_t
     use boundary_interface, only : boundary_t
@@ -29,7 +29,6 @@ program icar
     use time_object,        only : Time_type
     use time_delta_object,  only : time_delta_t
     use wind,               only : update_winds
-    use restart_interface,  only : restart_model
     use icar_constants
     use wind_iterative,     only : finalize_iter_winds
     use ioserver_interface, only : ioserver_t
@@ -89,14 +88,19 @@ program icar
 
     select case(exec_team)
     case(kCOMPUTE_TEAM)
+    
         EVENT WAIT (read_ev)
         call ioclient%receive(boundary, read_buffer)
-
-        !Compute processes may now initialize their state based on the data read in
         call boundary%update_computed_vars(options, update=options%parameters%time_varying_z)
 
         call init_model_state(options, domain, boundary, add_cond) ! added boundary structure for external files (additional conditions)
 
+        if (options%parameters%restart) then
+            EVENT WAIT (read_ev)
+            if (this_image()==1) write(*,*) "Reading restart data"
+            call ioclient%receive_rst(domain, write_buffer)
+        endif
+        
         ! physics drivers need to be initialized after restart data are potentially read in.
         call init_physics(options, domain)
 
@@ -110,10 +114,19 @@ program icar
         call output_timer%stop()
         next_output = options%parameters%start_time + options%io_options%output_dt
     case(kIO_TEAM)
-        call ioserver%read_file(boundary, read_buffer)
+    
+        call ioserver%read_file(read_buffer)
         do i = 1,ioserver%n_children
             EVENT POST (read_ev[ioserver%children(i)])
         enddo
+        
+        if (options%parameters%restart) then
+            call ioserver%read_restart_file(options, write_buffer)
+            do i = 1,ioserver%n_children
+                EVENT POST (read_ev[ioserver%children(i)])
+            enddo
+        endif
+        
         !Call dt_reduce to sync co_min call with compute processes. Pass a ridiculously large time step to ensure that it does not contribute to reduction.
         ! This should be no problem since output time steps are likely to overlap with input time steps
         future_dt_seconds = 3000.0D0
@@ -225,7 +238,7 @@ program icar
             if ((next_output + options%io_options%input_dt + small_time_delta) >= next_input .and. &
                 next_input <= options%parameters%end_time) then
                 
-                call ioserver%read_file(boundary, read_buffer)
+                call ioserver%read_file(read_buffer)
                 do i = 1,ioserver%n_children
                     EVENT POST (read_ev[ioserver%children(i)])
                 enddo
@@ -242,11 +255,10 @@ program icar
             if (next_input + small_time_delta >= (next_output + options%io_options%input_dt)) then
                 EVENT WAIT (write_ev, UNTIL_COUNT = ioserver%n_children)
                 
-                call ioserver%write_file(domain, next_output, write_buffer)
+                call ioserver%write_file(next_output, write_buffer)
                 do i = 1,ioserver%n_children
                     EVENT POST (written_ev[ioserver%children(i)])
-                enddo
-                
+                enddo                
                 next_output = next_output + options%io_options%output_dt
             endif
         enddo
@@ -317,7 +329,7 @@ contains
         kNUM_COMPUTE = num_images()-kNUM_SERVERS
         
         if ((mod(kNUM_COMPUTE,2) /= 0) .and. this_image()==1) then
-            write(*,*) 'WARNING: number of compute processes per node is odd-numbered.' 
+            write(*,*) 'WARNING: number of compute processes is odd-numbered.' 
             write(*,*) 'One process per node is used for I/O.'
             write(*,*) 'If the total number of compute processes is odd-numbered,'
             write(*,*) 'this may lead to errors with domain decomposition'
@@ -343,7 +355,7 @@ contains
     subroutine init_IO(exec_team, domain, boundary, options, ioclient, ioserver, write_buffer, read_buffer)
         implicit none
         integer, intent(in) :: exec_team
-        type(domain_t),  intent(in)  :: domain
+        type(domain_t),  intent(inout)  :: domain
         type(boundary_t),intent(in)  :: boundary
         type(options_t), intent(in)  :: options
         type(ioclient_t), intent(inout) :: ioclient
@@ -352,8 +364,9 @@ contains
 
         integer, allocatable, dimension(:) :: i_s_w, i_e_w, k_s_w, k_e_w, j_s_w, j_e_w, i_s_r, i_e_r, k_s_r, k_e_r, j_s_r, j_e_r
         integer, allocatable, dimension(:,:) :: childrens
-        integer :: nx_w, ny_w, nz_w, n_w, nx_r, ny_r, nz_r, n_r, i, globalComm, splitComm, color, ierr
-                
+        integer :: nx_w, ny_w, nz_w, n_w, nx_r, ny_r, nz_r, n_r, n_restart, i, globalComm, splitComm, color, ierr
+        integer :: out_i, rst_i, var_indx
+        
         allocate(i_s_w(num_images())); allocate(i_e_w(num_images()))
         allocate(i_s_r(num_images())); allocate(i_e_r(num_images()))
         
@@ -370,14 +383,16 @@ contains
         k_s_w = 0; k_e_w = 0; k_s_r = 0; k_e_r = 0
         
         nx_w = 0; ny_w = 0; nz_w = 0; nx_r = 0; ny_r = 0; nz_r = 0;
-        n_w = 0; n_r = 0;
+        n_w = 0; n_r = 0; n_restart = 0;
+        
+        
+
         
         childrens = 0
-        
         select case (exec_team)
         case (kCOMPUTE_TEAM)
             color = 0
-            call ioclient%init(domain, boundary)
+            call ioclient%init(domain, boundary, options)
             
             i_s_w(this_image()) = ioclient%i_s_w; i_e_w(this_image()) = ioclient%i_e_w
             i_s_r(this_image()) = ioclient%i_s_r; i_e_r(this_image()) = ioclient%i_e_r
@@ -413,6 +428,7 @@ contains
 
             n_r = ioserver%n_r
             n_w = ioserver%n_w
+            n_restart = ioserver%n_restart
             childrens(ioserver%server_id,1:ioserver%n_children) = ioserver%children
         end select
 
@@ -455,9 +471,13 @@ contains
 
         call co_max(n_w)
         call co_max(n_r)
+        call co_max(n_restart)
+        
+        
         !Initialize read/write buffers. They are coarrays, defined by the comax of the read and write bounds for each compute image
         allocate(write_buffer(n_w,1:nx_w+1,1:nz_w,1:ny_w+1)[*])
         allocate(read_buffer(n_r,1:nx_r+1,1:nz_r,1:ny_r+1)[*])
+
     end subroutine init_IO
 
     

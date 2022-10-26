@@ -15,11 +15,12 @@ module output_interface
   use mpi
   use netcdf
   use icar_constants
-  use variable_interface, only : variable_t
-  use domain_interface,   only : domain_t
-  use meta_data_interface,only : meta_data_t
-  use time_object,        only : Time_type, THREESIXTY, GREGORIAN, NOCALENDAR, NOLEAP
-  use options_interface,  only : options_t
+  use variable_interface,       only : variable_t
+  use domain_interface,         only : domain_t
+  use meta_data_interface,      only : meta_data_t
+  use time_object,              only : Time_type, THREESIXTY, GREGORIAN, NOCALENDAR, NOLEAP
+  use options_interface,        only : options_t
+  use variable_dict_interface,  only : var_dict_t
 
   implicit none
 
@@ -52,16 +53,19 @@ module output_interface
       logical :: blocked_UR = .false.
 
       ! The filename of the netcdf file to write
-      character(len=kMAX_FILE_LENGTH), public :: filename, base_file_name
+      character(len=kMAX_FILE_LENGTH), public :: output_fn, base_out_file_name, base_rst_file_name, restart_fn
 
       character(len=49)   :: file_date_format = '(I4,"-",I0.2,"-",I0.2,"_",I0.2,"-",I0.2,"-",I0.2)'
 
       ! the netcdf ID for an open file
-      integer :: ncfile_id = -1
-
+      integer :: out_ncfile_id = -1
+      integer :: rst_ncfile_id = -1
+      
+      integer :: active_nc_id = -1 !Used during save events to control which file is written to
+      
       ! number of dimensions in the file
       integer :: n_dims = 0
-
+      
       integer :: start_3d(3), cnt_3d(3), cnt_2d(2)
       
       !same as above, but for block, if present
@@ -70,7 +74,7 @@ module output_interface
 
       integer :: its, ite, kts, kte, jts, jte
 
-      integer :: output_counter, output_count
+      integer :: output_counter, restart_counter, restart_count, output_count
 
       integer :: global_dim_len(3)
 
@@ -81,14 +85,14 @@ module output_interface
 
   contains
 
-      procedure, public  :: add_to_output
-      procedure, public  :: add_variables
       procedure, public  :: set_attrs
-      procedure, public  :: save_file
-      procedure, public  :: close_file
+      procedure, public  :: save_out_file
+      procedure, public  :: close_files
 
       procedure, public  :: init
       procedure, private :: increase_var_capacity
+      procedure, private :: add_to_output
+      procedure, private :: add_variables
   end type
 
   interface
@@ -100,7 +104,7 @@ module output_interface
       module subroutine init(this, domain, options, its, ite, kts, kte, jts, jte)
         implicit none
         class(output_t),  intent(inout)  :: this
-        type(domain_t),   intent(in)     :: domain
+        type(domain_t),   intent(inout)  :: domain
         type(options_t),  intent(in)     :: options
         integer,          intent(in)     :: its, ite, kts, kte, jts, jte
 
@@ -134,32 +138,32 @@ module output_interface
           class(output_t),   intent(inout)  :: this
           type(variable_t),  intent(in)     :: in_variable
       end subroutine
-
+      
       !>----------------------------------------------------------
-      !! Add multiple variables to the list of output variables given their integer constant index
+      !! Essentially copy domain vars_to_out to a local array
       !!
       !!----------------------------------------------------------
-      module subroutine add_variables(this, var_list)
-          implicit none
-          class(output_t), intent(inout)  :: this
-          integer,         intent(in)     :: var_list(:)
+      module subroutine add_variables(this, vars_to_out)
+          class(output_t),  intent(inout)  :: this
+          type(var_dict_t), intent(inout)  :: vars_to_out
       end subroutine
-
       !>----------------------------------------------------------
-      !! Save a new timestep (time) to the file "filename"
+      !! Save a new timestep (time) to the output file 
       !!
       !!----------------------------------------------------------
-      module subroutine save_file(this, time, par_comms)
+      module subroutine save_out_file(this, time, par_comms, out_var_indices, rst_var_indices)
           implicit none
           class(output_t),  intent(inout) :: this
           type(Time_type),  intent(in)    :: time
           integer,          intent(in)    :: par_comms
+          integer,          intent(in)    :: out_var_indices(:), rst_var_indices(:)
       end subroutine
-
-    module subroutine close_file(this)
+      
+      
+      module subroutine close_files(this)
         implicit none
         class(output_t),   intent(inout)  :: this
-    end subroutine
+      end subroutine
 
   end interface
 end module

@@ -67,6 +67,9 @@ contains
                 call wind_linear_var_request(options)
             endif
 
+            if (options%physics%windtype == kITERATIVE_WINDS) then
+                call options%restart_vars([kVARS%w_real])
+            endif
         end subroutine wind_var_request
 
 
