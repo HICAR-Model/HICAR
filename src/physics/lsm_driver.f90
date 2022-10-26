@@ -208,8 +208,7 @@ contains
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%ustar,        &
                          kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg,                                        &
                          kVARS%veg_type, kVARS%soil_type, kVARS%land_mask,												&
-						 & ! needed for FSM
-						 kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow  ])
+			 kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow ])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
 
@@ -222,8 +221,7 @@ contains
                          kVARS%snow_height,                                                                             &  ! BK 2020/10/26
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%veg_type,		&
-                         & ! needed for FSM
-                         kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow  ])
+                         kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow ])
         endif
 		
     end subroutine lsm_var_request
@@ -999,8 +997,7 @@ contains
 !                                  domain%land_mask,                     &
 !                                  QSFC,                                 &
 !                                  QFX,                                  &
-!                                  domain%skin_temperature%data_2d,      &
-!                                  its, ite, kts, kte, jts, jte)
+!                                  domain%skin_temperature%data_2d)
 !            endif
 
             where(windspd<1) windspd=1 ! minimum wind speed to prevent the exchange coefficient from blowing up
@@ -1433,8 +1430,7 @@ contains
                                   domain%land_mask,                     &
                                   QSFC,                                 &
                                   QFX,                                  &
-                                  domain%skin_temperature%data_2d,      &
-                                  its, ite, kts, kte, jts, jte)
+                                  domain%skin_temperature%data_2d)
             endif		
 
 
