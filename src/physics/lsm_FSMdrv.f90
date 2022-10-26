@@ -128,7 +128,7 @@ contains
 		!if (this_image()==1) write(*,*) "  ********DAY = ", domain%model_time%day
 		!if (this_image()==1) write(*,*) "  ********MINUTE = ", domain%model_time%minute
 		!if (this_image()==1) write(*,*) "  ********SECOND = ", domain%model_time%second
-		SYNC ALL
+		!SYNC ALL
     end subroutine lsm_FSM_init
 
     subroutine lsm_FSM(domain,options,lsm_dt,current_rain,current_snow,windspd)
@@ -233,19 +233,21 @@ contains
 
 
 		!! reseting the water pixels....
+            if (options%physics%watersurface==kWATER_SIMPLE) then
 		do j=1,Ny_HICAR
 			do i=1,Nx_HICAR
-                if (domain%land_mask(i,j)==kLC_WATER) then
-                    H_(i,j) = 0.0
-                    LE_(i,j) = 0.0
-                    SWE_(i,j) = 0.0
-                    snowdepth_(i,j) = 0.0
-                    Roff_(i,j) = 0.0
-                    meltflux_out_(i,j) = 0.0
-                    !! skin temperature will be reset to sea surface temperature later in water scheme
-                endif
-            end do
-        end do
+               		if (domain%land_mask(its+i-1,jts+j-1)==kLC_WATER) then
+               	  	     H_(i,j) = 0.0
+                    		     LE_(i,j) = 0.0
+                    		     SWE_(i,j) = 0.0
+                   		     snowdepth_(i,j) = 0.0
+                   		     Roff_(i,j) = 0.0
+                   		   meltflux_out_(i,j) = 0.0
+                    		  !! skin temperature will be reset to sea surface temperature later in water scheme
+                		endif
+            		end do
+        	end do
+	endif
 
 		!! giving feedback to HICAR
 		domain%sensible_heat%data_2d(its:ite,jts:jte)=H_
@@ -267,7 +269,7 @@ contains
 		domain%fsnow%data_2d(its:ite,jts:jte)=fsnow
 		domain%Nsnow%data_2d(its:ite,jts:jte)=Nsnow
 		!!
-		SYNC ALL  
+		!SYNC ALL  
     end subroutine lsm_FSM
 
 

@@ -81,19 +81,21 @@ contains
     subroutine water_simple(sst, psfc, wind, ustar, qv, temperature,  &
                             sensible_heat, latent_heat, &
                             z_atm, Z0, landmask, &
-                            qv_surf, evap_flux, tskin, its, ite, kts, kte, jts, jte)
+                            qv_surf, evap_flux, tskin)
         implicit none
-        real,    dimension(its:ite,kts:kte,jts:jte),intent(in)    :: qv, temperature
-        real,    dimension(its:ite,jts:jte),  intent(inout) :: sensible_heat, latent_heat, Z0, qv_surf, evap_flux, tskin
-        real,    dimension(its:ite,jts:jte),  intent(in)    :: sst, psfc, wind, ustar, z_atm
-        integer, dimension(its:ite,jts:jte),  intent(in)    :: landmask
-        integer, intent(in)                     :: its, ite, kts, kte, jts, jte
+        real,    dimension(:,:,:),intent(in)    :: qv, temperature
+        real,    dimension(:,:),  intent(inout) :: sensible_heat, latent_heat, Z0, qv_surf, evap_flux, tskin
+        real,    dimension(:,:),  intent(in)    :: sst, psfc, wind, ustar, z_atm
+        integer, dimension(:,:),  intent(in)    :: landmask
 
-        integer :: i, j
+        integer :: nx, ny, i, j
         real :: base_exchange_term, lnz_atm_term, exchange_C, z
 
-        do j=jts,jte
-            do i=its,ite
+        nx=size(sst,1)
+        ny=size(sst,2)
+
+        do j=2,ny-1
+            do i=2,nx-1
                 if (landmask(i,j)==kLC_WATER) then
                     qv_surf(i,j) = 0.98 * sat_mr(sst(i,j),psfc(i,j)) ! multiply by 0.98 to account for salinity
 
