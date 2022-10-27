@@ -288,7 +288,6 @@ contains
         if (0<var_list( kVARS%Ds) )                         call this%vars_to_out%add_var( trim( get_varname( kVARS%Ds                           )), this%Ds)
         if (0<var_list( kVARS%fsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%fsnow                        )), this%fsnow)
         if (0<var_list( kVARS%Nsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%Nsnow                        )), this%Nsnow)        
-        end associate
 
         if (options%parameters%batched_exch) then
             allocate(this%north_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
