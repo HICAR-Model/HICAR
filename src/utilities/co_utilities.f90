@@ -4,7 +4,7 @@ module co_util
     ! puts have potential to run faster than gets because they can operate more asynchronously
     ! It does not matter for some or all of these routines as they are already doing a sync before continuing.
 
-    use icar_constants, only : kMAX_STRING_LENGTH
+    use icar_constants, only : kMAX_STRING_LENGTH, DOM_IMG_INDX
 
     implicit none
 
@@ -469,8 +469,8 @@ contains
                     write(*,*) input(::xstep,j)
                 enddo
             endif
-            ! after a given image has printed it's array contents, sync all to make all images wait
-            sync all
+            ! after a given image has printed it's array contents, sync images ([DOM_IMG_INDX]) to make all images wait
+            sync images ([DOM_IMG_INDX])
         end do
 
     end subroutine print_in_image_order

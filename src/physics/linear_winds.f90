@@ -53,7 +53,7 @@ module linear_theory_winds
                                           blocking_fraction, options_t
     use array_utilities,            only: smooth_array, calc_weight, &
                                           linear_space
-    use icar_constants,             only: kMAX_FILE_LENGTH
+    use icar_constants,             only: kMAX_FILE_LENGTH, DOM_IMG_INDX
 
     implicit none
 
@@ -790,9 +790,9 @@ contains
                     loops_completed = loops_completed+1
                     !$omp end critical (print_lock)
 
-                    ! for now sync all has to be inside the z loop to conserve memory for large domains
+                    ! for now sync images ([DOM_IMG_INDX]) has to be inside the z loop to conserve memory for large domains
                     !$omp critical
-                    sync all
+                    sync images ([DOM_IMG_INDX])
                     !$omp end critical
                 enddo
 
@@ -805,7 +805,7 @@ contains
                 ! the syncs should be outside of the z loop, but this is a little more forgiving with memory requirements
                 do z=1,nz
                     !$omp critical
-                    sync all
+                    sync images ([DOM_IMG_INDX])
                     !$omp end critical
                 enddo
             enddo
@@ -814,7 +814,7 @@ contains
             call destroy_linear_theory_data(lt_data_m)
             ! $omp end parallel
 
-            sync all
+            sync images ([DOM_IMG_INDX])
 
             if (this_image()==1) write(*,*) "All images: 100 % Complete"
             if (this_image()==1) write(*,*) char(10),"--------  Linear wind look up table generation complete ---------"
