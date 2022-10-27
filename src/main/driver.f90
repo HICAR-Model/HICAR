@@ -199,9 +199,6 @@ program icar
             if (this_image()==1) write(*,*) "   End  time = ", trim(options%parameters%end_time%as_string())
             if (this_image()==1) write(*,*) "  Next Input = ", trim(next_input%as_string())
             if (this_image()==1) write(*,*) "  Next Output= ", trim(next_output%as_string())
-            if (this_image()==1) write(*,*) "  output         : ", trim(output_timer%as_string())
-            if (this_image()==1) write(*,*) "  input          : ", trim(input_timer%as_string())
-            if (this_image()==1) write(*,*) "  wind           : ", trim(wind_timer%as_string())
 
             ! this is the meat of the model physics, run all the physics for the current time step looping over internal timesteps
             if (.not.(options%wind%wind_only)) then

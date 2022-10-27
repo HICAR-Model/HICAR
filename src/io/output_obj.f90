@@ -78,7 +78,7 @@ contains
 
 
         !Check if we should change the file
-        if (this%output_counter >= this%output_count .and. this%out_ncfile_id > 0) then
+        if (this%output_counter > this%output_count .and. this%out_ncfile_id > 0) then
             write(this%output_fn, '(A,A,".nc")')    &
                 trim(this%base_out_file_name),   &
                 trim(time%as_string(this%file_date_format))
@@ -107,7 +107,7 @@ contains
         
         this%active_nc_id = -1
         
-        if (this%restart_counter == this%restart_count) then
+        if (this%restart_counter > this%restart_count) then
             call check_ncdf(nf90_close(this%out_ncfile_id), "Closing output file ")
             this%out_ncfile_id = -1
             call save_rst_file(this, time, par_comms, rst_var_indices)     
@@ -439,8 +439,10 @@ contains
                 start_two_D_t_b2 = (/ this%start_3d_b2(1), this%start_3d_b2(2), current_step /)
 
                 if (this%ite == this%global_dim_len(1)) cnt_3d(1) = cnt_3d(1) + var%xstag
+                
                 if ((this%start_3d_b(1) - this%its + cnt_3d_b(1)) == this%global_dim_len(1)) cnt_3d_b(1) = cnt_3d_b(1) + var%xstag
                 if ((this%start_3d_b2(1) - this%its + cnt_3d_b2(1)) == this%global_dim_len(1)) cnt_3d_b2(1) = cnt_3d_b2(1) + var%xstag
+                
                 if (this%jte == this%global_dim_len(2)) cnt_3d(2) = cnt_3d(2) + var%ystag
                 if ((this%start_3d_b2(2) - this%jts + cnt_3d_b2(2)) == this%global_dim_len(2)) cnt_3d_b2(2) = cnt_3d_b2(2) + var%ystag
 
