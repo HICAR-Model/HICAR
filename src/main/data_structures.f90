@@ -317,8 +317,5 @@ module data_structures
         real,allocatable,dimension(:,:)     :: lowres_terrain
         real,allocatable,dimension(:,:,:)   :: lowres_z
 
-        ! if we are using an external wind field, store them here temporarily...
-        ! does this need to be separate from next_domain other than the nfiles attribute?
-        type(wind_type)::ext_winds
     end type bc_type
 end module data_structures

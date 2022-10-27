@@ -118,7 +118,7 @@ module options_types
     ! ------------------------------------------------
     type adv_options_type
         logical :: boundary_buffer          ! buffer to smooth a bit to cut down on oscillations at the border if FCT is not used
-        logical :: flux_corrected_transport ! use Flux Corrected Transport (FCT) to maintain stability and prevent any wild oscllations
+        logical :: MPDATA_FCT               ! use Flux Corrected Transport (FCT) to maintain stability and prevent any wild oscllations
         integer :: mpdata_order             ! accuracy order for MP_DATA advection scheme.
         integer :: flux_corr                ! Designates which flux-correction scheme to use
         integer :: h_order                  ! Designates which order the horizontal advection should be
@@ -219,7 +219,7 @@ module options_types
         ! file names
         character (len=MAXFILELENGTH) :: init_conditions_file, linear_mask_file, nsq_calibration_file, external_files
 
-        character (len=MAXFILELENGTH), dimension(:), allocatable :: boundary_files, ext_wind_files
+        character (len=MAXFILELENGTH), dimension(:), allocatable :: boundary_files
 
         ! variable names from init/BC/wind/... files
         character (len=MAXVARLENGTH) :: landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar, &
@@ -258,7 +258,6 @@ module options_types
         logical :: compute_z            ! flag that we need to compute z from p this is determined from the vars specified (not read)
         logical :: readz                ! read atmospheric grid elevations from file
         logical :: readdz               ! read atm model layer thicknesses from namelist
-        logical :: external_winds       ! read a high res 3d wind field from an external file (e.g. a high res WRF run)
         logical :: mean_winds           ! use only a mean wind field across the entire model domain
         logical :: mean_fields          ! use only a mean forcing field across the model boundaries
         logical :: restart              ! this is a restart run, read model conditions from a restart file
@@ -278,7 +277,6 @@ module options_types
         integer :: ntimesteps           ! total number of time steps to be simulated (from the first forcing data)
         integer :: nz                   ! number of model vertical levels
         integer :: wind_iterations      ! number of time to iterate for wind=3 option
-        integer :: ext_winds_nfiles     ! number of extrenal wind filenames to read from namelist
 
         ! various real parameters/options
         real :: dx                      ! grid cell width [m]
@@ -315,7 +313,7 @@ module options_types
         real    :: sleve_n              ! Additional parameter introduced by Leuenberger 2009.
         logical :: use_terrain_difference ! calculate dzdx from the differenec between hi- and lo-res terrain, rather than from hi-res terrain only. For use when forcing data is of a resolution that it resolves signigicant terrain influence (on wind field mainly)
 
-        logical :: nudging   ! constrain the solution of certain variables (QV,QS,QC,QI,QR,QG) to be close (nudge_factor) to the forcing data
+        ! logical :: nudging   ! constrain the solution of certain variables (QV,QS,QC,QI,QR,QG) to be close (nudge_factor) to the forcing data
 
         real    :: agl_cap              ! height up to which AGL height is used for vertical interpolation
 

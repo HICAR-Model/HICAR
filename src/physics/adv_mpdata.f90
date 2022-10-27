@@ -451,7 +451,7 @@ contains
                 ! and un-normalize, since upwind advection scheme includes dz
                 ! Since pseudo-velocities cannot be gaurenteed to be non-divergent, we assume worst-case and multiply by 0.5 to
                 ! ensure stability (from Smolarkiewicz 1984, after Eq. 24)
-                if (options%adv_options%flux_corrected_transport) then
+                if (options%adv_options%MPDATA_FCT) then
                     !These should be pure velocities, no dt/dx normalization
                     u2 = u2*dx/dt
                     v2 = v2*dx/dt

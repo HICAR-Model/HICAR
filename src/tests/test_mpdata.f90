@@ -69,7 +69,7 @@ contains
 
         nloops=10
         print*, "CFL=",cfl
-        options%adv_options%flux_corrected_transport=FCT
+        options%adv_options%MPDATA_FCT=FCT
         options%adv_options%mpdata_order=2
         dz=1
         rho=1

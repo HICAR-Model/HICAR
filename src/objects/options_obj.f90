@@ -935,8 +935,8 @@ contains
         real    :: dx, dxlow, t_offset, smooth_wind_distance, agl_cap
         integer :: ntimesteps, wind_iterations
         integer :: longitude_system
-        integer :: nz, n_ext_winds,buffer, warning_level
-        logical :: ideal, readz, readdz, interactive, debug, external_winds, surface_io_only, &
+        integer :: nz,buffer, warning_level
+        logical :: ideal, readz, readdz, interactive, debug, surface_io_only, &
                    mean_winds, mean_fields, restart, advect_density, z_is_geopotential, z_is_on_interface,&
                    high_res_soil_state, use_agl_height, time_varying_z, t_is_potential, qv_is_spec_humidity, &
                    qv_is_relative_humidity, &
@@ -954,7 +954,7 @@ contains
         namelist /parameters/ ntimesteps, wind_iterations, surface_io_only,                &
                               dx, dxlow, ideal, readz, readdz, nz, t_offset,                             &
                               debug, warning_level, interactive, restart,                                &
-                              external_winds, buffer, n_ext_winds, advect_density, smooth_wind_distance, &
+                              buffer, advect_density, smooth_wind_distance,                              &
                               mean_winds, mean_fields, z_is_geopotential, z_is_on_interface,             &
                               date, calendar, high_res_soil_state, t_is_potential,                       &
                               qv_is_relative_humidity, qv_is_spec_humidity,                              &
@@ -973,8 +973,6 @@ contains
         surface_io_only     = .False.
         mean_fields         = .False.
         mean_winds          = .False.
-        external_winds      = .False.
-        n_ext_winds         = 1
         t_offset            = (-9999)
         buffer              = 0
         advect_density      = .False.
@@ -1132,8 +1130,6 @@ contains
         options%z_is_geopotential= z_is_geopotential
         options%z_is_on_interface= z_is_on_interface
 
-        options%external_winds = external_winds
-        options%ext_winds_nfiles = n_ext_winds
         options%restart = restart
 
         options%nz = nz
@@ -1506,12 +1502,12 @@ contains
         integer :: name_unit
 
         logical :: boundary_buffer          ! apply some smoothing to the x and y boundaries in MPDATA
-        logical :: flux_corrected_transport ! use the flux corrected transport option in MPDATA
+        logical :: MPDATA_FCT ! use the flux corrected transport option in MPDATA
         ! MPDATA order of correction (e.g. 1st=upwind, 2nd=classic, 3rd=better)
         integer :: mpdata_order, flux_corr, h_order, v_order
         
         ! define the namelist
-        namelist /adv_parameters/ boundary_buffer, flux_corrected_transport, mpdata_order, flux_corr, h_order, v_order
+        namelist /adv_parameters/ boundary_buffer, MPDATA_FCT, mpdata_order, flux_corr, h_order, v_order
 
          ! because adv_options could be in a separate file
          if (options%parameters%use_adv_options) then
@@ -1523,7 +1519,7 @@ contains
 
         ! set default values
         boundary_buffer = .False.
-        flux_corrected_transport = .True.
+        MPDATA_FCT = .True.
         mpdata_order = 2
         flux_corr    = 0
         h_order = 1
@@ -1539,7 +1535,7 @@ contains
 
         ! store everything in the adv_options structure
         adv_options%boundary_buffer = boundary_buffer
-        adv_options%flux_corrected_transport = flux_corrected_transport
+        adv_options%MPDATA_FCT = MPDATA_FCT
         adv_options%mpdata_order = mpdata_order
         adv_options%flux_corr = flux_corr
         adv_options%h_order = h_order
@@ -1976,7 +1972,6 @@ contains
         ! read in filenames from up to two namelists
         ! init_conditions_file = high res grid data
         ! boundary_files       = list of files for boundary conditions (low-res)
-        ! ext_wind_files       = list of files to read wind data on the high-res grid (optional)
         ! linear_mask_file     = file to read a high-res fractional mask for the linear perturbation
         implicit none
         character(len=*),             intent(in)    :: filename
@@ -1985,15 +1980,13 @@ contains
         character(len=MAXFILELENGTH) :: init_conditions_file, output_file, forcing_file_list, &
                                         linear_mask_file, nsq_calibration_file, external_files
 
-        character(len=MAXFILELENGTH), allocatable :: boundary_files(:), ext_wind_files(:)
+        character(len=MAXFILELENGTH), allocatable :: boundary_files(:)
         integer :: name_unit, nfiles, i
 
         ! set up namelist structures
 
         namelist /files_list/ init_conditions_file, output_file, boundary_files, forcing_file_list, &
                               linear_mask_file, nsq_calibration_file, external_files
-
-        namelist /ext_winds_info/ ext_wind_files
 
         linear_mask_file="MISSING"
         nsq_calibration_file="MISSING"
@@ -2037,17 +2030,6 @@ contains
         endif
         options%nsq_calibration_file=nsq_calibration_file
 
-        if (options%external_winds) then
-            allocate(ext_wind_files(options%ext_winds_nfiles))
-
-            open(io_newunit(name_unit), file=filename)
-            read(name_unit,nml=ext_winds_info)
-            close(name_unit)
-
-            allocate(options%ext_wind_files(options%ext_winds_nfiles))
-            options%ext_wind_files(1:options%ext_winds_nfiles) = ext_wind_files(1:options%ext_winds_nfiles)
-            deallocate(ext_wind_files)
-        endif
     end subroutine filename_namelist
     
     
@@ -2128,10 +2110,24 @@ contains
     
         select case (options%physics%phys_suite)
             case('HICAR')
+                if (options%parameters%dx >= 1000 .and. this_image()==1) then
+                    write(*,*) '------------------------------------------------'
+                    write(*,*) 'WARNING: Setting HICAR namelist options'
+                    write(*,*) 'When user has selected dx => 1000.'
+                    write(*,*) 'PBL scheme will be turned off and the'
+                    write(*,*) 'high-resolution wind solver will be used,'
+                    write(*,*) 'which may not be appropriate for this resolution'
+                    write(*,*) '------------------------------------------------'
+                endif
                 !Add base HICAR options here
+                options%physics%boundarylayer = 0
+                
                 options%physics%windtype = 4
                 options%wind%Sx = .True.
-
+                options%time_options%RK3 = .True.
+                options%time_options%cfl_strictness = 4
+                options%parameters%use_agl_height = .True.
+                options%parameters%agl_cap = 800
         end select
     
     end subroutine
