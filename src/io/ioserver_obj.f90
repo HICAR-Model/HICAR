@@ -33,6 +33,9 @@ contains
         this%server_id = (this_image()/(num_images()/kNUM_SERVERS))
         this%io_time = options%parameters%start_time
         if (this%server_id==1) write(*,*) 'Initializing I/O Server'
+        this%ide = domain%ide
+        this%kde = domain%kde
+        this%jde = domain%jde
 
         call decompose(this, isrc, ierc, ksrc, kerc, jsrc, jerc, iswc, iewc, kswc, kewc, jswc, jewc)
 
@@ -247,8 +250,9 @@ contains
             
             i_s_w = this%iswc(i); i_e_w = this%iewc(i)
             j_s_w = this%jswc(i); j_e_w = this%jewc(i)
-            i_e_w = i_e_w+1 !Add extra to accomodate staggered vars
-            j_e_w = j_e_w+1 !Add extra to accomodate staggered vars
+            !If a particular child process is at the boundaries
+            if (this%ide == i_e_w) i_e_w = i_e_w+1 !Add extra to accomodate staggered vars
+            if (this%jde == j_e_w) j_e_w = j_e_w+1 !Add extra to accomodate staggered vars
             nx = i_e_w - i_s_w + 1
             ny = j_e_w - j_s_w + 1
 

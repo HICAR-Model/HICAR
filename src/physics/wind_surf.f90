@@ -322,7 +322,7 @@ contains
         deallocate(azm_indices)
         
         !Sync images befoer exiting so that we don't try to read Sx while it is being written
-        !sync all
+        !sync images ([DOM_IMG_INDX])
 
     end subroutine calc_Sx
     
