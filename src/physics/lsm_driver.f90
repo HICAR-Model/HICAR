@@ -41,11 +41,14 @@ module land_surface
     use mod_atm_utilities,   only : sat_mr
     use time_object,         only : Time_type
     use data_structures
-    use icar_constants,      only : kVARS, kLSM_SIMPLE, kLSM_NOAH, kLSM_NOAHMP
+    use icar_constants,      only : kVARS, kLSM_SIMPLE, kLSM_NOAH, kLSM_NOAHMP, kLSM_FSM
     use options_interface,   only : options_t
     use domain_interface,    only : domain_t
     use module_ra_simple, only: calc_solar_elevation
     use io_routines,          only : io_write
+
+    use module_sf_FSMdrv,   only : lsm_FSM_init, lsm_FSM,Esrf_,Tsrf, KH_ !! MJ added for for FSM
+    !use module_sf_FSMdrv,   only : current_rain_FSM, current_snow_FSM, windspd_FSM !! MJ added for for FSM
 
     implicit none
 
@@ -99,6 +102,9 @@ module land_surface
     character(len=MAXVARLENGTH) :: landuse_name
     real, allocatable :: day_frac(:), solar_elevation(:)
 
+    ! MJ added for FSM
+    real,allocatable, dimension(:,:) :: current_snow, SNOWBL, current_rain
+    integer,allocatable, dimension(:,:) :: snow_bucket      
 contains
 
 
@@ -189,21 +195,35 @@ contains
                          ! kVARS%soil_type, kVARS%land_mask, kVARS%vegetation_fraction]
         endif
 
-        if (options%physics%watersurface > 1) then
+
+
+        if (options%physics%landsurface == kLSM_FSM) then
             call options%alloc_vars( &
-                         [kVARS%sst, kVARS%ustar, kVARS%surface_pressure, kVARS%water_vapor,            &
-                         kVARS%temperature, kVARS%sensible_heat, kVARS%latent_heat, kVARS%land_mask,    &
-                         kVARS%humidity_2m, kVARS%temperature_2m, kVARS%skin_temperature, kVARS%u_10m, kVARS%v_10m])
+                         [kVARS%water_vapor, kVARS%potential_temperature, kVARS%precipitation, kVARS%temperature,       &
+                         kVARS%exner, kVARS%dz_interface, kVARS%density, kVARS%pressure_interface, kVARS%shortwave,     &
+                         kVARS%longwave, kVARS%vegetation_fraction, kVARS%canopy_water, kVARS%snow_water_equivalent,    &
+                         kVARS%skin_temperature, kVARS%soil_water_content, kVARS%soil_temperature, kVARS%terrain,       &
+                         kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
+                         kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
+                         kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%ustar,        &
+                         kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg,                                        &
+                         kVARS%veg_type, kVARS%soil_type, kVARS%land_mask,												&
+			 kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow ])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
 
              call options%restart_vars( &
-                         [kVARS%sst, kVARS%potential_temperature, kVARS%water_vapor, kVARS%skin_temperature,        &
-                         kVARS%surface_pressure, kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m,  &
-                         kVARS%humidity_2m, kVARS%temperature_2m])
+                         [kVARS%water_vapor, kVARS%potential_temperature, kVARS%precipitation, kVARS%temperature,       &
+                         kVARS%density, kVARS%pressure_interface, kVARS%shortwave,                                      &
+                         kVARS%longwave, kVARS%canopy_water, kVARS%snow_water_equivalent,                               &
+                         kVARS%skin_temperature, kVARS%soil_water_content, kVARS%soil_temperature, kVARS%terrain,       &
+                         kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
+                         kVARS%snow_height,                                                                             &  ! BK 2020/10/26
+                         kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
+                         kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%veg_type,		&
+                         kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow ])
         endif
-
-
+		
     end subroutine lsm_var_request
 
     subroutine calc_exchange_coefficient(wind,tskin,airt,exchange_C)
@@ -361,6 +381,45 @@ contains
         !$omp end do
         !$omp end parallel
     end subroutine surface_diagnostics
+    
+
+    subroutine surface_diagnostics_FSM(HFX, QFX, TSK, QSFC, CHS2, CQS2,T2, Q2, PSFC)
+        ! taken almost directly / exactly from WRF's module_sf_sfcdiags.F
+        implicit none
+        REAL, DIMENSION(ims:ime, jms:jme ), INTENT(IN)    ::  HFX, QFX, TSK, QSFC
+        REAL, DIMENSION(ims:ime, jms:jme ), INTENT(INOUT) ::  Q2, T2
+        REAL, DIMENSION(ims:ime, jms:jme ), INTENT(IN)    ::  PSFC, CHS2, CQS2
+        integer :: i,j, nx,ny
+        real :: RHO
+        real :: CP_=1005.
+
+        !$omp parallel default(shared), private(nx,ny,i,j,rho)
+        nx=size(HFX,1)
+        ny=size(HFX,2)
+        !$omp do
+        do j=jts,jte
+            do i=its,ite
+                RHO = PSFC(I,J)/(Rd * TSK(I,J))
+                if(CQS2(I,J).lt.1.E-3) then
+                   Q2(I,J) = QSFC(I,J)
+                else
+                   Q2(I,J) = QSFC(I,J) - QFX(I,J)/(RHO*CQS2(I,J))
+                endif
+                if(CHS2(I,J).lt.1.E-3) then
+                   T2(I,J) = TSK(I,J)
+                else
+                   T2(I,J) = TSK(I,J) - HFX(I,J)/(RHO*CP_*CHS2(I,J))
+                endif
+                ! TH2(I,J) = T2(I,J)*(1.E5/PSFC(I,J))**ROVCP
+                 !if ( isnan(HFX(I,J)) .or. abs(TSK(I,J)-T2(I,J))>30 ) write(*,*),"img-H222",i,j,this_image(), HFX(I,J), TSK(I,J), T2(I,J)
+                 !if (this_image()==1) write(*,*),"img-H222",i,j,this_image(), RHO, TSK(I,J), T2(I,J),PSFC(I,J)
+            enddo
+        enddo
+        !$omp end do
+        !$omp end parallel
+         !write(*,*),"RHO*CP",this_image(), RHO,CP,rd
+    end subroutine surface_diagnostics_FSM
+        
 
     subroutine apply_fluxes(domain,dt)
         ! add sensible and latent heat fluxes to the first atm level
@@ -581,6 +640,18 @@ contains
         allocate(rain_bucket(ims:ime,jms:jme))
         rain_bucket = domain%precipitation_bucket  ! used to store last time step accumulated precip so that it can be subtracted from the current step
 
+		! MJ added:
+        allocate(current_snow(ims:ime,jms:jme)) ! MJ added 
+        current_snow = 0
+        
+        allocate(current_rain(ims:ime,jms:jme)) ! MJ added 
+        current_rain = 0
+		
+        allocate(SNOWBL(ims:ime,jms:jme))! for snowfall:
+        SNOWBL = domain%accumulated_snowfall%data_2d  ! used to store last time step accumulated precip so that it can be subtracted from the current step
+
+        allocate(snow_bucket(ims:ime,jms:jme))
+        snow_bucket = domain%snowfall_bucket
 
         ! initial guesses (not needed?)
         domain%temperature_2m%data_2d = domain%temperature%data_3d(:,kms,:)
@@ -834,6 +905,22 @@ contains
             where(domain%veg_type==ISWATER) domain%land_mask=kLC_WATER ! ensure VEGTYPE (land cover) and land-sea mask are consistent
         endif
 
+        if (options%physics%landsurface == kLSM_FSM) then
+			call lsm_FSM_init(domain,options)
+			!!
+			num_soil_layers=4
+!			allocate(Zs(num_soil_layers))
+!			allocate(DZs(num_soil_layers))
+!			DZs = [0.1,0.2,0.4,0.8]
+!			Zs(1) = DZs(1)/2
+!			do i = 2,num_soil_layers
+!				Zs(i) = Zs(i-1) + DZs(i)/2 + DZs(i-1)/2
+!			end do
+!			!!
+!			allocate(EMISS(ims:ime,jms:jme))
+!			EMISS = 0.95
+			call allocate_noah_data(num_soil_layers)
+        endif
         ! defines the height of the middle of the first model level
         z_atm = domain%z%data_3d(:,kts,:) - domain%terrain%data_2d
         lnz_atm_term = log((z_atm+Z0)/Z0)
@@ -894,23 +981,24 @@ contains
                 !     enddo
                 ! enddo
             ! else
-            if (options%physics%watersurface==kWATER_SIMPLE) then
 
-                call water_simple(domain%sst%data_2d,                   &
-                                  domain%surface_pressure%data_2d,      &
-                                  windspd,                              &
-                                  domain%ustar,                         &
-                                  domain%water_vapor%data_3d,           &
-                                  domain%temperature%data_3d,           &
-                                  domain%sensible_heat%data_2d,         &
-                                  domain%latent_heat%data_2d,           &
-                                  z_atm, domain%roughness_z0%data_2d,   &
-                                  domain%land_mask,                     &
-                                  QSFC,                                 &
-                                  QFX,                                  &
-                                  domain%skin_temperature%data_2d,      &
-                                  its, ite, kts, kte, jts, jte)
-            endif
+            !! MJ moved this block at the end....thus it is commented            
+!            if (options%physics%watersurface==kWATER_SIMPLE) then
+!
+!                call water_simple(domain%sst%data_2d,                   &
+!                                  domain%surface_pressure%data_2d,      &
+!                                  windspd,                              &
+!                                  domain%ustar,                         &
+!                                  domain%water_vapor%data_3d,           &
+!                                  domain%temperature%data_3d,           &
+!                                  domain%sensible_heat%data_2d,         &
+!                                  domain%latent_heat%data_2d,           &
+!                                  z_atm, domain%roughness_z0%data_2d,   &
+!                                  domain%land_mask,                     &
+!                                  QSFC,                                 &
+!                                  QFX,                                  &
+!                                  domain%skin_temperature%data_2d)
+!            endif
 
             where(windspd<1) windspd=1 ! minimum wind speed to prevent the exchange coefficient from blowing up
             CHS = CHS * windspd * 2            
@@ -1276,7 +1364,78 @@ contains
             endif
 
 
-            if (options%physics%landsurface > kLSM_BASIC) then
+			!! MJ added: this block is for FSM as lsm..
+			if (options%physics%landsurface == kLSM_FSM) then
+				current_precipitation = (domain%accumulated_precipitation%data_2d-RAINBL)+(domain%precipitation_bucket-rain_bucket)*kPRECIP_BUCKET_SIZE ! this total prep=rainfall+snowfall in kg m-2
+				current_snow = (domain%accumulated_snowfall%data_2d-SNOWBL)+(domain%snowfall_bucket-snow_bucket)*kPRECIP_BUCKET_SIZE ! snowfall in kg m-2
+				current_rain = max(current_precipitation-current_snow,0.) ! rainfall in kg m-2				
+				!!			
+!				windspd_FSM=windspd(its:ite,jts:jte)
+!				current_snow_FSM=current_snow(its:ite,jts:jte)
+!				current_rain_FSM=current_rain(its:ite,jts:jte)
+				!!
+				call lsm_FSM(domain,options,lsm_dt,current_rain(its:ite,jts:jte),current_snow(its:ite,jts:jte),windspd(its:ite,jts:jte))
+				!!
+				domain%longwave_up%data_2d = stefan_boltzmann * EMISS * domain%skin_temperature%data_2d**4                              
+				!!
+                if (.not. options%lsm_options%surface_diagnostics) then
+					domain%temperature_2m%data_2d = domain%temperature%data_3d(:,kms,:)
+					domain%humidity_2m%data_2d = domain%water_vapor%data_3d(:,kms,:)
+				endif
+				!!
+                if (options%lsm_options%surface_diagnostics) then
+					QSFC = sat_mr(domain%skin_temperature%data_2d,domain%surface_pressure%data_2d)
+					QFX(its:ite,jts:jte)=Esrf_
+					CHS2(its:ite,jts:jte)=KH_
+					CQS2(its:ite,jts:jte)=KH_
+	                ! accumulate soil moisture over the entire column
+	                domain%soil_totalmoisture%data_2d = domain%soil_water_content%data_3d(:,1,:) * DZS(1) * 1000
+	                do i = 2,num_soil_layers
+	                    domain%soil_totalmoisture%data_2d = domain%soil_totalmoisture%data_2d + domain%soil_water_content%data_3d(:,i,:) * DZS(i)* 1000
+	                enddo
+
+	                ! 2m Air T and Q are not well defined if Tskin is not coupled with the surface fluxes
+	                call surface_diagnostics_FSM(domain%sensible_heat%data_2d,    &
+	                                         QFX,                             &
+	                                         domain%skin_temperature%data_2d, &
+	                                         QSFC,                            &
+	                                         CHS2,                            &
+	                                         CQS2,                            &
+	                                         domain%temperature_2m%data_2d,   &
+	                                         domain%humidity_2m%data_2d,      &
+	                                         domain%surface_pressure%data_2d)
+				endif
+
+                !Resting water pixels in FSM and assign it the result of water_simple
+                !           
+                RAINBL = domain%accumulated_precipitation%data_2d
+                rain_bucket = domain%precipitation_bucket
+                SNOWBL = domain%accumulated_snowfall%data_2d
+                snow_bucket = domain%snowfall_bucket
+                !!                               
+			endif
+			!!
+			! MJ moved water model here at the end...since FSM considers all pixels non-water
+            if (options%physics%watersurface==kWATER_SIMPLE) then
+
+                call water_simple(domain%sst%data_2d,                   &
+                                  domain%surface_pressure%data_2d,      &
+                                  windspd,                              &
+                                  domain%ustar,                         &
+                                  domain%water_vapor%data_3d,           &
+                                  domain%temperature%data_3d,           &
+                                  domain%sensible_heat%data_2d,         &
+                                  domain%latent_heat%data_2d,           &
+                                  z_atm, domain%roughness_z0%data_2d,   &
+                                  domain%land_mask,                     &
+                                  QSFC,                                 &
+                                  QFX,                                  &
+                                  domain%skin_temperature%data_2d)
+            endif		
+
+
+
+            if (options%physics%landsurface > kLSM_BASIC .and. options%physics%landsurface/=kLSM_FSM) then !! MJ uses different func for FSM as we do not have vegetaion
                 ! accumulate soil moisture over the entire column
                 domain%soil_totalmoisture%data_2d = domain%soil_water_content%data_3d(:,1,:) * DZS(1) * 1000
                 do i = 2,num_soil_layers
@@ -1303,9 +1462,10 @@ contains
 
             endif
         endif
-        !if (options%physics%landsurface>0) then
-        !    call apply_fluxes(domain, dt)
-        !endif
+        
+        if (options%physics%landsurface>0) then
+            call apply_fluxes(domain, dt)
+        endif
 
     end subroutine lsm
 end module land_surface

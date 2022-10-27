@@ -160,6 +160,7 @@ module options_types
         integer :: water_category
         ! use monthly vegetation fraction data, not just a single value
         logical :: monthly_vegfrac
+        logical :: surface_diagnostics !! MJ added
     end type lsm_options_type
 
     ! ------------------------------------------------

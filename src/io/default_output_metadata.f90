@@ -2835,6 +2835,127 @@ contains
                                attribute_t("units",         "degrees_east")]
         end associate
 
+
+		!! MJ added for needed new vars for FSM
+        !>------------------------------------------------------------
+        !!  runoff from FSM
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%runoff))
+            var%name        = "runoff"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "runoff, from FSM"),   &
+                               attribute_t("units",         "kg m-2"),                        &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate       		
+		!! MJ added for needed new vars for FSM
+        !>------------------------------------------------------------
+        !!  snowdepth from FSM
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%snowdepth))
+            var%name        = "snowdepth"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "snowdepth"),   &
+                               attribute_t("units",         "m"),                        &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  Snow Temperature
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%Tsnow))
+            var%name        = "Tsnow"
+            var%dimensions  = three_d_t_snow_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "snow_temperature"),                    &
+                               attribute_t("units",         "K"),                                   &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  ice mass content of snow 
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%Sice))
+            var%name        = "Sice"
+            var%dimensions  = three_d_t_snow_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "snow_ice_content"),                    &
+                               attribute_t("units",         "kg m-2"),                                   &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate               		
+        !>------------------------------------------------------------
+        !!  water mass content of snow 
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%Sliq))
+            var%name        = "Sliq"
+            var%dimensions  = three_d_t_snow_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "snow_water_content"),                    &
+                               attribute_t("units",         "kg m-2"),                                   &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate        		
+        !>------------------------------------------------------------
+        !!  albs from FSM
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%albs))
+            var%name        = "albs"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "albedo"),   &
+                               attribute_t("units",         "-"),                        &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate	
+        !>------------------------------------------------------------
+        !!  snow layer thicknes 
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%Ds))
+            var%name        = "Ds"
+            var%dimensions  = three_d_t_snow_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "snow_layer_thickness"),                    &
+                               attribute_t("units",         "m"),                                   &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate   
+        !>------------------------------------------------------------
+        !!  fsnow from FSM
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%fsnow))
+            var%name        = "fsnow"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "fsnow"),   &
+                               attribute_t("units",         "-"),                        &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate	
+        !>------------------------------------------------------------
+        !!  Nsnow from FSM
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%Nsnow))
+            var%name        = "Nsnow"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "Nsnow"),   &
+                               attribute_t("units",         "-"),                        &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate	
+                         	
         ! loop through entire array setting n_dimensions and n_attrs based on the data that were supplied
         do i=1,size(var_meta)
             var_meta(i)%n_dimensions = size(var_meta(i)%dimensions)
