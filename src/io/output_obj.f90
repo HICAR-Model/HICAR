@@ -107,7 +107,7 @@ contains
         
         this%active_nc_id = -1
         
-        if (this%restart_counter > this%restart_count) then
+        if (this%restart_counter == this%restart_count) then
             call check_ncdf(nf90_close(this%out_ncfile_id), "Closing output file ")
             this%out_ncfile_id = -1
             call save_rst_file(this, time, par_comms, rst_var_indices)     

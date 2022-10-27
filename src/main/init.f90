@@ -30,8 +30,9 @@ module initialization
     use io_routines,          only : io_read, io_write
     use mod_atm_utilities,          only : init_atm_utilities
     use wind,                       only : update_winds
+    use linear_theory_winds,        only : setup_linwinds
     use wind_iterative,             only : init_iter_winds
-    use icar_constants,             only : kITERATIVE_WINDS
+    use icar_constants,             only : kITERATIVE_WINDS, kWIND_LINEAR
     use ioclient_interface,         only : ioclient_t
 
     ! use io_routines,                only : io_read, &
@@ -78,12 +79,15 @@ contains
         if (this_image()==1) write(*,*) "Initializing boundary condition data structure"
         call boundary%init(options,domain%latitude%data_2d,domain%longitude%data_2d,domain%variables_to_force)
 
-
         ! initialize the atmospheric helper utilities
         call init_atm_utilities(options)
         
-        if (options%physics%windtype==kITERATIVE_WINDS) call init_iter_winds(domain)
-
+        if (options%physics%windtype==kITERATIVE_WINDS) then
+            call init_iter_winds(domain)
+        else if (options%physics%windtype==kWIND_LINEAR) then
+            call setup_linwinds(domain, options, .False., options%parameters%advect_density)
+        endif
+        
         if (this_image()==1) write(*,'(/ A)') "Finished basic initialization"
         if (this_image()==1) write(*,'(A /)') "---------------------------------------"
 
