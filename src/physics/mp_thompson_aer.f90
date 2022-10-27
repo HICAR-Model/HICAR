@@ -3663,7 +3663,7 @@
           ENDIF
       ! endif
 
-      ! sync all
+      ! sync images ([DOM_IMG_INDX])
       ! if (good.eq.1) then
       !     call broadcast(tcg_racg, 1, 1, num_images())
       !     call broadcast(tmr_racg, 1, 1, num_images())
@@ -3856,7 +3856,7 @@
         ENDIF
       ! endif
 
-      ! sync all
+      ! sync images ([DOM_IMG_INDX])
       ! if (good.eq.1) then
       !     call broadcast(tcs_racs1, 1, 1, num_images())
       !     call broadcast(tmr_racs1, 1, 1, num_images())
@@ -4125,7 +4125,7 @@
         ENDIF
       ! ENDIF
 
-      ! sync all
+      ! sync images ([DOM_IMG_INDX])
       ! if (good.eq.1) then
       !     call broadcast(tpi_qrfz, 1, 1, num_images())
       !     call broadcast(tni_qrfz, 1, 1, num_images())

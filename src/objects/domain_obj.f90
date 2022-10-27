@@ -93,7 +93,7 @@ contains
         if (0<var_list( kVARS%u) )                          call this%vars_to_out%add_var( trim( get_varname( kVARS%u                            )), this%u%meta_data)
         if (0<var_list( kVARS%v) )                          call this%vars_to_out%add_var( trim( get_varname( kVARS%v                            )), this%v%meta_data)
         if (0<var_list( kVARS%w) )                          call this%vars_to_out%add_var( trim( get_varname( kVARS%w                            )), this%w%meta_data)
-        if (0<var_list( kVARS%w) )                          call this%vars_to_out%add_var( trim( get_varname( kVARS%w_real                       )), this%w_real)
+        if (0<var_list( kVARS%w_real) )                     call this%vars_to_out%add_var( trim( get_varname( kVARS%w_real                       )), this%w_real)
         if (0<var_list( kVARS%nsquared) )                   call this%vars_to_out%add_var( trim( get_varname( kVARS%nsquared                     )), this%nsquared)
         if (0<var_list( kVARS%water_vapor) )                call this%vars_to_out%add_var( trim( get_varname( kVARS%water_vapor                  )), this%water_vapor%meta_data)
         if (0<var_list( kVARS%potential_temperature) )      call this%vars_to_out%add_var( trim( get_varname( kVARS%potential_temperature        )), this%potential_temperature%meta_data)
@@ -656,7 +656,7 @@ contains
         if (0<opt%vars_to_allocate( kVARS%v) )                          call setup(this%v,                        this%v_grid,   forcing_var=opt%parameters%vvar,       list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%v) )                          call setup(this%v_mass,                   this%grid)
         if (0<opt%vars_to_allocate( kVARS%w) )                          call setup(this%w,                        this%grid)
-        if (0<opt%vars_to_allocate( kVARS%w) )                          call setup(this%w_real,                   this%grid,   forcing_var=opt%parameters%wvar,       list=this%variables_to_force, force_boundaries=.False. )
+        if (0<opt%vars_to_allocate( kVARS%w_real) )                     call setup(this%w_real,                   this%grid,   forcing_var=opt%parameters%wvar,       list=this%variables_to_force, force_boundaries=.False. )
         if (0<opt%vars_to_allocate( kVARS%nsquared) )                   call setup(this%nsquared,                 this%grid )
         if (0<opt%vars_to_allocate( kVARS%water_vapor) )                call setup(this%water_vapor,              this%grid,     forcing_var=opt%parameters%qvvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%potential_temperature) )      call setup(this%potential_temperature,    this%grid,     forcing_var=opt%parameters%tvar,       list=this%variables_to_force, force_boundaries=.True.)
@@ -2628,6 +2628,7 @@ contains
                      [kVARS%z,                      kVARS%z_interface,              &
                       kVARS%dz,                     kVARS%dz_interface,             &
                       kVARS%u,                      kVARS%v,                        &
+                      kVARS%w,                      kVARS%w_real,                   &
                       kVARS%surface_pressure,       kVARS%roughness_z0,             &
                       kVARS%terrain,                kVARS%pressure,                 &
                       kVARS%temperature,            kVARS%pressure_interface,       &
