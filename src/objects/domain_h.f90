@@ -344,6 +344,19 @@ module domain_interface
     integer ::  ids,ide, jds,jde, kds,kde, & ! for the entire model domain    (d)
                 ims,ime, jms,jme, kms,kme, & ! for the memory in these arrays (m)
                 its,ite, jts,jte, kts,kte    ! for the data tile to process   (t)
+                
+    !! MJ added for needed new vars for FSM
+    !real,allocatable :: FSM_slopemu(:,:)
+    type(variable_t) :: runoff 
+    type(variable_t) :: snowdepth
+    type(variable_t) :: Tsnow
+    type(variable_t) :: Sice
+    type(variable_t) :: Sliq
+    type(variable_t) :: albs
+    type(variable_t) :: Ds
+    type(variable_t) :: fsnow
+    type(variable_t) :: Nsnow
+                
 
   contains
     procedure :: init
