@@ -551,6 +551,9 @@ contains
         allocate(Zs(num_soil_layers))
         allocate(DZs(num_soil_layers))
         DZs = [0.1,0.3,0.6,1.0]
+        if (options%physics%landsurface==kLSM_FSM) then !! MJ added to adapt with FSM for the soil layer thickness
+            DZs = [0.1,0.2,0.4,0.8]
+        endif
         Zs(1) = DZs(1)/2
         do i = 2,num_soil_layers
             Zs(i) = Zs(i-1) + DZs(i)/2 + DZs(i-1)/2
@@ -640,13 +643,13 @@ contains
         allocate(rain_bucket(ims:ime,jms:jme))
         rain_bucket = domain%precipitation_bucket  ! used to store last time step accumulated precip so that it can be subtracted from the current step
 
-		! MJ added:
+        ! MJ added:
         allocate(current_snow(ims:ime,jms:jme)) ! MJ added 
         current_snow = 0
         
         allocate(current_rain(ims:ime,jms:jme)) ! MJ added 
         current_rain = 0
-		
+        
         allocate(SNOWBL(ims:ime,jms:jme))! for snowfall:
         SNOWBL = domain%accumulated_snowfall%data_2d  ! used to store last time step accumulated precip so that it can be subtracted from the current step
 
@@ -906,21 +909,22 @@ contains
         endif
 
         if (options%physics%landsurface == kLSM_FSM) then
-			call lsm_FSM_init(domain,options)
-			!!
-			num_soil_layers=4
-!			allocate(Zs(num_soil_layers))
-!			allocate(DZs(num_soil_layers))
-!			DZs = [0.1,0.2,0.4,0.8]
-!			Zs(1) = DZs(1)/2
-!			do i = 2,num_soil_layers
-!				Zs(i) = Zs(i-1) + DZs(i)/2 + DZs(i-1)/2
-!			end do
-!			!!
-!			allocate(EMISS(ims:ime,jms:jme))
-!			EMISS = 0.95
-			call allocate_noah_data(num_soil_layers)
+            call lsm_FSM_init(domain,options)
+            !!
+            num_soil_layers=4
+            !allocate(Zs(num_soil_layers))
+            !allocate(DZs(num_soil_layers))
+            !DZs = [0.1,0.2,0.4,0.8]
+            !Zs(1) = DZs(1)/2
+            !do i = 2,num_soil_layers
+            !    Zs(i) = Zs(i-1) + DZs(i)/2 + DZs(i-1)/2
+            !end do
+            !!
+            !allocate(EMISS(ims:ime,jms:jme))
+            !EMISS = 0.95
+            call allocate_noah_data(num_soil_layers)
         endif
+        
         ! defines the height of the middle of the first model level
         z_atm = domain%z%data_3d(:,kts,:) - domain%terrain%data_2d
         lnz_atm_term = log((z_atm+Z0)/Z0)
@@ -1194,7 +1198,7 @@ contains
                              domain%dx,                                &
                              domain%veg_type,                          &
                              domain%soil_type,                         &
-              	             VEGFRAC,                                  &
+                             VEGFRAC,                                  &
                              domain%vegetation_fraction_max%data_2d,   &
                              domain%soil_deep_temperature%data_2d,     &
                              real(domain%land_mask),                   &
@@ -1363,48 +1367,47 @@ contains
                 rain_bucket = domain%precipitation_bucket
             endif
 
-
-			!! MJ added: this block is for FSM as lsm..
-			if (options%physics%landsurface == kLSM_FSM) then
-				current_precipitation = (domain%accumulated_precipitation%data_2d-RAINBL)+(domain%precipitation_bucket-rain_bucket)*kPRECIP_BUCKET_SIZE ! this total prep=rainfall+snowfall in kg m-2
-				current_snow = (domain%accumulated_snowfall%data_2d-SNOWBL)+(domain%snowfall_bucket-snow_bucket)*kPRECIP_BUCKET_SIZE ! snowfall in kg m-2
-				current_rain = max(current_precipitation-current_snow,0.) ! rainfall in kg m-2				
-				!!			
-!				windspd_FSM=windspd(its:ite,jts:jte)
-!				current_snow_FSM=current_snow(its:ite,jts:jte)
-!				current_rain_FSM=current_rain(its:ite,jts:jte)
-				!!
-				call lsm_FSM(domain,options,lsm_dt,current_rain(its:ite,jts:jte),current_snow(its:ite,jts:jte),windspd(its:ite,jts:jte))
-				!!
-				domain%longwave_up%data_2d = stefan_boltzmann * EMISS * domain%skin_temperature%data_2d**4                              
-				!!
+            !! MJ added: this block is for FSM as lsm..
+            if (options%physics%landsurface == kLSM_FSM) then
+                current_precipitation = (domain%accumulated_precipitation%data_2d-RAINBL)+(domain%precipitation_bucket-rain_bucket)*kPRECIP_BUCKET_SIZE ! this total prep=rainfall+snowfall in kg m-2
+                current_snow = (domain%accumulated_snowfall%data_2d-SNOWBL)+(domain%snowfall_bucket-snow_bucket)*kPRECIP_BUCKET_SIZE ! snowfall in kg m-2
+                current_rain = max(current_precipitation-current_snow,0.) ! rainfall in kg m-2
+                !!
+                !windspd_FSM=windspd(its:ite,jts:jte)
+                !current_snow_FSM=current_snow(its:ite,jts:jte)
+                !current_rain_FSM=current_rain(its:ite,jts:jte)
+                !!
+                call lsm_FSM(domain,options,lsm_dt,current_rain(its:ite,jts:jte),current_snow(its:ite,jts:jte),windspd(its:ite,jts:jte))
+                !!
+                domain%longwave_up%data_2d = stefan_boltzmann * EMISS * domain%skin_temperature%data_2d**4                              
+                !!
                 if (.not. options%lsm_options%surface_diagnostics) then
-					domain%temperature_2m%data_2d = domain%temperature%data_3d(:,kms,:)
-					domain%humidity_2m%data_2d = domain%water_vapor%data_3d(:,kms,:)
-				endif
-				!!
-                if (options%lsm_options%surface_diagnostics) then
-					QSFC = sat_mr(domain%skin_temperature%data_2d,domain%surface_pressure%data_2d)
-					QFX(its:ite,jts:jte)=Esrf_
-					CHS2(its:ite,jts:jte)=KH_
-					CQS2(its:ite,jts:jte)=KH_
-	                ! accumulate soil moisture over the entire column
-	                domain%soil_totalmoisture%data_2d = domain%soil_water_content%data_3d(:,1,:) * DZS(1) * 1000
-	                do i = 2,num_soil_layers
-	                    domain%soil_totalmoisture%data_2d = domain%soil_totalmoisture%data_2d + domain%soil_water_content%data_3d(:,i,:) * DZS(i)* 1000
-	                enddo
+                    domain%temperature_2m%data_2d = domain%temperature%data_3d(:,kms,:)
+                    domain%humidity_2m%data_2d = domain%water_vapor%data_3d(:,kms,:)
+                endif
+                !!
+                if (options%lsm_options%surface_diagnostics) then 
+                    QSFC = sat_mr(domain%skin_temperature%data_2d,domain%surface_pressure%data_2d)
+                    QFX(its:ite,jts:jte)=Esrf_
+                    CHS2(its:ite,jts:jte)=KH_
+                    CQS2(its:ite,jts:jte)=KH_
+                    ! accumulate soil moisture over the entire column
+                    domain%soil_totalmoisture%data_2d = domain%soil_water_content%data_3d(:,1,:) * DZS(1) * 1000
+                    do i = 2,num_soil_layers
+                        domain%soil_totalmoisture%data_2d = domain%soil_totalmoisture%data_2d + domain%soil_water_content%data_3d(:,i,:) * DZS(i)* 1000
+                    enddo
 
-	                ! 2m Air T and Q are not well defined if Tskin is not coupled with the surface fluxes
-	                call surface_diagnostics_FSM(domain%sensible_heat%data_2d,    &
-	                                         QFX,                             &
-	                                         domain%skin_temperature%data_2d, &
-	                                         QSFC,                            &
-	                                         CHS2,                            &
-	                                         CQS2,                            &
-	                                         domain%temperature_2m%data_2d,   &
-	                                         domain%humidity_2m%data_2d,      &
-	                                         domain%surface_pressure%data_2d)
-				endif
+                    ! 2m Air T and Q are not well defined if Tskin is not coupled with the surface fluxes
+                    call surface_diagnostics_FSM(domain%sensible_heat%data_2d,    &
+                                             QFX,                             &
+                                             domain%skin_temperature%data_2d, &
+                                             QSFC,                            &
+                                             CHS2,                            &
+                                             CQS2,                            &
+                                             domain%temperature_2m%data_2d,   &
+                                             domain%humidity_2m%data_2d,      &
+                                             domain%surface_pressure%data_2d)
+                endif
 
                 !Resting water pixels in FSM and assign it the result of water_simple
                 !           
@@ -1413,11 +1416,10 @@ contains
                 SNOWBL = domain%accumulated_snowfall%data_2d
                 snow_bucket = domain%snowfall_bucket
                 !!                               
-			endif
-			!!
-			! MJ moved water model here at the end...since FSM considers all pixels non-water
+            endif
+            !!
+            !! MJ moved water model here at the end...since FSM considers all pixels non-water
             if (options%physics%watersurface==kWATER_SIMPLE) then
-
                 call water_simple(domain%sst%data_2d,                   &
                                   domain%surface_pressure%data_2d,      &
                                   windspd,                              &
@@ -1431,10 +1433,8 @@ contains
                                   QSFC,                                 &
                                   QFX,                                  &
                                   domain%skin_temperature%data_2d)
-            endif		
-
-
-
+            endif
+            !!
             if (options%physics%landsurface > kLSM_BASIC .and. options%physics%landsurface/=kLSM_FSM) then !! MJ uses different func for FSM as we do not have vegetaion
                 ! accumulate soil moisture over the entire column
                 domain%soil_totalmoisture%data_2d = domain%soil_water_content%data_3d(:,1,:) * DZS(1) * 1000
@@ -1461,6 +1461,7 @@ contains
                                          domain%mixing_ratio_2m_bare%data_2d)
 
             endif
+            !!
         endif
         
         if (options%physics%landsurface>0) then
