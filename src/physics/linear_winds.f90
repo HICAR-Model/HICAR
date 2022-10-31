@@ -36,6 +36,7 @@
 !!----------------------------------------------------------
 module linear_theory_winds
     use iso_c_binding
+    use iso_fortran_env
     use fft,                        only: fftw_execute_dft,                    &
                                           fftw_alloc_complex, fftw_free,       &
                                           fftw_plan_dft_2d, fftw_destroy_plan, &
@@ -53,7 +54,7 @@ module linear_theory_winds
                                           blocking_fraction, options_t
     use array_utilities,            only: smooth_array, calc_weight, &
                                           linear_space
-    use icar_constants,             only: kMAX_FILE_LENGTH, DOM_IMG_INDX
+    use icar_constants,             only: kMAX_FILE_LENGTH, DOM_IMG_INDX, kNUM_SERVERS, kNUM_COMPUTE, kNUM_PROC_PER_NODE
 
     implicit none
 
@@ -538,47 +539,47 @@ contains
     end subroutine destroy_linear_theory_data
 
 
-    subroutine setup_remote_grids(u_grids, v_grids, terrain, nz)
+    subroutine setup_remote_grids(u_grids, v_grids, terrain, nz, halo_size)
         implicit none
         type(grid_t), intent(inout), allocatable :: u_grids(:), v_grids(:)
         real,         intent(in)    :: terrain(:,:)
-        integer,      intent(in)    :: nz
-
+        integer,      intent(in)    :: nz, halo_size
+        
         integer :: nx, ny, i
 
         if (allocated(u_grids)) deallocate(u_grids)
         if (allocated(v_grids)) deallocate(v_grids)
 
-        allocate(u_grids(num_images()))
-        allocate(v_grids(num_images()))
+        allocate(u_grids(kNUM_COMPUTE))
+        allocate(v_grids(kNUM_COMPUTE))
 
         nx = size(terrain, 1)
         ny = size(terrain, 2)
 
-        do i=1,num_images()
-            call u_grids(i)%set_grid_dimensions(nx, ny, nz, nx_extra=1, for_image=i)
-            call v_grids(i)%set_grid_dimensions(nx, ny, nz, ny_extra=1, for_image=i)
+        do i=1,kNUM_COMPUTE
+            call u_grids(i)%set_grid_dimensions(nx, ny, nz, adv_order=halo_size*2, nx_extra=1, for_image=i)
+            call v_grids(i)%set_grid_dimensions(nx, ny, nz, adv_order=halo_size*2, ny_extra=1, for_image=i)
         enddo
 
     end subroutine setup_remote_grids
 
     subroutine copy_data_to_remote(wind, grids, LUT, i,j,k, z)
         implicit none
-        real,           intent(in)  :: wind(:,:)
-        type(grid_t),   intent(in)  :: grids(:)
-        real,           intent(inout):: LUT(:,:,:,:,:,:)[*]
-        integer,        intent(in)  :: i,j,k, z
+        real,              intent(in)   :: wind(:,:)
+        type(grid_t),      intent(in)   :: grids(:)
+        real, allocatable, intent(inout):: LUT(:,:,:,:,:,:)[:]
+        integer,           intent(in)   :: i,j,k, z
 
         integer :: img
 
-        do img = 1, num_images()
+        do img = 1, kNUM_COMPUTE
             associate(ims => grids(img)%ims, &
                       ime => grids(img)%ime, &
                       jms => grids(img)%jms, &
                       jme => grids(img)%jme  &
                 )
             !$omp critical
-            LUT(k,i,j, 1:ime-ims+1, z, 1:jme-jms+1)[img] = wind(ims:ime,jms:jme)
+            LUT(k,i,j, 1:ime-ims+1, z, 1:jme-jms+1)[DOM_IMG_INDX(img)] = wind(ims:ime,jms:jme)
             !$omp end critical
 
             end associate
@@ -603,22 +604,20 @@ contains
         integer, dimension(3,2) :: LUT_dims
         integer :: loops_completed ! this is just used to measure progress in the LUT creation
         integer :: total_LUT_entries, ijk, start_pos, stop_pos
-        integer :: ims, jms, this_n
+        integer :: ims, jms, this_n, my_index
         real, allocatable :: temporary_u(:,:), temporary_v(:,:)
         character(len=kMAX_FILE_LENGTH) :: LUT_file
 
         type(grid_t), allocatable :: u_grids(:), v_grids(:)
 
-        ! append total number of images and the current image number to the LUT filename
-        LUT_file = trim(options%lt_options%u_LUT_Filename) // "_" // trim(str(num_images())) // "_" // trim(str(this_image())) // ".nc"
 
         ims = lbound(domain%z%data_3d,1)
         jms = lbound(domain%z%data_3d,3)
-
+        
         ! the domain to work over
         nz = size(domain%u%data_3d,  2)
 
-        call setup_remote_grids(u_grids, v_grids, domain%global_terrain, nz)
+        call setup_remote_grids(u_grids, v_grids, domain%global_terrain, nz, domain%grid%halo_size)
 
         ! ensure these are at their required size for all images
         nx = maxval(v_grids%nx)
@@ -639,12 +638,48 @@ contains
         LUT_dims(:,2) = [nx,nz,nyv]
 
         total_LUT_entries = n_dir_values * n_spd_values * n_nsq_values
+        
+        if (mod(this_image(),(num_images()/kNUM_SERVERS)) == 0) then
+            my_index = 1
+        else
+            my_index = FINDLOC(DOM_IMG_INDX,this_image(),dim=1)
+        endif
+        ! append total number of images and the current image number to the LUT filename
+        LUT_file = trim(options%lt_options%u_LUT_Filename) // "_" // trim(str(kNUM_COMPUTE)) // "_" // trim(str(my_index)) // ".nc"
 
-        start_pos = nint((real(this_image()-1) / num_images()) * total_LUT_entries)
-        if (this_image()==num_images()) then
+        ! Allocate the (LARGE) look up tables for both U and V
+        if (.not.options%lt_options%read_LUT) then
+            allocate(hi_u_LUT(n_spd_values, n_dir_values, n_nsq_values, nxu, nz, ny)[*], source=0.0)
+            allocate(hi_v_LUT(n_spd_values, n_dir_values, n_nsq_values, nx,  nz, nyv)[*], source=0.0)
+            
+            ! If we are an IO image, we only need to stick around long enough to allocate the coarrays with everyone
+            ! This should be changed in the future once coarray teams are better supported accross compilers, such
+            ! that we can allocate the coarrays from within the compute team and do not have to worry about global barriers
+            if (mod(this_image(),(num_images()/kNUM_SERVERS)) == 0) return
+            
+            error=0
+        else
+            if (this_image()==1) write(*,*) "    Reading LUT from file: ", trim(LUT_file)
+            error=1
+            error = read_LUT(LUT_file, hi_u_LUT, hi_v_LUT, options%parameters%dz_levels(:nz), LUT_dims, options%lt_options)
+            
+            if (error/=0) then
+                if (this_image()==1) write(*,*) "WARNING: LUT on disk does not match that specified in the namelist or does not exist."
+                if (this_image()==1) write(*,*) "    LUT will be recreated"
+                if (allocated(hi_u_LUT)) deallocate(hi_u_LUT)
+                allocate(hi_u_LUT(n_spd_values, n_dir_values, n_nsq_values, nxu, nz, ny)[*], source=0.0)
+                if (allocated(hi_v_LUT)) deallocate(hi_v_LUT)
+                allocate(hi_v_LUT(n_spd_values, n_dir_values, n_nsq_values, nx,  nz, nyv)[*], source=0.0)
+            endif
+            if (mod(this_image(),(num_images()/kNUM_SERVERS)) == 0) return
+        endif
+
+        
+        start_pos = nint((real(my_index-1) / kNUM_COMPUTE) * total_LUT_entries)
+        if (my_index==kNUM_COMPUTE) then
             stop_pos = total_LUT_entries - 1
         else
-            stop_pos  = nint((real(this_image()) / num_images()) * total_LUT_entries) - 1
+            stop_pos  = nint((real(my_index) / kNUM_COMPUTE) * total_LUT_entries) - 1
         endif
 
         ! create the array of spd, dir, and nsq values to create LUTs for
@@ -655,25 +690,6 @@ contains
         call linear_space(nsq_values,nsqmin,nsqmax,n_nsq_values)
         ! generate table of Brunt-Vaisalla frequencies (Nsq) to be used
         call linear_space(spd_values,spdmin,spdmax,n_spd_values)
-
-        ! Allocate the (LARGE) look up tables for both U and V
-        if (.not.options%lt_options%read_LUT) then
-            allocate(hi_u_LUT(n_spd_values, n_dir_values, n_nsq_values, nxu, nz, ny)[*], source=0.0)
-            allocate(hi_v_LUT(n_spd_values, n_dir_values, n_nsq_values, nx,  nz, nyv)[*], source=0.0)
-            error=0
-        else
-            if (this_image()==1) write(*,*) "    Reading LUT from file: ", trim(LUT_file)
-            error=1
-            error = read_LUT(LUT_file, hi_u_LUT, hi_v_LUT, options%parameters%dz_levels(:nz), LUT_dims, options%lt_options)
-            if (error/=0) then
-                if (this_image()==1) write(*,*) "WARNING: LUT on disk does not match that specified in the namelist or does not exist."
-                if (this_image()==1) write(*,*) "    LUT will be recreated"
-                if (allocated(hi_u_LUT)) deallocate(hi_u_LUT)
-                allocate(hi_u_LUT(n_spd_values, n_dir_values, n_nsq_values, nxu, nz, ny)[*], source=0.0)
-                if (allocated(hi_v_LUT)) deallocate(hi_v_LUT)
-                allocate(hi_v_LUT(n_spd_values, n_dir_values, n_nsq_values, nx,  nz, nyv)[*], source=0.0)
-            endif
-        endif
 
         if (options%parameters%debug) then
             if (this_image()==1) write(*,*) "Local Look up Table size:", 4*product(shape(hi_u_LUT))/real(2**20), "MB"
@@ -753,10 +769,10 @@ contains
 
                         if (z>1) then
                             if (layer_height_bottom /= sum(options%parameters%dz_levels(1:z-1))) then
-                                print*, this_image(), layer_height_bottom - sum(options%parameters%dz_levels(1:z-1)), "layer_height_bottom = ", layer_height_bottom, "sum(dz) = ", sum(options%parameters%dz_levels(1:z-1))
+                                print*, my_index, layer_height_bottom - sum(options%parameters%dz_levels(1:z-1)), "layer_height_bottom = ", layer_height_bottom, "sum(dz) = ", sum(options%parameters%dz_levels(1:z-1))
                             endif
                             if (layer_height_top /= sum(options%parameters%dz_levels(1:z))) then
-                                print*, this_image(), layer_height_top - sum(options%parameters%dz_levels(1:z)), "layer_height_top = ", layer_height_top, "sum(dz) = ", sum(options%parameters%dz_levels(1:z))
+                                print*, my_index, layer_height_top - sum(options%parameters%dz_levels(1:z)), "layer_height_top = ", layer_height_top, "sum(dz) = ", sum(options%parameters%dz_levels(1:z))
                             endif
                         endif
 
@@ -776,7 +792,6 @@ contains
 
                         call copy_data_to_remote(temporary_u, u_grids, hi_u_LUT, i,j,k, z)
                         call copy_data_to_remote(temporary_v, v_grids, hi_v_LUT, i,j,k, z)
-
                     else
                         stop "ERROR: linear wind LUT creation not set up for non-staggered grids yet"
                         ! hi_u_LUT(k,i,j,:,z,:) = real( real(                                                    &
@@ -794,6 +809,7 @@ contains
                     !$omp critical
                     sync images ([DOM_IMG_INDX])
                     !$omp end critical
+
                 enddo
 
             end do
@@ -801,7 +817,7 @@ contains
 
             ! If this image doesn't have as many steps to run as some other images might,
             ! then it has to run additional ghost step(s) so that it syncs with the others correctly
-            do i=1, (total_LUT_entries/num_images()+1) - this_n
+            do i=1, (total_LUT_entries/kNUM_COMPUTE+1) - this_n
                 ! the syncs should be outside of the z loop, but this is a little more forgiving with memory requirements
                 do z=1,nz
                     !$omp critical
@@ -1332,11 +1348,6 @@ contains
         else
             linear_contribution = options%lt_options%linear_contribution
             N_squared = options%lt_options%N_squared
-        endif
-
-        ! if linear_perturb hasn't been called before we need to perform some setup actions.
-        if (.not. module_initialized) then
-            call setup_linwinds(domain, options, rev, useD)
         endif
 
         ! add the spatially variable linear field
