@@ -10,12 +10,16 @@
 submodule(domain_interface) domain_implementation
     use assertions_mod,       only : assert, assertions
     use mod_atm_utilities,    only : exner_function, update_pressure
+<<<<<<< HEAD
     use icar_constants
+=======
+    use icar_constants,       only : kVARS, kLC_LAND, kLC_WATER, kWATER_LAKE, kDOUBLE
+>>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
     use string,               only : str
     use co_util,              only : broadcast
     use io_routines,          only : io_write, io_read
     use geo,                  only : geo_lut, geo_interp, geo_interp2d, standardize_coordinates
-    use array_utilities,      only : array_offset_x, array_offset_y, smooth_array, smooth_array_2d, array_offset_x_2d, array_offset_y_2d
+    use array_utilities,      only : array_offset_x, array_offset_y, smooth_array, make_2d_x, make_2d_y
     use vertical_interpolation,only : vinterp, vLUT
     use wind_surf,            only : calc_Sx, calc_TPI
     use output_metadata,            only : get_varname
@@ -669,6 +673,7 @@ contains
         if (0<opt%vars_to_allocate( kVARS%snow_in_air) )                call setup(this%snow_mass,                this%grid,     forcing_var=opt%parameters%qsvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%snow_number_concentration) )  call setup(this%snow_number,              this%grid,     forcing_var=opt%parameters%qnsvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%graupel_in_air) )             call setup(this%graupel_mass,             this%grid,     forcing_var=opt%parameters%qgvar,      list=this%variables_to_force, force_boundaries=.True.)
+<<<<<<< HEAD
         if (0<opt%vars_to_allocate( kVARS%graupel_number_concentration))call setup(this%graupel_number,           this%grid,     forcing_var=opt%parameters%qngvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%ice1_a))                      call setup(this%ice1_a,           this%grid,     forcing_var=opt%parameters%i1avar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%ice1_c))                      call setup(this%ice1_c,           this%grid,     forcing_var=opt%parameters%i1cvar,      list=this%variables_to_force, force_boundaries=.True.)
@@ -682,9 +687,13 @@ contains
         if (0<opt%vars_to_allocate( kVARS%ice3_c))                      call setup(this%ice3_c,           this%grid,     forcing_var=opt%parameters%i3cvar,      list=this%variables_to_force, force_boundaries=.True.)
 
         if (0<opt%vars_to_allocate( kVARS%precipitation) )              call setup(this%accumulated_precipitation,this%grid2d )
+=======
+        if (0<opt%vars_to_allocate( kVARS%graupel_number_concentration))call setup(this%graupel_number,           this%grid )
+        if (0<opt%vars_to_allocate( kVARS%precipitation) )              call setup(this%accumulated_precipitation,this%grid2d, dtype=kDOUBLE )
+>>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
         if (0<opt%vars_to_allocate( kVARS%convective_precipitation) )   call setup(this%accumulated_convective_pcp,this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%external_precipitation) )     call setup(this%external_precipitation,   this%grid2d,   forcing_var=opt%parameters%rain_var,  list=this%variables_to_force)
-        if (0<opt%vars_to_allocate( kVARS%snowfall) )                   call setup(this%accumulated_snowfall,     this%grid2d )
+        if (0<opt%vars_to_allocate( kVARS%snowfall) )                   call setup(this%accumulated_snowfall,     this%grid2d, dtype=kDOUBLE )
         if (0<opt%vars_to_allocate( kVARS%pressure) )                   call setup(this%pressure,                 this%grid,     forcing_var=opt%parameters%pvar,       list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%temperature) )                call setup(this%temperature,              this%grid )
         if (0<opt%vars_to_allocate( kVARS%exner) )                      call setup(this%exner,                    this%grid )
@@ -694,12 +703,17 @@ contains
         if (0<opt%vars_to_allocate( kVARS%dz) )                         call setup(this%dz_mass,                  this%grid )
         if (0<opt%vars_to_allocate( kVARS%density) )                    call setup(this%density,                  this%grid )
         if (0<opt%vars_to_allocate( kVARS%pressure_interface) )         call setup(this%pressure_interface,       this%grid )
-        if (0<opt%vars_to_allocate( kVARS%graupel) )                    call setup(this%graupel,                  this%grid2d )
+        if (0<opt%vars_to_allocate( kVARS%graupel) )                    call setup(this%graupel,                  this%grid2d, dtype=kDOUBLE )
         if (0<opt%vars_to_allocate( kVARS%cloud_fraction) )             call setup(this%cloud_fraction,           this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%shortwave) )                  call setup(this%shortwave,                this%grid2d,   forcing_var=opt%parameters%swdown_var,  list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%shortwave_direct) )           call setup(this%shortwave_direct,         this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%shortwave_diffuse) )          call setup(this%shortwave_diffuse,        this%grid2d)
+<<<<<<< HEAD
         if (0<opt%vars_to_allocate( kVARS%longwave) )                   call setup(this%longwave,                 this%grid2d,   forcing_var=opt%parameters%lwdown_var,  list=this%variables_to_force, force_boundaries=.False.)
+=======
+        if (0<opt%vars_to_allocate( kVARS%longwave) )                   call setup(this%longwave,                 this%grid2d,   forcing_var=opt%parameters%lwdown_var,  list=this%variables_to_force)
+        if (0<opt%vars_to_allocate( kVARS%albedo) )                     call setup(this%albedo,                   this%grid_monthly )
+>>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
         if (0<opt%vars_to_allocate( kVARS%vegetation_fraction) )        call setup(this%vegetation_fraction,      this%grid_monthly )
         if (0<opt%vars_to_allocate( kVARS%vegetation_fraction_max) )    call setup(this%vegetation_fraction_max,  this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%vegetation_fraction_out) )    call setup(this%vegetation_fraction_out,  this%grid2d )
@@ -777,6 +791,8 @@ contains
         if (0<opt%vars_to_allocate( kVARS%v_10m) )                      call setup(this%v_10m,                    this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%coeff_momentum_drag) )        call setup(this%coeff_momentum_drag,      this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%coeff_heat_exchange) )        call setup(this%coeff_heat_exchange,      this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%coeff_heat_exchange_3d) )     call setup(this%coeff_heat_exchange_3d,   this%grid)    ! for pbl ysu
+        if (0<opt%vars_to_allocate( kVARS%hpbl) )                       call setup(this%hpbl,                     this%grid2d)    ! for pbl ysu
         if (0<opt%vars_to_allocate( kVARS%surface_rad_temperature) )    call setup(this%surface_rad_temperature,  this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%temperature_2m) )             call setup(this%temperature_2m,           this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%humidity_2m) )                call setup(this%humidity_2m,              this%grid2d)
@@ -842,6 +858,33 @@ contains
         if (0<opt%vars_to_allocate( kVARS%temperature_interface) )      call setup(this%temperature_interface,    this%grid)
         if (0<opt%vars_to_allocate( kVARS%land_emissivity) )            call setup(this%land_emissivity,          this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%tend_swrad) )                 call setup(this%tend_swrad,               this%grid)
+        ! lake vars:
+        if (0<opt%vars_to_allocate( kVARS%lake_depth) )                 call setup(this%lake_depth,              this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%t_lake3d) )                   call setup(this%t_lake3d,                this%grid_lake )
+        if (0<opt%vars_to_allocate( kVARS%lake_icefrac3d) )             call setup(this%lake_icefrac3d,          this%grid_lake )
+        if (0<opt%vars_to_allocate( kVARS%z_lake3d) )                   call setup(this%z_lake3d,                this%grid_lake )
+        if (0<opt%vars_to_allocate( kVARS%dz_lake3d) )                  call setup(this%dz_lake3d,               this%grid_lake )
+        if (0<opt%vars_to_allocate( kVARS%snl2d) )                      call setup(this%snl2d,                   this%grid2d )
+        if (0<opt%vars_to_allocate( kVARS%t_grnd2d) )                   call setup(this%t_grnd2d,                this%grid2d )
+        if (0<opt%vars_to_allocate( kVARS%t_soisno3d) )                 call setup(this%t_soisno3d,              this%grid_lake_soisno )
+        if (0<opt%vars_to_allocate( kVARS%h2osoi_ice3d) )               call setup(this%h2osoi_ice3d,            this%grid_lake_soisno )
+        if (0<opt%vars_to_allocate( kVARS%h2osoi_liq3d) )               call setup(this%h2osoi_liq3d,            this%grid_lake_soisno )
+        if (0<opt%vars_to_allocate( kVARS%h2osoi_vol3d) )               call setup(this%h2osoi_vol3d,            this%grid_lake_soisno )
+        if (0<opt%vars_to_allocate( kVARS%z3d) )                        call setup(this%z3d,                     this%grid_lake_soisno )
+        if (0<opt%vars_to_allocate( kVARS%dz3d) )                       call setup(this%dz3d,                    this%grid_lake_soisno )
+        if (0<opt%vars_to_allocate( kVARS%zi3d) )                       call setup(this%zi3d,                    this%grid_lake_soisno_1 )
+        if (0<opt%vars_to_allocate( kVARS%watsat3d) )                   call setup(this%watsat3d,                this%grid_lake_soi )
+        if (0<opt%vars_to_allocate( kVARS%csol3d) )                     call setup(this%csol3d,                  this%grid_lake_soi )
+        if (0<opt%vars_to_allocate( kVARS%tkmg3d) )                     call setup(this%tkmg3d,                  this%grid_lake_soi )
+        if (0<opt%vars_to_allocate( kVARS%tksatu3d) )                   call setup(this%tksatu3d,                this%grid_lake_soi )
+        if (0<opt%vars_to_allocate( kVARS%tkdry3d) )                    call setup(this%tkdry3d,                 this%grid_lake_soi )
+        if (0<opt%vars_to_allocate( kVARS%lakemask) )                   call setup(this%lakemask,                this%grid2d )
+        if (0<opt%vars_to_allocate( kVARS%savedtke12d) )                call setup(this%savedtke12d,             this%grid2d )
+        if (0<opt%vars_to_allocate( kVARS%lakedepth2d) )                call setup(this%lakedepth2d,             this%grid2d )
+        if (0<opt%vars_to_allocate( kVARS%ivt) )                        call setup(this%ivt,                     this%grid2d )
+        if (0<opt%vars_to_allocate( kVARS%iwv) )                        call setup(this%iwv,                     this%grid2d )
+        if (0<opt%vars_to_allocate( kVARS%iwl) )                        call setup(this%iwl,                     this%grid2d )
+        if (0<opt%vars_to_allocate( kVARS%iwi) )                        call setup(this%iwi,                     this%grid2d )
 
         ! integer variable_t types aren't available (yet...)
         if (0<opt%vars_to_allocate( kVARS%convective_precipitation) )   allocate(this%cu_precipitation_bucket  (ims:ime, jms:jme),          source=0)
@@ -856,12 +899,16 @@ contains
         if (0<opt%vars_to_allocate( kVARS%irr_eventno_micro) )          allocate(this%irr_eventno_micro        (ims:ime, jms:jme),          source=0)
         if (0<opt%vars_to_allocate( kVARS%irr_eventno_flood) )          allocate(this%irr_eventno_flood        (ims:ime, jms:jme),          source=0)
         if (0<opt%vars_to_allocate( kVARS%plant_growth_stage) )         allocate(this%plant_growth_stage       (ims:ime, jms:jme),          source=0)
+        if (0<opt%vars_to_allocate( kVARS%kpbl) )                       allocate(this%kpbl                     (ims:ime, jms:jme),          source=0) ! for pbl ysu
 
         ! tendency variables that don't need to be output... maybe these should be set up the same way
         if (0<opt%vars_to_allocate( kVARS%tend_qv_adv) )                allocate(this%tend%qv_adv(ims:ime, kms:kme, jms:jme),   source=0.0)
         if (0<opt%vars_to_allocate( kVARS%tend_qv_pbl) )                allocate(this%tend%qv_pbl(ims:ime, kms:kme, jms:jme),   source=0.0)
         if (0<opt%vars_to_allocate( kVARS%tend_qv) )                    allocate(this%tend%qv(ims:ime, kms:kme, jms:jme),       source=0.0)
         if (0<opt%vars_to_allocate( kVARS%tend_th) )                    allocate(this%tend%th(ims:ime, kms:kme, jms:jme),       source=0.0)
+        if (0<opt%vars_to_allocate( kVARS%tend_th_pbl) )                allocate(this%tend%th_pbl(ims:ime, kms:kme, jms:jme),       source=0.0)
+        if (0<opt%vars_to_allocate( kVARS%tend_qc_pbl) )                allocate(this%tend%qc_pbl(ims:ime, kms:kme, jms:jme),       source=0.0)
+        if (0<opt%vars_to_allocate( kVARS%tend_qi_pbl) )                allocate(this%tend%qi_pbl(ims:ime, kms:kme, jms:jme),       source=0.0)
         if (0<opt%vars_to_allocate( kVARS%tend_qc) )                    allocate(this%tend%qc(ims:ime, kms:kme, jms:jme),       source=0.0)
         if (0<opt%vars_to_allocate( kVARS%tend_qi) )                    allocate(this%tend%qi(ims:ime, kms:kme, jms:jme),       source=0.0)
         if (0<opt%vars_to_allocate( kVARS%tend_qs) )                    allocate(this%tend%qs(ims:ime, kms:kme, jms:jme),       source=0.0)
@@ -886,16 +933,21 @@ contains
     !! and the forcing_var is both present and not blank ("")
     !!
     !! -------------------------------
-    subroutine setup_var(var, grid, forcing_var, list, force_boundaries)
+    subroutine setup_var(var, grid, forcing_var, list, force_boundaries, dtype)
         implicit none
         type(variable_t),   intent(inout) :: var
         type(grid_t),       intent(in)    :: grid
         character(len=*),   intent(in),   optional :: forcing_var
         type(var_dict_t),   intent(inout),optional :: list
         logical,            intent(in),   optional :: force_boundaries
+        integer,            intent(in),   optional :: dtype
 
         if (present(forcing_var)) then
-            call var%initialize(grid, forcing_var=forcing_var)
+            if (present(dtype)) then
+                call var%initialize(grid, forcing_var=forcing_var, dtype=dtype)
+            else
+                call var%initialize(grid, forcing_var=forcing_var)
+            endif
 
             if (present(list)) then
                 if (Len(Trim(forcing_var)) /= 0) then
@@ -905,10 +957,15 @@ contains
             endif
         else
 
-            call var%initialize(grid)
+            if (present(dtype)) then
+                call var%initialize(grid, dtype=dtype)
+            else
+                call var%initialize(grid)
+            endif
         endif
 
     end subroutine
+
 
     !> -------------------------------
     !! Setup an exchangeable variable.
@@ -1010,12 +1067,15 @@ contains
         call load_data(options%parameters%init_conditions_file,   &
                        options%parameters%lat_hi,                 &
                        temporary_data, this%grid)
+
+        call make_2d_y(temporary_data, this%grid%ims, this%grid%ime)
         this%latitude%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
 
         ! Read the longitude data
         call load_data(options%parameters%init_conditions_file,   &
                        options%parameters%lon_hi,                 &
                        temporary_data, this%grid)
+        call make_2d_x(temporary_data, this%grid%jms, this%grid%jme)
         this%longitude%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
 
 
@@ -1031,6 +1091,7 @@ contains
                            options%parameters%ulon_hi,                &
                            temporary_data, this%u_grid)
 
+            call make_2d_y(temporary_data, 1, size(this%global_terrain,2))
             call subset_array(temporary_data, this%u_longitude%data_2d, this%u_grid)
 
             associate(g=>this%u_grid2d_ext, var=>this%geo_u%lon)
@@ -1043,6 +1104,7 @@ contains
                            options%parameters%lon_hi,                 &
                            temporary_data, this%grid)
 
+            call make_2d_y(temporary_data, 1, size(this%global_terrain,2))
             call array_offset_x(temporary_data, temp_offset)
             call subset_array(temp_offset, this%u_longitude%data_2d, this%u_grid)
             associate(g=>this%u_grid2d_ext, var=>this%geo_u%lon)
@@ -1057,6 +1119,7 @@ contains
                            options%parameters%ulat_hi,                &
                            temporary_data, this%u_grid)
 
+            call make_2d_x(temporary_data, 1, size(this%global_terrain,1)+1)
             call subset_array(temporary_data, this%u_latitude%data_2d, this%u_grid)
             associate(g=>this%u_grid2d_ext, var=>this%geo_u%lat)
                 allocate(this%geo_u%lat(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
@@ -1068,6 +1131,7 @@ contains
                            options%parameters%lat_hi,                 &
                            temporary_data, this%grid)
 
+            call make_2d_x(temporary_data, 1, size(this%global_terrain,1)+1)
             call array_offset_x(temporary_data, temp_offset)
             call subset_array(temp_offset, this%u_latitude%data_2d, this%u_grid)
             associate(g=>this%u_grid2d_ext, var=>this%geo_u%lat)
@@ -1083,6 +1147,7 @@ contains
                            options%parameters%vlon_hi,                &
                            temporary_data, this%v_grid)
 
+            call make_2d_y(temporary_data, 1, size(this%global_terrain,2)+1)
             call subset_array(temporary_data, this%v_longitude%data_2d, this%v_grid)
             associate(g=>this%v_grid2d_ext, var=>this%geo_v%lon)
                 allocate(this%geo_v%lon(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
@@ -1094,6 +1159,7 @@ contains
                            options%parameters%lon_hi,                 &
                            temporary_data, this%grid)
 
+            call make_2d_y(temporary_data, 1, size(this%global_terrain,2)+1)
             call array_offset_y(temporary_data, temp_offset)
             call subset_array(temp_offset, this%v_longitude%data_2d, this%v_grid)
             associate(g=>this%v_grid2d_ext, var=>this%geo_v%lon)
@@ -1108,6 +1174,7 @@ contains
                            options%parameters%vlat_hi,                &
                            temporary_data, this%v_grid)
 
+            call make_2d_x(temporary_data, 1, size(this%global_terrain,1))
             call subset_array(temporary_data, this%v_latitude%data_2d, this%v_grid)
             associate(g=>this%v_grid2d_ext, var=>this%geo_v%lat)
                 allocate(this%geo_v%lat(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
@@ -1120,6 +1187,7 @@ contains
                            options%parameters%lat_hi,                 &
                            temporary_data, this%grid)
 
+            call make_2d_x(temporary_data, 1, size(this%global_terrain,1))
             call array_offset_y(temporary_data, temp_offset)
             call subset_array(temp_offset, this%v_latitude%data_2d, this%v_grid)
             associate(g=>this%v_grid2d_ext, var=>this%geo_v%lat)
@@ -1406,9 +1474,9 @@ contains
         class(domain_t), intent(inout)  :: this
         type(options_t), intent(in)     :: options
 
-        real, allocatable :: temp(:,:,:)
+        real, allocatable :: temp(:,:,:), gamma_n(:)
         integer :: i, max_level
-        real :: s, n, s1, s2, gamma
+        real :: s, n, s1, s2, gamma, gamma_min
         logical :: SLEVE
 
         associate(ims => this%ims,      ime => this%ime,                        &
@@ -1441,10 +1509,14 @@ contains
             dz_scl                => this%dz_scl,                         &
             zr_u                  => this%zr_u,                           &
             zr_v                  => this%zr_v)
+<<<<<<< HEAD
             
             max_level = find_flat_model_level(options, nz, dz)
+=======
+>>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
             ! Still not 100% convinced this works well in cases other than flat_z_height = 0 (w sleve). So for now best to keep at 0 when using sleve?
+            max_level = find_flat_model_level(options, nz, dz)
             ! if(max_level /= nz) then
             !     if (this_image()==1) then
             !         print*, "    flat z height ", options%parameters%flat_z_height
@@ -1463,13 +1535,41 @@ contains
 
 
             ! Scale dz with smooth_height/sum(dz(1:max_level)) before calculating sleve levels.
-            dz_scl(:)   =   dz(1:nz) ! *  smooth_height / sum(dz(1:max_level))  ! this leads to a jump in dz thickness at max_level+1. Not sure if this is a problem.
+            dz_scl(:)   =   dz(1:nz) *  smooth_height / sum(dz(1:max_level))  ! this leads to a jump in dz thickness at max_level+1. Not sure if this is a problem.
 
 
             ! - - -   calculate invertibility parameter gamma (Schär et al 2002 eqn 20):  - - - - - -
-            gamma  =  1  -  MAXVAL(h1)/s1 * COSH(smooth_height/s1)/SINH(smooth_height/s1) - MAXVAL(h2)/s2 * COSH(smooth_height/s2)/SINH(smooth_height/s2)
+            gamma  =  1  -  MAXVAL(h1)/s1 * COSH(smooth_height/s1)/SINH(smooth_height/s1) &
+                          - MAXVAL(h2)/s2 * COSH(smooth_height/s2)/SINH(smooth_height/s2)
 
-            ! COSMO1 operational setting (but model top is at ~22000 masl):
+            ! with the new (leuenberger et al 2010) Sleve formulation, the inveribiltiy criterion is as follows:
+            ! ( Although an argument could be made to calculate this on the offset (u/v) grid b/c that is most
+            !   relevant for advection? In reality this is probably a sufficient approximation, as long as we
+            !   aren't pushing the gamma factor too close to zero )
+            allocate(gamma_n(this%kds : this%kde+1))
+            i=kms
+            gamma_n(i) =  1                                                     &
+                - MAXVAL(h1) * n/(s1**n)                                        &
+                * COSH((smooth_height/s1)**n) / SINH((smooth_height/s1)**n)     &
+                - MAXVAL(h2) * n/(s2**n)                                        &
+                * COSH((smooth_height/s2)**n) / SINH((smooth_height/s2)**n)
+
+            do i = this%grid%kds, this%grid%kde
+                gamma_n(i+1)  =  1                                    &    ! # for i != kds !!
+                - MAXVAL(h1) * n/(s1**n) * sum(dz_scl(1:i))**(n-1)                                             &
+                * COSH((smooth_height/s1)**n -(sum(dz_scl(1:i))/s1)**n ) / SINH((smooth_height/s1)**n)    &
+                - MAXVAL(h2) * n/(s2**n) *  sum(dz_scl(1:i))**(n-1)                                            &
+                * COSH((smooth_height/s2)**n -(sum(dz_scl(1:i))/s2)**n ) / SINH((smooth_height/s2)**n)
+            enddo
+
+            if (n==1) then
+                gamma_min = gamma
+            else
+                gamma_min = MINVAL(gamma_n)
+            endif
+
+
+            ! For reference: COSMO1 operational setting (but model top is at ~22000 masl):
             !    Decay Rate for Large-Scale Topography: svc1 = 10000.0000
             !    Decay Rate for Small-Scale Topography: svc2 =  3300.0000
             if ((this_image()==1)) then
@@ -1477,8 +1577,9 @@ contains
                 print*, "    Using a SLEVE coordinate with a Decay height for Small-Scale Topography: (s2) of ", s2, " m."
                 print*, "    Using a sleve_n of ", options%parameters%sleve_n
                 write(*,*) "    Smooth height is ", smooth_height, "m.a.s.l     (model top ", sum(dz(1:nz)), "m.a.s.l.)"
-                write(*,*) "    invertibility parameter gamma is: ", gamma
-                if(gamma <= 0) print*, " CAUTION: coordinate transformation is not invertible (gamma <= 0 ) !!! reduce decay rate(s)!"
+                write(*,*) "    invertibility parameter gamma is: ", gamma_min
+                if(gamma_min <= 0) print*, " CAUTION: coordinate transformation is not invertible (gamma <= 0 ) !!! reduce decay rate(s), and/or increase flat_z_height!"
+                ! if(options%parameters%debug)  write(*,*) "   (for (debugging) reference: 'gamma(n=1)'= ", gamma,")"
                 print*, ""
             endif
 
@@ -1495,6 +1596,7 @@ contains
                                     + h2  *  SINH( (smooth_height/s2)**n - (dz_scl(i)/s2)**n ) / SINH((smooth_height/s2)**n)   ! small terrain features
 
             global_dz_interface(:,i,:)  =  temp(:,i+1,:) - temp(:,i,:)  ! same for higher k
+            global_z_interface(:,i,:)  = global_terrain
             global_jacobian(:,i,:) = global_dz_interface(:,i,:)/dz_scl(i)
 
             ! this is on the subset grid:
@@ -1547,6 +1649,7 @@ contains
                     z_interface(:,i+1,:) = temp(ims:ime,i+1,jms:jme)
 
                     global_dz_interface(:,i,:)  =  temp(:,i+1,:) - temp(:,i,:)
+                    global_z_interface(:,i,:)  = global_z_interface(:,i-1,:) + global_dz_interface(:,i-1,:)
                     dz_interface(:,i,:)  =  z_interface(:,i+1,:) - z_interface(:,i,:)
 
                     endif
@@ -1559,11 +1662,12 @@ contains
                         print*, dz_interface(:,i,:)
                         print*,""
                     endif
-                    else if ( ANY(dz_interface(:,i,:)<=0.01) ) then
+                    else if ( ANY(global_dz_interface(:,i,:)<=0.01) ) then
                     if (this_image()==1)  write(*,*) "WARNING: dz_interface very low (at level ",i,")"
                     endif
 
                     ! - - - - -   u/v grid calculations - - - - -
+                    ! contrary to the calculations above, these all take place on the parallelized terrain
                     z_u(:,i,:)   = (sum(dz_scl(1:(i-1))) + dz_scl(i)/2)   &
                                 + h1_u  *  SINH( (smooth_height/s1)**n -  ( (sum(dz_scl(1:(i-1)))+dz_scl(i)/2) /s1)**n ) / SINH((smooth_height/s1)**n)  &! large-scale terrain
                                 + h2_u  *  SINH( (smooth_height/s2)**n -  ( (sum(dz_scl(1:(i-1)))+dz_scl(i)/2) /s2)**n ) / SINH((smooth_height/s2)**n)   ! small terrain features
@@ -1581,6 +1685,7 @@ contains
                     zr_v(:,i,:) = 1
 
                     global_dz_interface(:,i,:) =  dz_scl(i)
+                    global_z_interface(:,i,:)  = global_z_interface(:,i-1,:) + global_dz_interface(:,i-1,:)
                     dz_interface(:,i,:) =  dz_scl(i) !(dz(i) + dz_scl(i) )/2   ! to mitigate the jump in dz at max_level+1: (dz+dz_scl)/2 iso dz
                     if (i/=this%grid%kme)   z_interface(:,i+1,:) = z_interface(:,i,:) + dz(i) ! (dz(i) + dz_scl( i) )/2 !test in icar_s5T
 
@@ -1596,6 +1701,14 @@ contains
                 global_jacobian(:,i,:) = global_dz_interface(:,i,:)/dz_scl(i)
 
             enddo
+
+            i=kme+1
+            global_z_interface(:,i,:)  = global_z_interface(:,i-1,:) + global_dz_interface(:,i-1,:)
+
+            ! if ((this_image()==1).and.(options%parameters%debug)) then
+            !     call io_write("global_jacobian.nc", "global_jacobian", global_jacobian(:,:,:) )
+            !     write(*,*) "  global jacobian minmax: ", MINVAL(global_jacobian) , MAXVAL(global_jacobian)
+            ! endif
 
         end associate
 
@@ -1750,10 +1863,18 @@ contains
             call setup_sleve(this, options)
 
         else
-
+            ! This will set up either a Gal-Chen terrainfollowing coordinate, or no terrain following.
             call setup_simple_z(this, options)
 
         endif
+
+        !! To allow for development and debugging of coordinate transformations:
+        ! if ((this_image()==1).and.(options%parameters%debug)) then
+        !     ! call io_write("global_jacobian.nc", "global_jacobian", this%global_jacobian(:,:,:) )
+        !     write(*,*) "    global jacobian minmax: ", MINVAL(this%global_jacobian) , MAXVAL(this%global_jacobian)
+        !     write(*,*) ""
+        ! endif
+
 
         associate(ims => this%ims,      ime => this%ime,                        &
                   jms => this%jms,      jme => this%jme,                        &
@@ -2074,20 +2195,20 @@ contains
         h1 =  global_terrain(this%grid2d%ids:this%grid2d%ide, this%grid2d%jds:this%grid2d%jde)
 
         ! offset the global terrain for the h_(u/v) calculations:
-        call array_offset_x_2d(global_terrain, temp_offset)
+        call array_offset_x(global_terrain, temp_offset)
         h_u = temp_offset
         h1_u = temp_offset
         if (allocated(temp_offset)) deallocate(temp_offset)
 
-        call array_offset_y_2d(global_terrain, temp_offset)
+        call array_offset_y(global_terrain, temp_offset)
         h_v = temp_offset
         h1_v = temp_offset
 
         ! Smooth the terrain to attain the large-scale contribution h1 (_u/v):
         do i =1,options%parameters%terrain_smooth_cycles
-          call smooth_array_2d( h1, windowsize  =  options%parameters%terrain_smooth_windowsize)
-          call smooth_array_2d( h1_u, windowsize = options%parameters%terrain_smooth_windowsize)
-          call smooth_array_2d( h1_v, windowsize = options%parameters%terrain_smooth_windowsize)
+          call smooth_array( h1, windowsize  =  options%parameters%terrain_smooth_windowsize)
+          call smooth_array( h1_u, windowsize = options%parameters%terrain_smooth_windowsize)
+          call smooth_array( h1_v, windowsize = options%parameters%terrain_smooth_windowsize)
         enddo
 
         ! Subract the large-scale terrain from the full topography to attain the small-scale contribution:
@@ -2272,9 +2393,21 @@ contains
                            temporary_data)
             if (allocated(this%land_mask)) then
                 this%land_mask = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+                where(this%land_mask==0) this%land_mask = kLC_WATER  ! To ensure conisitency. land_mask can be 0 or 2 for water, enforce a single value.
             endif
         endif
 
+        if ((options%physics%watersurface==kWATER_LAKE) .AND.(options%parameters%lakedepthvar /= "")) then
+            if (this_image()==1) write(*,*) "   reading lake depth data from hi-res file"
+
+            call io_read(options%parameters%init_conditions_file,   &
+                           options%parameters%lakedepthvar,         &
+                           temporary_data)
+            if (associated(this%lake_depth%data_2d)) then
+                this%lake_depth%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+            endif
+
+        endif
 
         if (options%parameters%soiltype_var /= "") then
             call io_read(options%parameters%init_conditions_file,   &
@@ -2372,7 +2505,7 @@ contains
 
         else
             if (associated(this%soil_water_content%data_3d)) then
-                this%soil_water_content%data_3d = 0.2
+                this%soil_water_content%data_3d = 0.4
             endif
         endif
 
@@ -2385,14 +2518,65 @@ contains
             endif
         endif
 
+        if (options%parameters%albedo_var /= "") then
+            if (options%lsm_options%monthly_albedo) then
+                call io_read(options%parameters%init_conditions_file,   &
+                            options%parameters%albedo_var,          &
+                            temporary_data_3d)
+
+                if (associated(this%albedo%data_3d)) then
+                    do i=1,size(this%albedo%data_3d, 2)
+                        this%albedo%data_3d(:,i,:) = temporary_data_3d(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme,i)
+                    enddo
+
+                    if (maxval(temporary_data_3d) > 1) then
+                        if (this_image()==1) print*, "Changing input ALBEDO % to fraction"
+                        this%albedo%data_3d = this%albedo%data_3d / 100
+                    endif
+                endif
+            else
+                call io_read(options%parameters%init_conditions_file,   &
+                               options%parameters%albedo_var,          &
+                               temporary_data)
+                if (associated(this%albedo%data_3d)) then
+                    do i=1,size(this%albedo%data_3d, 2)
+                        this%albedo%data_3d(:,i,:) = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+                    enddo
+
+                    if (maxval(temporary_data) > 1) then
+                        if (this_image()==1) print*, "Changing input ALBEDO % to fraction"
+                        this%albedo%data_3d = this%albedo%data_3d / 100
+                    endif
+                endif
+            endif
+
+        else
+            if (associated(this%albedo%data_3d)) then
+                this%albedo%data_3d = 0.17
+            endif
+        endif
+
+
         if (options%parameters%vegfrac_var /= "") then
-            call io_read(options%parameters%init_conditions_file,   &
-                           options%parameters%vegfrac_var,          &
-                           temporary_data)
-            if (associated(this%vegetation_fraction%data_3d)) then
-                do i=1,size(this%vegetation_fraction%data_3d, 2)
-                    this%vegetation_fraction%data_3d(:,i,:) = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
-                enddo
+            if (options%lsm_options%monthly_albedo) then
+                call io_read(options%parameters%init_conditions_file,   &
+                            options%parameters%vegfrac_var,          &
+                            temporary_data_3d)
+
+                if (associated(this%vegetation_fraction%data_3d)) then
+                    do i=1,size(this%vegetation_fraction%data_3d, 2)
+                        this%vegetation_fraction%data_3d(:,i,:) = temporary_data_3d(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme,i)
+                    enddo
+                endif
+            else
+                call io_read(options%parameters%init_conditions_file,   &
+                               options%parameters%vegfrac_var,          &
+                               temporary_data)
+                if (associated(this%vegetation_fraction%data_3d)) then
+                    do i=1,size(this%vegetation_fraction%data_3d, 2)
+                        this%vegetation_fraction%data_3d(:,i,:) = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+                    enddo
+                endif
             endif
 
         else
@@ -2471,16 +2655,14 @@ contains
         if (associated(this%canopy_temperature%data_2d)) this%canopy_temperature%data_2d=init_surf_temp
         if (associated(this%coeff_momentum_drag%data_2d)) this%coeff_momentum_drag%data_2d=0
         if (associated(this%coeff_heat_exchange%data_2d)) this%coeff_heat_exchange%data_2d=0
+        if (associated(this%coeff_heat_exchange_3d%data_3d)) this%coeff_heat_exchange_3d%data_3d=0.01
         if (associated(this%canopy_fwet%data_2d)) this%canopy_fwet%data_2d=0
         if (associated(this%snow_water_eq_prev%data_2d)) this%snow_water_eq_prev%data_2d=0
         if (associated(this%snow_albedo_prev%data_2d)) this%snow_albedo_prev%data_2d=0.65
         if (associated(this%storage_lake%data_2d)) this%storage_lake%data_2d=0
 
-
-
-
-
     end subroutine read_land_variables
+
 
     !> -------------------------------
     !! Initialize various internal variables that need forcing data first, e.g. temperature, pressure on interface, exner, ...
@@ -2636,7 +2818,12 @@ contains
                       kVARS%latitude,               kVARS%longitude,                &
                       kVARS%u_latitude,             kVARS%u_longitude,              &
                       kVARS%v_latitude,             kVARS%v_longitude,              &
+<<<<<<< HEAD
                       kVars%temperature_interface,  kVars%density                   ])
+=======
+                      kVARS%temperature_interface,  kVARS%ivt,                      &
+                      kVARS%iwv,    kVARS%iwl,      kVARS%iwi                      ])
+>>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
         if (trim(options%parameters%rain_var) /= "") call options%alloc_vars([kVARS%external_precipitation])
 
@@ -2720,6 +2907,7 @@ contains
         this%v_grid2d_ext%ime = min(this%v_grid2d%ime + nsmooth, this%v_grid2d%ide)
         this%v_grid2d_ext%jms = max(this%v_grid2d%jms - nsmooth, this%v_grid2d%jds)
         this%v_grid2d_ext%jme = min(this%v_grid2d%jme + nsmooth, this%v_grid2d%jde)
+<<<<<<< HEAD
         
         call this%grid_soil%set_grid_dimensions(     nx_global, ny_global, kSOIL_GRID_Z,adv_order=adv_order)
         call this%grid_snow%set_grid_dimensions(     nx_global, ny_global, kSNOW_GRID_Z,adv_order=adv_order)
@@ -2730,6 +2918,21 @@ contains
         call this%grid_monthly%set_grid_dimensions( nx_global, ny_global, kMONTH_GRID_Z,adv_order=adv_order)
 
 
+=======
+
+
+        call this%grid_soil%set_grid_dimensions(         nx_global, ny_global, 4)
+        call this%grid_snow%set_grid_dimensions(         nx_global, ny_global, 3)
+        call this%grid_snowsoil%set_grid_dimensions(     nx_global, ny_global, 7)
+        call this%grid_soilcomp%set_grid_dimensions(     nx_global, ny_global, 8)
+        call this%grid_gecros%set_grid_dimensions(       nx_global, ny_global, 60)
+        call this%grid_croptype%set_grid_dimensions(     nx_global, ny_global, 5)
+        call this%grid_monthly%set_grid_dimensions(      nx_global, ny_global, 12)
+        call this%grid_lake%set_grid_dimensions(         nx_global, ny_global, 10) ! nlevlake=10 (in water_lake.f90: should become nml option?)
+        call this%grid_lake_soisno%set_grid_dimensions(  nx_global, ny_global, 9)! nlevsoil=4; nlevsnow=5   real, dimension( ims:ime,-nlevsnow+1:nlevsoil, jms:jme )  ,INTENT(inout)  :: t_soisno3d,   h2osoi_ice3d, h2osoi_liq3d, h2osoi_vol3d, z3d,   dz3d
+        call this%grid_lake_soi%set_grid_dimensions(     nx_global, ny_global, 4) ! separate from grid_soil in case we want fewer layers under the lake.
+        call this%grid_lake_soisno_1%set_grid_dimensions(nx_global, ny_global, 10) !soisno+1 (for layer interface depth zi3d)
+>>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
         deallocate(temporary_data)
 
         this%north_boundary = (this%grid%yimg == this%grid%yimages)
@@ -3169,7 +3372,7 @@ contains
         ! make sure the dictionary is reset to point to the first variable
         call this%variables_to_force%reset_iterator()
 
-        ! No iterate through the dictionary as long as there are more elements present
+        ! Now iterate through the dictionary as long as there are more elements present
         do while (this%variables_to_force%has_more_elements())
             ! get the next variable
             var_to_update = this%variables_to_force%next()
@@ -3216,7 +3419,12 @@ contains
         var_to_update%data_3d = var_to_update%data_3d + (var_to_update%dqdt_3d * dt%seconds())
 
         if (associated(this%external_precipitation%data_2d)) then
-            this%accumulated_precipitation%data_2d = this%accumulated_precipitation%data_2d + (this%external_precipitation%data_2d * dt%seconds())
+            if (associated(this%accumulated_precipitation%data_2d)) then
+                this%accumulated_precipitation%data_2d = this%accumulated_precipitation%data_2d + (this%external_precipitation%data_2d * dt%seconds())
+            endif
+            if (associated(this%accumulated_precipitation%data_2dd)) then
+                this%accumulated_precipitation%data_2dd = this%accumulated_precipitation%data_2dd + (this%external_precipitation%data_2d * dt%seconds())
+            endif
         endif
 
 

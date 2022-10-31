@@ -31,6 +31,7 @@ contains
         nullify(this%data_3d)
     endif
 
+    this%dtype = kREAL
     allocate(this%data_3d(grid%ims:grid%ime, &
                           grid%kms:grid%kme, &
                           grid%jms:grid%jme), stat=err)
@@ -129,6 +130,12 @@ contains
     type(variable_t),      intent(in),    optional :: metadata
 
 
+<<<<<<< HEAD
+=======
+    this%meta_data%data_3d => this%data_3d
+    this%meta_data%three_d = .True.
+    this%meta_data%dtype = this%dtype
+>>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
 
   end subroutine
@@ -162,6 +169,7 @@ contains
   
   module subroutine exchange_y(this,do_metadata)
     class(exchangeable_t), intent(inout) :: this
+<<<<<<< HEAD
     logical, optional, intent(in) :: do_metadata
     logical :: metadata
       
@@ -170,6 +178,24 @@ contains
 
     if (.not. this%north_boundary) call this%put_north(metadata)
     if (.not. this%south_boundary) call this%put_south(metadata)
+=======
+    integer :: n, nx, start
+    !When exchanging for the v-field, we want a full exchange in the y-direction,
+    ! and an exchange in the x-direction of just the outer-most values
+
+    if (.not. this%north_boundary) then
+        n = ubound(this%data_3d,3)
+        nx = size(this%data_3d,1)
+        this%halo_south_in(1:nx,:,1:(halo_size+1))[north_neighbor] = this%data_3d(:,:,n-(halo_size)*2:n-(halo_size))
+    endif
+    if (.not. this%south_boundary) then
+        start = lbound(this%data_3d,3)
+        nx = size(this%data_3d,1)
+        this%halo_north_in(1:nx,:,1:halo_size)[south_neighbor] = this%data_3d(:,:,start+halo_size+1:start+halo_size*2)
+    endif
+    if (.not. this%east_boundary)  call this%put_east
+    if (.not. this%west_boundary)  call this%put_west
+>>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
     sync images( neighbors )
     
@@ -179,7 +205,20 @@ contains
     if (.not. this%east_boundary)  call this%put_east(metadata)
     if (.not. this%west_boundary)  call this%put_west(metadata)
 
+<<<<<<< HEAD
     sync images( neighbors )
+=======
+    if (.not. this%north_boundary) call this%retrieve_north_halo
+
+    if (.not. this%south_boundary) then
+        start = lbound(this%data_3d,3)
+        nx = size(this%data_3d,1)
+        this%data_3d(:,:,start:start+halo_size) = this%halo_south_in(:nx,:,1:halo_size+1)
+    endif
+
+    if (.not. this%east_boundary) call this%retrieve_east_halo
+    if (.not. this%west_boundary) call this%retrieve_west_halo
+>>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
     if (.not. this%east_boundary)  call this%retrieve_east_halo(metadata)
     if (.not. this%west_boundary)  call this%retrieve_west_halo(metadata)
@@ -194,8 +233,22 @@ contains
     metadata=.False.
     if (present(do_metadata)) metadata=do_metadata
 
+<<<<<<< HEAD
     if (.not. this%east_boundary)  call this%put_east(metadata)
     if (.not. this%west_boundary)  call this%put_west(metadata)
+=======
+    if (.not. this%east_boundary) then
+        n = ubound(this%data_3d,1)
+        ny = size(this%data_3d,3)
+        this%halo_west_in(1:halo_size+1,:,1:ny)[east_neighbor] = this%data_3d(n-(halo_size)*2:n-(halo_size),:,:)
+    endif
+
+    if (.not. this%west_boundary) then
+        start = lbound(this%data_3d,1)
+        ny = size(this%data_3d,3)
+        this%halo_east_in(1:halo_size,:,1:ny)[west_neighbor] = this%data_3d(start+halo_size+1:start+halo_size*2,:,:)
+    endif
+>>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
     sync images( neighbors )
 

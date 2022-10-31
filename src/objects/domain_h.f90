@@ -23,6 +23,7 @@ module domain_interface
     type(grid_t)         :: grid_monthly, grid_soil
     type(grid_t)         :: grid_snow, grid_snowsoil
     type(grid_t)         :: grid_soilcomp, grid_gecros, grid_croptype
+    type(grid_t)         :: grid_lake , grid_lake_soisno, grid_lake_soi, grid_lake_soisno_1
 
     type(Time_type) :: model_time
 
@@ -89,11 +90,13 @@ module domain_interface
     type(variable_t) :: terrain
     type(variable_t) :: forcing_terrain  ! BK 05/2020: The forcing terrain interpolated 2d to the hi-res grid. In order to calculate difference in slope
     type(variable_t) :: forcing_terrain2 ! test 9-6-2020
-        ! type(variable_t) :: forcing_terrain_u1 ! test 9-6-2020
     type(variable_t) :: u_10m
     type(variable_t) :: v_10m
     type(variable_t) :: coeff_momentum_drag
     type(variable_t) :: coeff_heat_exchange
+    type(variable_t) :: coeff_heat_exchange_3d ! used in YSU pbl
+    integer,allocatable :: kpbl(:,:)  ! used in YSU pbl / BMJ cu
+    type(variable_t) :: hpbl          ! used in YSU pbl /NSAS cu
     type(variable_t) :: surface_rad_temperature
     type(variable_t) :: temperature_2m
     type(variable_t) :: humidity_2m
@@ -124,6 +127,7 @@ module domain_interface
     type(variable_t) :: soil_carbon_stable
     type(variable_t) :: soil_carbon_fast
     type(variable_t) :: roughness_z0
+    type(variable_t) :: albedo
     type(variable_t) :: vegetation_fraction
     type(variable_t) :: vegetation_fraction_max
     type(variable_t) :: vegetation_fraction_out
@@ -220,6 +224,34 @@ module domain_interface
     type(variable_t) :: water_aquifer
     type(variable_t) :: storage_gw
     type(variable_t) :: storage_lake
+    ! lake model vars:
+    type(variable_t) :: lake_depth
+    type(variable_t) :: t_lake3d
+    type(variable_t) :: snl2d
+    type(variable_t) :: t_grnd2d
+    type(variable_t) :: lake_icefrac3d
+    type(variable_t) :: z_lake3d
+    type(variable_t) :: dz_lake3d
+    type(variable_t) :: t_soisno3d
+    type(variable_t) :: h2osoi_ice3d
+    type(variable_t) :: h2osoi_liq3d! liquid water (kg/m2)
+    type(variable_t) :: h2osoi_vol3d! volumetric soil water (0<=h2osoi_vol<=watsat)[m3/m3]
+    type(variable_t) :: z3d ! layer depth for snow & soil (m)
+    type(variable_t) :: dz3d
+    type(variable_t) :: watsat3d
+    type(variable_t) :: csol3d
+    type(variable_t) :: tkmg3d
+    type(variable_t) :: lakemask
+    type(variable_t) :: tksatu3d
+    type(variable_t) :: tkdry3d
+    type(variable_t) :: zi3d
+    type(variable_t) :: savedtke12d
+    type(variable_t) :: lakedepth2d
+    ! diagnostics
+    type(variable_t) :: ivt
+    type(variable_t) :: iwv
+    type(variable_t) :: iwl
+    type(variable_t) :: iwi
 
     ! link effective radius from microphysics to radiation scheme
     type(variable_t) :: re_cloud
@@ -267,6 +299,7 @@ module domain_interface
     real,                       allocatable :: relax_filter_2d(:,:)
     real,                       allocatable :: relax_filter_3d(:,:,:)
     real,                       allocatable :: advection_dz(:,:,:)
+    real,                       allocatable :: rain_fraction(:,:,:) ! monthly varying fraction to multiple precipitation  [-]
     ! store the ratio between the average dz and each grid cells topographically modified dz (for space varying dz only)
     real,                       allocatable :: jacobian(:,:,:)
     real,                       allocatable :: jacobian_u(:,:,:)
@@ -302,9 +335,12 @@ module domain_interface
     real,                       allocatable :: ustar(:,:)
     real,                       allocatable :: znu(:)
     real,                       allocatable :: znw(:)
+<<<<<<< HEAD
     real,                       allocatable :: froude(:,:,:) !Froude number
     real,                       allocatable :: Ri(:,:,:)     !Bulk richardson number
     
+=======
+>>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
     ! these data are stored on the domain wide grid even if this process is only looking at a subgrid
     ! these variables are necessary with linear winds, especially with spatially variable dz, to compute the LUT
     real,                       allocatable :: global_terrain(:,:)

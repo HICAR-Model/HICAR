@@ -145,7 +145,7 @@ contains
                       kVARS%dz_interface, kVARS%skin_temperature,      kVARS%temperature,             kVARS%density,          &
                       kVARS%longwave_cloud_forcing,                    kVARS%land_emissivity,         kVARS%temperature_interface,  &
                       kVARS%cosine_zenith_angle,                       kVARS%shortwave_cloud_forcing, kVARS%tend_swrad,           &
-                      kVARS%cloud_fraction])
+                      kVARS%cloud_fraction, kVARS%albedo])
 
 
         ! List the variables that are required when restarting for the simple radiation code
@@ -237,7 +237,7 @@ contains
         qs = 0
 
         cldfra=0
-        albedo=0.17
+
         F_QI=.false.
         F_QI2 = .false.
         F_QI3 = .false.
@@ -285,10 +285,17 @@ contains
                            options = options,                                    &
                            dt = dt,                                              &
                            ims=ims, ime=ime, jms=jms, jme=jme, kms=kms, kme=kme, &
-                           its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte)
+                           its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte, F_runlw=.True.)
         endif
 
         if (options%physics%radiation==kRA_RRTMG) then
+
+            if (options%lsm_options%monthly_albedo) then
+                ALBEDO = domain%albedo%data_3d(:, domain%model_time%month, :)
+            else
+                ALBEDO = domain%albedo%data_3d(:, 1, :)
+            endif
+
             do j = jms,jme
                 solar_elevation  = calc_solar_elevation(date=domain%model_time, lon=domain%longitude%data_2d, &
                                 j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac)
@@ -338,92 +345,114 @@ contains
                     END IF
                 END IF
 
-                call RRTMG_SWRAD(rthratensw=domain%tend%th_swrad,         &
-!                swupt, swuptc, swuptcln, swdnt, swdntc, swdntcln, &
-!                swupb, swupbc, swupbcln, swdnb, swdnbc, swdnbcln, &
-!                      swupflx, swupflxc, swdnflx, swdnflxc,      &
-                    swdnb = domain%shortwave%data_2d,                     &
-                    swcf = domain%shortwave_cloud_forcing%data_2d,        &
-                    gsw = gsw,                                            &
-                    xtime = 0., gmt = 0.,                                 &  ! not used
-                    xlat = domain%latitude%data_2d,                       &  ! not used
-                    xlong = domain%longitude%data_2d,                     &  ! not used
-                    radt = 0., degrad = 0., declin = 0.,                  &  ! not used
-                    coszr = domain%cosine_zenith_angle%data_2d,           &
-                    julday = 0,                                           &  ! not used
-                    solcon = solar_constant,                              &
-                    albedo = albedo,                                      &
-                    t3d = domain%temperature%data_3d,                     &
-                    t8w = domain%temperature_interface%data_3d,           &
-                    tsk = domain%skin_temperature%data_2d,                &
-                    p3d = domain%pressure%data_3d,                        &
-                    p8w = domain%pressure_interface%data_3d,              &
-                    pi3d = domain%exner%data_3d,                          &
-                    rho3d = domain%density%data_3d,                       &
-                    dz8w = domain%dz_interface%data_3d,                   &
-                    cldfra3d=cldfra,                                      &
-                    !, lradius, iradius,                                  &
-                    is_cammgmp_used = .False.,                            &
-                    r = Rd,                                               &
-                    g = gravity,                                          &
-                    re_cloud = domain%re_cloud%data_3d,                   &
-                    re_ice   = domain%re_ice%data_3d,                     &
-                    re_snow  = domain%re_snow%data_3d,                    &
-                    has_reqc=1,                                           & ! use with icloud > 0
-                    has_reqi=1,                                           & ! use with icloud > 0
-                    has_reqs=1,                                           & ! use with icloud > 0 ! G. Thompson
-                    icloud = options%rad_options%icloud,                  & ! set to nonzero if effective radius is available from microphysics
-                    warm_rain = .False.,                                  & ! when a dding WSM3scheme, add option for .True.
-                    cldovrlp=1,                                           & ! J. Henderson AER: cldovrlp namelist value
-                    !f_ice_phy, f_rain_phy,                               &
-                    xland=real(domain%land_mask),                         &
-                    xice=real(domain%land_mask)*0,                        & ! should add a variable for sea ice fraction
-                    snow=domain%snow_water_equivalent%data_2d,            &
-                    qv3d=domain%water_vapor%data_3d,                      &
-                    qc3d=qc,                                              &
-                    qr3d=domain%rain_mass%data_3d,                        &
-                    qi3d=qi,                                              &
-                    qs3d=qs,                                              &
-                    qg3d=domain%graupel_mass%data_3d,                     &
-                    !o3input, o33d,                                       &
-                    aer_opt=0,                                            &
-                    !aerod,                                               &
-                    no_src = 1,                                           &
-!                   alswvisdir, alswvisdif,                               &  !Zhenxin ssib alb comp (06/20/2011)
-!                   alswnirdir, alswnirdif,                               &  !Zhenxin ssib alb comp (06/20/2011)
-!                   swvisdir, swvisdif,                                   &  !Zhenxin ssib swr comp (06/20/2011)
-!                   swnirdir, swnirdif,                                   &  !Zhenxin ssib swi comp (06/20/2011)
-                    sf_surface_physics=1,                                 &  !Zhenxin
-                    f_qv=f_qv, f_qc=f_qc, f_qr=f_qr,                      &
-                    f_qi=f_qi, f_qs=f_qs, f_qg=f_qg,                      &
-                    !tauaer300,tauaer400,tauaer600,tauaer999,             & ! czhao
-                    !gaer300,gaer400,gaer600,gaer999,                     & ! czhao
-                    !waer300,waer400,waer600,waer999,                     & ! czhao
-!                   aer_ra_feedback,                                      &
-!jdfcz              progn,prescribe,                                      &
-                    calc_clean_atm_diag=0,                                &
-!                    qndrop3d=domain%cloud_number%data_3d,                 &
-                    f_qndrop=f_qndrop,                                    & !czhao
-                    mp_physics=0,                                         & !wang 2014/12
-                    ids=ids, ide=ide, jds=jds, jde=jde, kds=kds, kde=kde, &
-                    ims=ims, ime=ime, jms=jms, jme=jme, kms=kms, kme=kme, &
-                    its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte-1, &
-                    !swupflx, swupflxc,                                   &
-                    !swdnflx, swdnflxc,                                   &
-                    tauaer3d_sw=tauaer_sw,                                & ! jararias 2013/11
-                    ssaaer3d_sw=ssaaer_sw,                                & ! jararias 2013/11
-                    asyaer3d_sw=asyaer_sw,                                &
-!                   swddir = domain%skin_temperature%data_2d,             &
-!                   swddni = domain%skin_temperature%data_2d,             &
-!                   swddif = domain%skin_temperature%data_2d,             & ! jararias 2013/08
-!                   swdownc = domain%skin_temperature%data_2d,            &
-!                   swddnic = domain%skin_temperature%data_2d,            &
-!                   swddirc = domain%skin_temperature%data_2d,            &   ! PAJ
-                    xcoszen = domain%cosine_zenith_angle%data_2d,         &  ! NEED TO CALCULATE THIS.
-                    yr=domain%model_time%year,                            &
-                    julian=domain%model_time%day_of_year(),               &
-                    mp_options=mp_options                               )
-
+                if (.not.options%rad_options%use_simple_sw) then
+                    call RRTMG_SWRAD(rthratensw=domain%tend%th_swrad,         &
+    !                swupt, swuptc, swuptcln, swdnt, swdntc, swdntcln, &
+    !                swupb, swupbc, swupbcln, swdnb, swdnbc, swdnbcln, &
+    !                      swupflx, swupflxc, swdnflx, swdnflxc,      &
+                        swdnb = domain%shortwave%data_2d,                     &
+                        swcf = domain%shortwave_cloud_forcing%data_2d,        &
+                        gsw = gsw,                                            &
+                        xtime = 0., gmt = 0.,                                 &  ! not used
+                        xlat = domain%latitude%data_2d,                       &  ! not used
+                        xlong = domain%longitude%data_2d,                     &  ! not used
+                        radt = 0., degrad = 0., declin = 0.,                  &  ! not used
+                        coszr = domain%cosine_zenith_angle%data_2d,           &
+                        julday = 0,                                           &  ! not used
+                        solcon = solar_constant,                              &
+                        albedo = albedo,                                      &
+                        t3d = domain%temperature%data_3d,                     &
+                        t8w = domain%temperature_interface%data_3d,           &
+                        tsk = domain%skin_temperature%data_2d,                &
+                        p3d = domain%pressure%data_3d,                        &
+                        p8w = domain%pressure_interface%data_3d,              &
+                        pi3d = domain%exner%data_3d,                          &
+                        rho3d = domain%density%data_3d,                       &
+                        dz8w = domain%dz_interface%data_3d,                   &
+                        cldfra3d=cldfra,                                      &
+                        !, lradius, iradius,                                  &
+                        is_cammgmp_used = .False.,                            &
+                        r = Rd,                                               &
+                        g = gravity,                                          &
+                        re_cloud = domain%re_cloud%data_3d,                   &
+                        re_ice   = domain%re_ice%data_3d,                     &
+                        re_snow  = domain%re_snow%data_3d,                    &
+                        has_reqc=1,                                           & ! use with icloud > 0
+                        has_reqi=1,                                           & ! use with icloud > 0
+                        has_reqs=1,                                           & ! use with icloud > 0 ! G. Thompson
+                        icloud = options%rad_options%icloud,                  & ! set to nonzero if effective radius is available from microphysics
+                        warm_rain = .False.,                                  & ! when a dding WSM3scheme, add option for .True.
+                        cldovrlp=1,                                           & ! J. Henderson AER: cldovrlp namelist value
+                        !f_ice_phy, f_rain_phy,                               &
+                        xland=real(domain%land_mask),                         &
+                        xice=real(domain%land_mask)*0,                        & ! should add a variable for sea ice fraction
+                        snow=domain%snow_water_equivalent%data_2d,            &
+                        qv3d=domain%water_vapor%data_3d,                      &
+                        qc3d=qc,                                              &
+                        qr3d=domain%rain_mass%data_3d,                        &
+                        qi3d=qi,                                              &
+                        qs3d=qs,                                              &
+                        qg3d=domain%graupel_mass%data_3d,                     &
+                        !o3input, o33d,                                       &
+                        aer_opt=0,                                            &
+                        !aerod,                                               &
+                        no_src = 1,                                           &
+    !                   alswvisdir, alswvisdif,                               &  !Zhenxin ssib alb comp (06/20/2011)
+    !                   alswnirdir, alswnirdif,                               &  !Zhenxin ssib alb comp (06/20/2011)
+    !                   swvisdir, swvisdif,                                   &  !Zhenxin ssib swr comp (06/20/2011)
+    !                   swnirdir, swnirdif,                                   &  !Zhenxin ssib swi comp (06/20/2011)
+                        sf_surface_physics=1,                                 &  !Zhenxin
+                        f_qv=f_qv, f_qc=f_qc, f_qr=f_qr,                      &
+                        f_qi=f_qi, f_qs=f_qs, f_qg=f_qg,                      &
+                        !tauaer300,tauaer400,tauaer600,tauaer999,             & ! czhao
+                        !gaer300,gaer400,gaer600,gaer999,                     & ! czhao
+                        !waer300,waer400,waer600,waer999,                     & ! czhao
+    !                   aer_ra_feedback,                                      &
+    !jdfcz              progn,prescribe,                                      &
+                        calc_clean_atm_diag=0,                                &
+    !                    qndrop3d=domain%cloud_number%data_3d,                 &
+                        f_qndrop=f_qndrop,                                    & !czhao
+                        mp_physics=0,                                         & !wang 2014/12
+                        ids=ids, ide=ide, jds=jds, jde=jde, kds=kds, kde=kde, &
+                        ims=ims, ime=ime, jms=jms, jme=jme, kms=kms, kme=kme, &
+                        its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte-1, &
+                        !swupflx, swupflxc,                                   &
+                        !swdnflx, swdnflxc,                                   &
+                        tauaer3d_sw=tauaer_sw,                                & ! jararias 2013/11
+                        ssaaer3d_sw=ssaaer_sw,                                & ! jararias 2013/11
+                        asyaer3d_sw=asyaer_sw,                                &
+    !                   swddir = domain%skin_temperature%data_2d,             &
+    !                   swddni = domain%skin_temperature%data_2d,             &
+    !                   swddif = domain%skin_temperature%data_2d,             & ! jararias 2013/08
+    !                   swdownc = domain%skin_temperature%data_2d,            &
+    !                   swddnic = domain%skin_temperature%data_2d,            &
+    !                   swddirc = domain%skin_temperature%data_2d,            &   ! PAJ
+                        xcoszen = domain%cosine_zenith_angle%data_2d,         &  ! NEED TO CALCULATE THIS.
+                        yr=domain%model_time%year,                            &
+                        julian=domain%model_time%day_of_year(),               &
+                        mp_options=mp_options                               )
+                else
+                    call ra_simple(theta = domain%potential_temperature%data_3d,         &
+                                   pii= domain%exner%data_3d,                            &
+                                   qv = domain%water_vapor%data_3d,                      &
+                                   qc = domain%cloud_water_mass%data_3d,                 &
+                                   qs = domain%snow_mass%data_3d                         &
+                                        + domain%cloud_ice_mass%data_3d                  &
+                                        + domain%graupel_mass%data_3d,                   &
+                                   qr = domain%rain_mass%data_3d,                        &
+                                   p =  domain%pressure%data_3d,                         &
+                                   swdown =  domain%shortwave%data_2d,                   &
+                                   lwdown =  domain%longwave%data_2d,                    &
+                                   cloud_cover =  domain%cloud_fraction%data_2d,         &
+                                   lat = domain%latitude%data_2d,                        &
+                                   lon = domain%longitude%data_2d,                       &
+                                   date = domain%model_time,                             &
+                                   options = options,                                    &
+                                   dt = dt,                                              &
+                                   ims=ims, ime=ime, jms=jms, jme=jme, kms=kms, kme=kme, &
+                                   its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte, F_runlw=.False.)
+                endif ! simple SW only
+                
                 call RRTMG_LWRAD(rthratenlw=domain%tend%th_lwrad,                 &
 !                           lwupt, lwuptc, lwuptcln, lwdnt, lwdntc, lwdntcln,     &        !if lwupt defined, all MUST be defined
 !                           lwupb, lwupbc, lwupbcln, lwdnb, lwdnbc, lwdnbcln,     &
@@ -486,10 +515,16 @@ contains
 !                           lwupflx, lwupflxc, lwdnflx, lwdnflxc,                  &
                             read_ghg=options%rad_options%read_ghg                  &
                             )
+                domain%tend_swrad%data_3d = domain%tend%th_swrad
             endif
+<<<<<<< HEAD
             domain%potential_temperature%data_3d = domain%potential_temperature%data_3d+domain%tend%th_lwrad*dt+domain%tend%th_swrad*dt
             domain%temperature%data_3d = domain%potential_temperature%data_3d*domain%exner%data_3d
             domain%tend_swrad%data_3d = domain%tend%th_swrad
+=======
+            domain%potential_temperature%data_3d = domain%potential_temperature%data_3d + domain%tend%th_lwrad*dt + domain%tend%th_swrad*dt
+            domain%temperature%data_3d = domain%potential_temperature%data_3d * domain%exner%data_3d
+>>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
         endif
 
     end subroutine rad
