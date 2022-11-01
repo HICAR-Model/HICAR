@@ -93,7 +93,6 @@ contains
         allocate(temp_list(MAX_NUMBER_FILES))
         
         temp_file = 'tmp_outfiles'//trim(str(this_image()))//'.txt'
-        write(*,*) trim(temp_file)
         cmd_str = 'ls '//trim(this%base_out_file_name)//'*.nc > '//trim(temp_file)
         call system( cmd_str )
         
@@ -105,7 +104,6 @@ contains
             if (error==0) then
                 i=i+1
                 temp_list(i) = trim(file)
-                if (this_image()==29) write(*,*) temp_list(i)
             endif
         enddo
         close(unit)
