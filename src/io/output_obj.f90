@@ -2,6 +2,9 @@ submodule(output_interface) output_implementation
   use output_metadata,          only : get_metadata, get_varindx
   use debug_module,             only : check_ncdf
   use iso_fortran_env,          only : output_unit
+  use time_io,                  only : find_timestep_in_filelist
+  use string,                   only : str
+  use io_routines,              only : io_newunit
 
   implicit none
 
@@ -40,6 +43,80 @@ contains
 
         call this%add_variables(domain%vars_to_out)
         
+    end subroutine init
+    
+    !If this is a restart run, set output counter and filename to pick up
+    !where we left off
+    module subroutine init_restart(this, options, par_comms, out_var_indices)
+        implicit none
+        class(output_t),  intent(inout)  :: this
+        type(options_t),  intent(in)     :: options
+        integer,          intent(in)     :: par_comms, out_var_indices(:)
+        
+        integer                       :: error
+        character(len=MAXFILELENGTH), allocatable :: file_list(:)
+
+        !Expect the worse
+        error = 1
+
+        call get_outputfiles(this,file_list)
+        
+        if (size(file_list) > 0) then
+            !Find output file and step in output filelist
+            this%output_counter = find_timestep_in_filelist(file_list, 'time', options%parameters%start_time,this%output_fn,error=error)
+        endif
+        
+        if (error == 0) then
+            !Open output file, setting out_ncfile_id
+            call open_file(this, this%output_fn, options%parameters%start_time, par_comms, out_var_indices)
+            this%out_ncfile_id = this%active_nc_id
+        else
+            this%output_counter = 1
+            write(this%output_fn, '(A,A,".nc")')    &
+                trim(this%base_out_file_name),   &
+                trim(options%parameters%start_time%as_string(this%file_date_format))
+        endif
+
+    end subroutine init_restart
+    
+    subroutine get_outputfiles(this,file_list)
+        implicit none
+        class(output_t),  intent(in)   :: this
+        character(len=*), allocatable, intent(inout):: file_list(:)
+        
+        integer :: i, error, nfiles, unit
+        character(len=MAXFILELENGTH)  :: file
+        character(len=MAXFILELENGTH), allocatable :: temp_list(:)
+        character(len=kMAX_FILE_LENGTH) :: temp_file
+        character(len=MAXFILELENGTH) :: cmd_str
+        
+        allocate(temp_list(MAX_NUMBER_FILES))
+        
+        temp_file = 'tmp_outfiles'//trim(str(this_image()))//'.txt'
+        write(*,*) trim(temp_file)
+        cmd_str = 'ls '//trim(this%base_out_file_name)//'*.nc > '//trim(temp_file)
+        call system( cmd_str )
+        
+        open( io_newunit(unit), file = trim(temp_file) )
+        i=0
+        error=0
+        do while (error==0)
+            read(unit, '(A)', iostat=error) file
+            if (error==0) then
+                i=i+1
+                temp_list(i) = trim(file)
+                if (this_image()==29) write(*,*) temp_list(i)
+            endif
+        enddo
+        close(unit)
+        
+        cmd_str = 'rm '//trim(temp_file)
+        call system( cmd_str )
+        
+        nfiles = i
+        allocate(file_list(nfiles))
+        file_list(1:nfiles) = temp_list(1:nfiles)
+        deallocate(temp_list)
     end subroutine
 
     module subroutine set_attrs(this, domain)
@@ -78,14 +155,16 @@ contains
 
 
         !Check if we should change the file
-        if (this%output_counter > this%output_count .and. this%out_ncfile_id > 0) then
+        if (this%output_counter > this%output_count) then
             write(this%output_fn, '(A,A,".nc")')    &
                 trim(this%base_out_file_name),   &
                 trim(time%as_string(this%file_date_format))
 
             this%output_counter = 1
-            call check_ncdf(nf90_close(this%out_ncfile_id), "Closing output file ")
-            this%out_ncfile_id = -1
+            if (this%out_ncfile_id > 0) then
+                call check_ncdf(nf90_close(this%out_ncfile_id), "Closing output file ")
+                this%out_ncfile_id = -1
+            endif
         endif
 
         this%active_nc_id = this%out_ncfile_id
@@ -103,14 +182,18 @@ contains
         
         !In case we had creating set to true, set to false
         this%creating = .false.
-
         
         this%active_nc_id = -1
         
-        if (this%restart_counter == this%restart_count) then
+        if (this%restart_counter > this%restart_count) then
+            !Close output file to force buffered data to be written to disk.
+            !If the user wants to use the restart file later, this is necesarry 
+            !For writing to the output file again
+            
             call check_ncdf(nf90_close(this%out_ncfile_id), "Closing output file ")
             this%out_ncfile_id = -1
-            call save_rst_file(this, time, par_comms, rst_var_indices)     
+
+            call save_rst_file(this, time, par_comms, rst_var_indices)   
             this%restart_counter = 1
         else
             this%restart_counter = this%restart_counter+1
