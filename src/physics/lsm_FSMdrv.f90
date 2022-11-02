@@ -49,7 +49,9 @@ module module_sf_FSMdrv
       Ds,                &
       fsnow,             &
       Nsnow,             &
-      Tsoil               
+      Tsoil,             &
+      albs,              &
+      theta
       
    !use land_surface,   only : windspd,current_snow, SNOWBL, current_rain,snow_bucket
    !use land_surface,   only : ids,ide,jds,jde,kds,kde ! Domain dimensions
@@ -124,6 +126,28 @@ contains
         !if (this_image()==1) write(*,*) "  ********DAY = ", domain%model_time%day
         !if (this_image()==1) write(*,*) "  ********MINUTE = ", domain%model_time%minute
         !if (this_image()==1) write(*,*) "  ********SECOND = ", domain%model_time%second
+        
+        !! MJ added this to read while we use restart file:
+        if (options%parameters%restart) then
+            !! giving feedback to HICAR
+            Tsrf = domain%skin_temperature%data_2d(its:ite,jts:jte)
+            albs = domain%albs%data_2d(its:ite,jts:jte)
+            fsnow = domain%fsnow%data_2d(its:ite,jts:jte)
+            Nsnow = domain%Nsnow%data_2d(its:ite,jts:jte)                        
+            !!
+            do i=1,3
+                 Tsnow(i,:,:) = domain%Tsnow%data_3d(its:ite,i,jts:jte)
+                 Sice(i,:,:) = domain%Sice%data_3d(its:ite,i,jts:jte)
+                 Sliq(i,:,:) = domain%Sliq%data_3d(its:ite,i,jts:jte)
+                 Ds(i,:,:) = domain%Ds%data_3d(its:ite,i,jts:jte)
+            enddo
+            do i=1,4
+                Tsoil(i,:,:) = domain%soil_temperature%data_3d(its:ite,i,jts:jte)
+                theta(i,:,:) = domain%soil_water_content%data_3d(its:ite,i,jts:jte)
+            enddo
+        endif
+        
+        
         !SYNC ALL
     end subroutine lsm_FSM_init
 
@@ -249,6 +273,7 @@ contains
         enddo
         domain%fsnow%data_2d(its:ite,jts:jte)=fsnow
         domain%Nsnow%data_2d(its:ite,jts:jte)=Nsnow
+        domain%albs%data_2d(its:ite,jts:jte)=albs
         !!
         !SYNC ALL  
     end subroutine lsm_FSM

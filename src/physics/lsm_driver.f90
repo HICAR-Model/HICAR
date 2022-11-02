@@ -220,7 +220,7 @@ contains
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
                          kVARS%snow_height,                                                                             &  ! BK 2020/10/26
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
-                         kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%veg_type,		&
+                         kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0,                     &
                          kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow ])
         endif
 
@@ -565,10 +565,10 @@ contains
 
         allocate(Zs(num_soil_layers))
         allocate(DZs(num_soil_layers))
-        DZs = [0.1,0.3,0.6,1.0]
-        if (options%physics%landsurface==kLSM_FSM) then !! MJ added to adapt with FSM for the soil layer thickness
+        !DZs = [0.1,0.3,0.6,1.0]
+        !if (options%physics%landsurface==kLSM_FSM) then !! MJ added to adapt with FSM for the soil layer thickness
             DZs = [0.1,0.2,0.4,0.8]
-        endif
+        !endif
         Zs(1) = DZs(1)/2
         do i = 2,num_soil_layers
             Zs(i) = Zs(i-1) + DZs(i)/2 + DZs(i-1)/2

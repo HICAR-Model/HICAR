@@ -2002,7 +2002,7 @@ contains
             var%unlimited_dim=.True.
             var%dim_len(3)  = kSOIL_GRID_Z
             var%attributes  = [attribute_t("standard_name", "moisture_content_of_soil_layer"),      &
-                               attribute_t("units",         "kg m-2"),                              &
+                               attribute_t("units",         "m3 m-3"),                              &
                                attribute_t("coordinates",   "lat lon")]
         end associate
         !>------------------------------------------------------------
