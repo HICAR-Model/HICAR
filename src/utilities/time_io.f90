@@ -166,6 +166,120 @@ contains
 
     end function hour_from_units
 
+    function find_timestep_in_filelist(filelist, time_var, time, filename, error) result(step)
+        implicit none
+        character(len=*),  intent(in) :: filelist(:)
+        character(len=*),  intent(in) :: time_var
+        type(Time_type),   intent(in) :: time
+        character(len=*),  intent(inout), optional :: filename
+        integer,           intent(inout), optional :: error
+        integer :: step
+
+        type(Time_type), allocatable :: times_in_file_up(:), times_in_file_down(:)
+        type(time_delta_t) :: max_dt
+        integer :: i, n_t_down, n_t_up, nup, ndown, nup_o, ndown_o
+        logical :: found
+
+        call max_dt%set(seconds=1.0)
+        if (present(error)) error=0
+        
+        step = -1
+        found = .False.
+        
+        nup = size(filelist)
+        ndown=1
+        ndown_o = ndown
+        nup_o = nup
+
+        call read_times(filelist(ndown), time_var, times_in_file_down)
+        call read_times(filelist(nup), time_var, times_in_file_up)
+
+
+        do while(.not.(found))
+            ! read the times for all timesteps in the specified file
+            if (.not.(ndown==ndown_o)) call read_times(filelist(ndown), time_var, times_in_file_down)
+
+            n_t_down  = size(times_in_file_down)
+            ! loop through times looking for a time that matches the input time to within
+            ! a specified maximum delta t
+            do i = 1, n_t_down
+                if (.not.found) then
+                    if (times_in_file_down(i)%equals(time, precision=max_dt)) then
+                        step = i
+                        found=.True.
+                        filename = filelist(ndown)
+                    elseif (i > 1) then
+                        if ((times_in_file_down(i) > time) .and. (times_in_file_down(i-1) < time)) then
+                            step = i-1
+                            found=.True.
+                            filename = filelist(ndown)
+                        endif
+                    endif
+                endif
+            enddo
+                
+            ! read the times for all timesteps in the specified file
+            if (.not.(nup==nup_o)) call read_times(filelist(nup), time_var, times_in_file_up)
+
+            n_t_up  = size(times_in_file_up)
+            ! loop through times looking for a time that matches the input time to within
+            ! a specified maximum delta t
+            do i = 1, n_t_up
+                if (.not.found) then
+                    if (times_in_file_up(i)%equals(time, precision=max_dt)) then
+                        step = i
+                        found=.True.
+                        filename = filelist(nup)
+                    elseif (i > 1) then
+                        if ((times_in_file_up(i) > time) .and. (times_in_file_up(i-1) < time)) then
+                            step = i-1
+                            found=.True.
+                            filename = filelist(nup)
+                        endif
+                    endif
+                endif
+            enddo
+            
+            if (.not.found) then
+                !Either it is bounded
+                if (times_in_file_down(n_t_down) < time .and. times_in_file_up(1) > time) then
+                    !If bounded, save these positions
+                    ndown_o = ndown
+                    nup_o = nup
+                    !Advance ndown by half of distance between nup and ndown
+                    ndown = ndown + nint((nup-ndown)/2.0)
+                ! or we overshot (since on the bounded condition we advance up)
+                elseif(times_in_file_down(1) > time .and. times_in_file_up(1) > time) then
+                    !set upper bound to former lower bound
+                    nup = ndown
+                    times_in_file_up = times_in_file_down
+                    nup_o = nup
+                    !Set lower bound to last bounding lower bound
+                    ndown = ndown_o
+                    ndown_o = 0
+                ! only other option is that the requested time is not included in the filelist
+                else
+                    if (present(error)) then
+                        error = 1
+                        found = .True.
+                    else
+                        write(*,*) "ERROR: Unable to find requested date in filelist."
+                        write(*,*) "First filename: ",trim(filelist(1))
+                        write(*,*) "  time  : ",trim(time%as_string())
+                        stop "Unable to find date in file"
+                    endif
+                endif
+            endif
+            
+            !Handle the limiting case
+            if (ndown==nup) ndown=nup-1
+        enddo
+        
+        deallocate(times_in_file_down)
+        deallocate(times_in_file_up)
+
+    end function find_timestep_in_filelist
+
 
     subroutine read_times(filename, varname, times, timezone_offset, curstep)
         implicit none
