@@ -208,7 +208,7 @@ contains
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%ustar,        &
                          kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg,                                        &
                          kVARS%veg_type, kVARS%soil_type, kVARS%land_mask,												&
-			 kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow ])
+			 kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow, kVARS%albs ])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
 
@@ -221,7 +221,7 @@ contains
                          kVARS%snow_height,                                                                             &  ! BK 2020/10/26
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0,                     &
-                         kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow ])
+                         kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow, kVARS%albs  ])
         endif
 
        if (options%physics%watersurface > 1) then
