@@ -18,7 +18,7 @@ submodule(reader_interface) reader_implementation
   use variable_interface,     only : variable_t
   use timer_interface,    only : timer_t
 
-  use time_io,                only : read_times, find_timestep_in_file
+  use time_io,                only : read_times, find_timestep_in_filelist
   implicit none
 
 contains
@@ -213,21 +213,18 @@ contains
         character(len=*),   intent(in) :: file_list(:)
         character(len=*),   intent(in) :: time_var
 
+        character(len=MAXFILELENGTH) :: filename
+        integer          :: error, n
 
-        integer :: error
-
-        ! these are module variables that should be correctly set when the subroutine returns
-        this%curstep = 1
-        this%curfile = 0
-        error = 1
-        do while ( (error/=0) .and. (this%curfile < size(file_list)) )
-            this%curfile = this%curfile + 1
-            this%curstep = find_timestep_in_file(file_list(this%curfile), time_var, time, error=error)
-        enddo
+        this%curstep = find_timestep_in_filelist(file_list, time_var, time, filename, error)
 
         if (error==1) then
             stop "Ran out of files to process while searching for matching time variable!"
         endif
+        
+        do n = 1,size(file_list)
+            if (trim(file_list(n))==trim(filename)) this%curfile = n
+        enddo
 
     end subroutine
 

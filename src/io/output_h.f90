@@ -90,6 +90,7 @@ module output_interface
       procedure, public  :: close_files
 
       procedure, public  :: init
+      procedure, public  :: init_restart
       procedure, private :: increase_var_capacity
       procedure, private :: add_to_output
       procedure, private :: add_variables
@@ -108,6 +109,17 @@ module output_interface
         type(options_t),  intent(in)     :: options
         integer,          intent(in)     :: its, ite, kts, kte, jts, jte
 
+      end subroutine
+
+      !>----------------------------------------------------------
+      !! Initialize the output counter and file after a restart
+      !!
+      !!----------------------------------------------------------
+      module subroutine init_restart(this, options, par_comms, out_var_indices)
+        implicit none
+        class(output_t),  intent(inout)  :: this
+        type(options_t),  intent(in)     :: options
+        integer,          intent(in)     :: par_comms, out_var_indices(:)
       end subroutine
 
       !>----------------------------------------------------------

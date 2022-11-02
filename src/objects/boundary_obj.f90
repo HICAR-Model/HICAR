@@ -8,7 +8,7 @@
 submodule(boundary_interface) boundary_implementation
     use array_utilities,        only : interpolate_in_z
     use io_routines,            only : io_getdims, io_read, io_maxDims, io_variable_is_present, io_write
-    use time_io,                only : read_times, find_timestep_in_file
+    use time_io,                only : read_times, find_timestep_in_filelist
     use string,                 only : str
     use mod_atm_utilities,      only : rh_to_mr, compute_3d_p, compute_3d_z, exner_function
     use geo,                    only : standardize_coordinates
@@ -304,25 +304,17 @@ contains
     !!
     !! Reads the time_var from each file successively until it finds a timestep that matches time
     !!------------------------------------------------------------
-    subroutine set_firstfile_firststep(bc, time, file_list, time_var)
+    subroutine set_firstfile_firststep(this, time, file_list, time_var)
         implicit none
-        type(boundary_t),   intent(inout) :: bc
+        class(boundary_t),  intent(inout) :: this
         type(Time_type),    intent(in) :: time
         character(len=*),   intent(in) :: file_list(:)
         character(len=*),   intent(in) :: time_var
 
+        character(len=MAXFILELENGTH) :: filename
+        integer          :: error, n
 
-        integer :: error, i
-
-        ! these are module variables that should be correctly set when the subroutine returns
-        bc%firststep = 1
-        error = 1
-        i = 0
-        do while ( (error/=0) .and. (i < size(file_list)) )
-            i = i + 1
-            bc%firstfile = file_list(i)
-            bc%firststep = find_timestep_in_file(bc%firstfile, time_var, time, error=error)
-        enddo
+        this%firststep = find_timestep_in_filelist(file_list, time_var, time, this%firstfile, error)
 
         if (error==1) then
             stop "Ran out of files to process while searching for matching time variable!"
