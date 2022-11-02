@@ -2525,7 +2525,7 @@ contains
         if (associated(this%Tsnow%data_3d)) this%Tsnow%data_3d=273.15
         if (associated(this%Sice%data_3d)) this%Sice%data_3d=0.
         if (associated(this%Sliq%data_3d)) this%Sliq%data_3d=0.
-        if (associated(this%albs%data_2d)) this%albs%data_2d=0.
+        if (associated(this%albs%data_2d)) this%albs%data_2d=1.
         if (associated(this%Ds%data_3d)) this%Ds%data_3d=0.
         if (associated(this%fsnow%data_2d)) this%fsnow%data_2d=0.
         if (associated(this%Nsnow%data_2d)) this%Nsnow%data_2d=0.
