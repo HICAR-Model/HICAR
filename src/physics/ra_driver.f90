@@ -115,7 +115,7 @@ contains
         ! List the variables that are required to be allocated for the simple radiation code
         call options%alloc_vars( &
                      [kVARS%pressure,    kVARS%potential_temperature,   kVARS%exner,        kVARS%cloud_fraction,   &
-                      kVARS%shortwave,   kVARS%longwave,  kVARS%graupel_in_air])
+                      kVARS%shortwave,   kVARS%longwave])
 
         ! List the variables that are required to be advected for the simple radiation code
         call options%advect_vars( &
@@ -151,14 +151,12 @@ contains
         ! List the variables that are required when restarting for the simple radiation code
         call options%restart_vars( &
                      [kVARS%pressure,     kVARS%pressure_interface,    kVARS%potential_temperature,   kVARS%exner,            &
-                      kVARS%water_vapor,  kVARS%cloud_water,           kVARS%rain_in_air,             kVARS%snow_in_air,      &
-                      kVARS%shortwave,    kVARS%longwave,              kVARS%cloud_ice,               kVARS%graupel_in_air,   &
+                      kVARS%water_vapor,  kVARS%shortwave,    kVARS%longwave,                                                 &          
                       kVARS%re_cloud,     kVARS%re_ice,                kVARS%re_snow,                 kVARS%out_longwave_rad, &
                       kVARS%snow_water_equivalent,                                                                            &
                       kVARS%dz_interface, kVARS%skin_temperature,      kVARS%temperature,             kVARS%density,          &
                       kVARS%longwave_cloud_forcing,                    kVARS%land_emissivity, kVARS%temperature_interface,    &
-                      kVARS%cosine_zenith_angle,                       kVARS%shortwave_cloud_forcing, kVars%tend_swrad          &
-                      ] )
+                      kVARS%cosine_zenith_angle,                       kVARS%shortwave_cloud_forcing, kVars%tend_swrad] )
 
     end subroutine ra_rrtmg_var_request
 
@@ -184,7 +182,7 @@ contains
         real :: gridkm
         integer :: i, k
         real, allocatable:: t_1d(:), p_1d(:), Dz_1d(:), qv_1d(:), qc_1d(:), qi_1d(:), qs_1d(:), cf_1d(:)
-        real, allocatable :: qc(:,:,:),qi(:,:,:), qs(:,:,:), cldfra(:,:,:)
+        real, allocatable :: qc(:,:,:),qi(:,:,:), qs(:,:,:), qg(:,:,:), cldfra(:,:,:)
         real, allocatable :: xland(:,:)
 
         logical :: f_qr, f_qc, f_qi, F_QI2, F_QI3, f_qs, f_qg, f_qv, f_qndrop
@@ -222,6 +220,7 @@ contains
         allocate(qc(ims:ime,kms:kme,jms:jme))
         allocate(qi(ims:ime,kms:kme,jms:jme))
         allocate(qs(ims:ime,kms:kme,jms:jme))
+        allocate(qg(ims:ime,kms:kme,jms:jme))
         allocate(cldfra(ims:ime,kms:kme,jms:jme))
         allocate(xland(ims:ime,jms:jme))
 
@@ -231,11 +230,12 @@ contains
         allocate(gsw(ims:ime,jms:jme))
 
         ! Note, need to link NoahMP to update albedo
-
+        
         qc = 0
         qi = 0
         qs = 0
-
+        qg = 0
+        
         cldfra=0
         albedo=0.17
         F_QI=.false.
@@ -253,11 +253,12 @@ contains
         F_QR=associated(domain%rain_mass%data_3d )
         F_QS=associated(domain%snow_mass%data_3d )
         F_QV=associated(domain%water_vapor%data_3d )
-        !F_QG=associated(domain%graupel_mass%data_3d )
+        F_QG=associated(domain%graupel_mass%data_3d )
         F_QNDROP=associated(domain%cloud_number%data_3d)
         F_QI2=associated(domain%ice2_mass%data_3d)
         F_QI3=associated(domain%ice3_mass%data_3d)
 
+        if (F_QG) qg(:,:,:) = domain%graupel_mass%data_3d
         if (F_QC) qc(:,:,:) = domain%cloud_water_mass%data_3d
         if (F_QI) qi(:,:,:) = domain%cloud_ice_mass%data_3d
         if (F_QI2) qi(:,:,:) = qi + domain%ice2_mass%data_3d
@@ -270,10 +271,8 @@ contains
             call ra_simple(theta = domain%potential_temperature%data_3d,         &
                            pii= domain%exner%data_3d,                            &
                            qv = domain%water_vapor%data_3d,                      &
-                           qc = domain%cloud_water_mass%data_3d,                 &
-                           qs = domain%snow_mass%data_3d                         &
-                                + domain%cloud_ice_mass%data_3d                  &
-                                + domain%graupel_mass%data_3d,                   &
+                           qc = qc,                 &
+                           qs = qs + qi + qg,                                    &
                            qr = domain%rain_mass%data_3d,                        &
                            p =  domain%pressure%data_3d,                         &
                            swdown =  domain%shortwave%data_2d,                   &
@@ -315,9 +314,9 @@ contains
                                     p_1d(k) = domain%pressure%data_3d(i,k,j) !p(i,k,j)
                                     t_1d(k) = domain%temperature%data_3d(i,k,j)
                                     qv_1d(k) = domain%water_vapor%data_3d(i,k,j)
-                                    qc_1d(k) = domain%cloud_water_mass%data_3d(i,k,j)
-                                    qi_1d(k) = domain%cloud_ice_mass%data_3d(i,k,j)
-                                    qs_1d(k) = domain%snow_mass%data_3d(i,k,j)
+                                    qc_1d(k) = qc(i,k,j)
+                                    qi_1d(k) = qi(i,k,j)
+                                    qs_1d(k) = qs(i,k,j)
                                     Dz_1d(k) = domain%dz_interface%data_3d(i,k,j)
                                     cf_1d(k) = cldfra(i,k,j)
                                 ENDDO
@@ -384,7 +383,7 @@ contains
                     qr3d=domain%rain_mass%data_3d,                        &
                     qi3d=qi,                                              &
                     qs3d=qs,                                              &
-                    qg3d=domain%graupel_mass%data_3d,                     &
+                    qg3d=qg,                                              &
                     !o3input, o33d,                                       &
                     aer_opt=0,                                            &
                     !aerod,                                               &
@@ -456,7 +455,7 @@ contains
                             qr3d=domain%rain_mass%data_3d,                        &
                             qi3d=qi,                                              &
                             qs3d=qs,                                              &
-                            qg3d=domain%graupel_mass%data_3d,                     &
+                            qg3d=qg,                                              &
 !                           o3input, o33d,                                        &
                             f_qv=f_qv, f_qc=f_qc, f_qr=f_qr,                      &
                             f_qi=f_qi, f_qs=f_qs, f_qg=f_qg,                      &
