@@ -183,7 +183,7 @@ contains
         
         this%active_nc_id = -1
         
-        if (this%restart_counter > this%restart_count) then
+        if (this%restart_counter == (this%restart_count+1)) then
             !Close output file to force buffered data to be written to disk.
             !If the user wants to use the restart file later, this is necesarry 
             !For writing to the output file again
