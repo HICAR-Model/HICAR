@@ -371,7 +371,7 @@ contains
         ims = lbound(w,1)
         ime = ubound(w,1)
         kms = lbound(w,2)
-        k_cor_top = 30 !Arbitrary at the moment, but high enough to ensure good vertical coverage
+        k_cor_top = min(30,ubound(w,2)) !Arbitrary at the moment, but high enough to ensure good vertical coverage
         jms = lbound(w,3)
         jme = ubound(w,3)
         

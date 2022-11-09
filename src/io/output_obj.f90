@@ -193,11 +193,9 @@ contains
 
             call save_rst_file(this, time, par_comms, rst_var_indices)   
             this%restart_counter = 1
-        else
-            this%restart_counter = this%restart_counter+1
         endif
-        
-        this%output_counter = this%output_counter + 1
+        this%restart_counter = this%restart_counter+ 1
+        this%output_counter  = this%output_counter + 1
 
     end subroutine
     
