@@ -48,7 +48,7 @@ module land_surface
     use io_routines,          only : io_write
 
     use module_sf_FSMdrv,   only : lsm_FSM_init, lsm_FSM,Esrf_,Tsrf, KH_ !! MJ added for for FSM
-    !use module_sf_FSMdrv,   only : current_rain_FSM, current_snow_FSM, windspd_FSM !! MJ added for for FSM
+    use module_sf_FSMdrv,   only : snowfall_sum, rainfall_sum, Roff_sum, meltflux_out_sum !! MJ added for for FSM
 
     implicit none
 
@@ -94,6 +94,7 @@ module land_surface
     integer :: num_soil_layers,ISURBAN,ISICE,ISWATER
     integer :: exchange_term
     real*8  :: last_model_time
+    real*8  :: Delta_t !! MJ added to detect the time for outputting 
 
     !Noah-MP specific
     integer :: IDVEG,IOPT_CRS,IOPT_BTR,IOPT_RUN,IOPT_SFC,IOPT_FRZ,IOPT_INF,IOPT_RAD,IOPT_ALB,IOPT_SNF,IOPT_TBOT
@@ -207,8 +208,10 @@ contains
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%ustar,        &
                          kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg,                                        &
-                         kVARS%veg_type, kVARS%soil_type, kVARS%land_mask,												&
-			 kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow, kVARS%albs ])
+                         kVARS%veg_type, kVARS%soil_type, kVARS%land_mask,                                              &
+                         kVARS%runoff_tstep, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow, kVARS%albs, &
+                         kVARS%rainfall_tstep, kVARS%snowfall_tstep, kVARS%meltflux_out_tstep, kVARS%slope, kVARS%slope_angle, kVARS%aspect_angle, &
+                         kVARS%svf, kVARS%hlm, kVARS%shortwave_direct, kVARS%shortwave_diffuse])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
 
@@ -221,7 +224,7 @@ contains
                          kVARS%snow_height,                                                                             &  ! BK 2020/10/26
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0,                     &
-                         kVARS%runoff, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow, kVARS%albs  ])
+                         kVARS%runoff_tstep, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow, kVARS%albs  ])
         endif
 
        if (options%physics%watersurface > 1) then
@@ -1430,8 +1433,9 @@ contains
                 rain_bucket = domain%precipitation_bucket
                 SNOWBL = domain%accumulated_snowfall%data_2d
                 snow_bucket = domain%snowfall_bucket
-                !!                               
+                !!                                              
             endif
+            
             !!
             !! MJ moved water model here at the end...since FSM considers all pixels non-water
             if (options%physics%watersurface==kWATER_SIMPLE) then
@@ -1449,6 +1453,7 @@ contains
                                   QFX,                                  &
                                   domain%skin_temperature%data_2d)
             endif
+            
             !!
             if (options%physics%landsurface > kLSM_BASIC .and. options%physics%landsurface/=kLSM_FSM) then !! MJ uses different func for FSM as we do not have vegetaion
                 ! accumulate soil moisture over the entire column
@@ -1477,6 +1482,24 @@ contains
 
             endif
             !!
+        endif
+        
+        !! this is to aggregate thge vars such as runoff, meltout, snowfall and rainfall per output interval only FSM 
+        if (options%physics%landsurface==kLSM_FSM) then 
+            Delta_t=mod(domain%model_time%seconds(),options%io_options%out_dt)
+            if ( abs(options%io_options%out_dt-(Delta_t+dt)) <= 1.e-3 ) then
+                if (this_image()==1) write(*,*) "reset-----------t,t+dt,mod", Delta_t,Delta_t+dt
+                !!
+                domain%rainfall_tstep%data_2d(its:ite,jts:jte)=rainfall_sum
+                domain%snowfall_tstep%data_2d(its:ite,jts:jte)=snowfall_sum
+                domain%runoff_tstep%data_2d(its:ite,jts:jte)=Roff_sum
+                domain%meltflux_out_tstep%data_2d(its:ite,jts:jte)=meltflux_out_sum
+                !! reseting the container to zero for next output interval
+                snowfall_sum = 0.
+                rainfall_sum = 0.
+                Roff_sum = 0.
+                meltflux_out_sum = 0.
+            endif
         endif
         
         if (options%physics%landsurface>0) then

@@ -279,7 +279,7 @@ contains
         if (0<var_list( kVARS%temperature_interface) )      call this%vars_to_out%add_var( trim( get_varname( kVARS%temperature_interface        )), this%temperature_interface)
         if (0<var_list( kVARS%tend_swrad) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%tend_swrad                   )), this%tend_swrad)
         !! MJ added for FSM:
-        if (0<var_list( kVARS%runoff) )                     call this%vars_to_out%add_var( trim( get_varname( kVARS%runoff                       )), this%runoff)
+        if (0<var_list( kVARS%runoff_tstep) )               call this%vars_to_out%add_var( trim( get_varname( kVARS%runoff_tstep                 )), this%runoff_tstep)
         if (0<var_list( kVARS%snowdepth) )                  call this%vars_to_out%add_var( trim( get_varname( kVARS%snowdepth                    )), this%snowdepth)
         if (0<var_list( kVARS%Tsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%Tsnow                        )), this%Tsnow)
         if (0<var_list( kVARS%Sice) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%Sice                         )), this%Sice)
@@ -288,6 +288,15 @@ contains
         if (0<var_list( kVARS%Ds) )                         call this%vars_to_out%add_var( trim( get_varname( kVARS%Ds                           )), this%Ds)
         if (0<var_list( kVARS%fsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%fsnow                        )), this%fsnow)
         if (0<var_list( kVARS%Nsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%Nsnow                        )), this%Nsnow)        
+        !!
+        if (0<var_list( kVARS%rainfall_tstep) )             call this%vars_to_out%add_var( trim( get_varname( kVARS%rainfall_tstep               )), this%rainfall_tstep)        
+        if (0<var_list( kVARS%snowfall_tstep) )             call this%vars_to_out%add_var( trim( get_varname( kVARS%snowfall_tstep               )), this%snowfall_tstep)        
+        if (0<var_list( kVARS%meltflux_out_tstep) )         call this%vars_to_out%add_var( trim( get_varname( kVARS%meltflux_out_tstep           )), this%meltflux_out_tstep)        
+        if (0<var_list( kVARS%slope) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%slope                        )), this%slope)        
+        if (0<var_list( kVARS%slope_angle) )                call this%vars_to_out%add_var( trim( get_varname( kVARS%slope_angle                  )), this%slope_angle)        
+        if (0<var_list( kVARS%aspect_angle) )               call this%vars_to_out%add_var( trim( get_varname( kVARS%aspect_angle                 )), this%aspect_angle)        
+        if (0<var_list( kVARS%svf) )                        call this%vars_to_out%add_var( trim( get_varname( kVARS%svf                          )), this%svf)        
+        if (0<var_list( kVARS%hlm) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%hlm                           )), this%hlm)        
 
         if (options%parameters%batched_exch) then
             allocate(this%north_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
@@ -884,19 +893,27 @@ contains
         if (0<opt%vars_to_allocate( kVARS%znu) )                        allocate(this%znu(kms:kme),   source=0.0)
         if (0<opt%vars_to_allocate( kVARS%znw) )                        allocate(this%znw(kms:kme),   source=0.0)
 
-		!! MJ added for needed new vars for FSM
-		!! note that, in lsm_driver, it is alreaddy decieded if we need these vars or not..so it should be here..
-        !if (0<opt%vars_to_allocate( kVARS%FSM_slopemu) )				allocate(this%FSM_slopemu                (ims:ime, jms:jme))!,          source=0.0)        
-        if (0<opt%vars_to_allocate( kVARS%runoff) )      				call setup(this%runoff,    	this%grid2d)        
-        if (0<opt%vars_to_allocate( kVARS%snowdepth) )      	  		call setup(this%snowdepth,  this%grid2d)        
-        if (0<opt%vars_to_allocate( kVARS%Tsnow) )      	  			call setup(this%Tsnow,    	this%grid_snow)        
-        if (0<opt%vars_to_allocate( kVARS%Sice) )      	  				call setup(this%Sice,    	this%grid_snow)        
-        if (0<opt%vars_to_allocate( kVARS%Sliq) )      	  				call setup(this%Sliq,    	this%grid_snow)        
-        if (0<opt%vars_to_allocate( kVARS%albs) )      	  				call setup(this%albs,    	this%grid2d)        
-        if (0<opt%vars_to_allocate( kVARS%Ds) )      	  				call setup(this%Ds,    	    this%grid_snow)        
-        if (0<opt%vars_to_allocate( kVARS%fsnow) )      	  			call setup(this%fsnow,    	this%grid2d)        
-        if (0<opt%vars_to_allocate( kVARS%Nsnow) )      	  			call setup(this%Nsnow,    	this%grid2d)        
-
+        !! MJ added for needed new vars for FSM
+        !! note that, in lsm_driver, it is alreaddy decieded if we need these vars or not..so it should be here..
+        !if (0<opt%vars_to_allocate( kVARS%FSM_slopemu) )               allocate(this%FSM_slopemu                (ims:ime, jms:jme))!,          source=0.0)        
+        if (0<opt%vars_to_allocate( kVARS%runoff_tstep) )               call setup(this%runoff_tstep,     this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%snowdepth) )                  call setup(this%snowdepth,  this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%Tsnow) )                      call setup(this%Tsnow,      this%grid_snow)        
+        if (0<opt%vars_to_allocate( kVARS%Sice) )                       call setup(this%Sice,       this%grid_snow)        
+        if (0<opt%vars_to_allocate( kVARS%Sliq) )                       call setup(this%Sliq,       this%grid_snow)        
+        if (0<opt%vars_to_allocate( kVARS%albs) )                       call setup(this%albs,       this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%Ds) )                         call setup(this%Ds,         this%grid_snow)        
+        if (0<opt%vars_to_allocate( kVARS%fsnow) )                      call setup(this%fsnow,      this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%Nsnow) )                      call setup(this%Nsnow,      this%grid2d)        
+        !!
+        if (0<opt%vars_to_allocate( kVARS%rainfall_tstep) )             call setup(this%rainfall_tstep,     this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%snowfall_tstep) )             call setup(this%snowfall_tstep,     this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%meltflux_out_tstep) )         call setup(this%meltflux_out_tstep, this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%slope) )                      call setup(this%slope,              this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%slope_angle) )                call setup(this%slope_angle,        this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%aspect_angle) )               call setup(this%aspect_angle,       this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%svf) )                        call setup(this%svf,                this%grid2d) 
+        if (0<opt%vars_to_allocate( kVARS%hlm) )                        call setup(this%hlm,                this%grid_hlm) 
     end subroutine
 
     !> -------------------------------
@@ -2498,8 +2515,8 @@ contains
         if (associated(this%snow_albedo_prev%data_2d)) this%snow_albedo_prev%data_2d=0.65
         if (associated(this%storage_lake%data_2d)) this%storage_lake%data_2d=0
 
-		call read_land_variables_FSM(this, options)
-		!stop
+        call read_land_variables_FSM(this, options)
+        !stop
     end subroutine read_land_variables
 
 
@@ -2514,23 +2531,81 @@ contains
         class(domain_t), intent(inout)  :: this
         type(options_t), intent(in)     :: options
 
-        integer :: i, nsoil, j !J added
-        real, allocatable :: temporary_data(:,:), temporary_data_3d(:,:,:), temporary_data2(:,:) !J added
-        real :: snow_thickness_FSM(3)
-       
+        integer :: i, j 
+        real, allocatable :: temporary_data(:,:), temporary_data_3d(:,:,:)
+        
+        if (options%physics%radiation_downScaling==1) then
+            !!
+            if (options%parameters%hlm_var /= "") then
+                call io_read(options%parameters%init_conditions_file,   &
+                               options%parameters%hlm_var,           &
+                               temporary_data_3d)
+                if (associated(this%hlm%data_3d)) then
+                    do i=1,90
+                        this%hlm%data_3d(:,i,:) = temporary_data_3d(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme, i)
+                        !if (this_image()==1) write(*,*),"hlm ", i, this%hlm%data_3d(this%grid%its,i,this%grid%jts)
+                    enddo
+                endif
+            endif
+            !!
+            if (options%parameters%svf_var /= "") then
+                call io_read(options%parameters%init_conditions_file,   &
+                               options%parameters%svf_var,         &
+                               temporary_data)
+                if (associated(this%svf%data_2d)) then
+                    this%svf%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+                endif
+            endif            
+            !!
+            if (options%parameters%slope_var /= "") then
+                call io_read(options%parameters%init_conditions_file,   &
+                               options%parameters%slope_var,         &
+                               temporary_data)
+                if (associated(this%slope%data_2d)) then
+                    this%slope%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+                endif
+            endif            
+            !!
+            if (options%parameters%slope_angle_var /= "") then
+                call io_read(options%parameters%init_conditions_file,   &
+                               options%parameters%slope_angle_var,         &
+                               temporary_data)
+                if (associated(this%slope_angle%data_2d)) then
+                    this%slope_angle%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+                endif
+            endif
+            !!
+            if (options%parameters%aspect_angle_var /= "") then
+                call io_read(options%parameters%init_conditions_file,   &
+                               options%parameters%aspect_angle_var,         &
+                               temporary_data)
+                if (associated(this%aspect_angle%data_2d)) then
+                    this%aspect_angle%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+                endif
+            endif
+        endif
 
-        ! these will all be udpated by either forcing data or the land model, but initialize to sensible values to avoid breaking other initialization routines
-        if (associated(this%runoff%data_2d)) 	this%runoff%data_2d=0.
-        if (associated(this%snowdepth%data_2d)) this%snowdepth%data_2d=0.
-        if (associated(this%Tsnow%data_3d)) this%Tsnow%data_3d=273.15
-        if (associated(this%Sice%data_3d)) this%Sice%data_3d=0.
-        if (associated(this%Sliq%data_3d)) this%Sliq%data_3d=0.
-        if (associated(this%albs%data_2d)) this%albs%data_2d=1.
-        if (associated(this%Ds%data_3d)) this%Ds%data_3d=0.
-        if (associated(this%fsnow%data_2d)) this%fsnow%data_2d=0.
-        if (associated(this%Nsnow%data_2d)) this%Nsnow%data_2d=0.
- 
-    
+        !! these will all be udpated by either forcing data or the land model, but initialize to sensible values to avoid breaking other initialization routines
+        if (associated(this%runoff_tstep%data_2d))        this%runoff_tstep%data_2d=0.
+        if (associated(this%snowdepth%data_2d))           this%snowdepth%data_2d=0.
+        if (associated(this%Tsnow%data_3d))               this%Tsnow%data_3d=273.15
+        if (associated(this%Sice%data_3d))                this%Sice%data_3d=0.
+        if (associated(this%Sliq%data_3d))                this%Sliq%data_3d=0.
+        if (associated(this%albs%data_2d))                this%albs%data_2d=1.
+        if (associated(this%Ds%data_3d))                  this%Ds%data_3d=0.
+        if (associated(this%fsnow%data_2d))               this%fsnow%data_2d=0.
+        if (associated(this%Nsnow%data_2d))               this%Nsnow%data_2d=0.
+        !!
+        if (associated(this%rainfall_tstep%data_2d))      this%rainfall_tstep%data_2d=0.
+        if (associated(this%snowfall_tstep%data_2d))      this%snowfall_tstep%data_2d=0.
+        if (associated(this%meltflux_out_tstep%data_2d))  this%meltflux_out_tstep%data_2d=0.
+        if (associated(this%shortwave_direct%data_2d))  this%shortwave_direct%data_2d=0.
+        if (associated(this%shortwave_diffuse%data_2d))  this%shortwave_diffuse%data_2d=0.
+        !if (associated(this%slope%data_2d))               this%slope%data_2d=0.
+        !if (associated(this%slope_angle%data_2d))         this%slope_angle%data_2d=0.
+        !if (associated(this%aspect_angle%data_2d))        this%aspect_angle%data_2d=0.
+        !if (associated(this%svf%data_2d))                 this%svf%data_2d=0.
+        !if (associated(this%hlm%data_2d))                 this%hlm%data_2d=0.
     end subroutine read_land_variables_FSM
     
     !> -------------------------------
@@ -2779,6 +2854,7 @@ contains
         call this%grid_gecros%set_grid_dimensions(  nx_global, ny_global, kGECROS_GRID_Z,adv_order=adv_order)
         call this%grid_croptype%set_grid_dimensions(  nx_global, ny_global, kCROP_GRID_Z,adv_order=adv_order)
         call this%grid_monthly%set_grid_dimensions( nx_global, ny_global, kMONTH_GRID_Z,adv_order=adv_order)
+        call this%grid_hlm%set_grid_dimensions(     nx_global, ny_global, 90,adv_order=adv_order) !! MJ added
 
 
         deallocate(temporary_data)

@@ -391,6 +391,16 @@ contains
                 if (this_image()==1) write(*,*) "WARNING WARNING WARNING"
             endif
         endif
+        
+        !! MJ added
+        if ((options%physics%radiation_downScaling==1).and.(options%physics%radiation==0)) then
+            if (this_image()==1) write(*,*) ""
+            if (this_image()==1) write(*,*) "STOP STOP STOP"
+            if (this_image()==1) write(*,*) "STOP, Running radiation_downScaling should not be used with rad=0. "
+            if (this_image()==1) write(*,*) "STOP STOP STOP"
+            stop
+        endif
+        
 
     end subroutine options_check
 
@@ -407,11 +417,11 @@ contains
 
         integer :: name_unit
 !       variables to be used in the namelist
-        integer :: pbl, lsm, water, mp, rad, conv, adv, wind
+        integer :: pbl, lsm, water, mp, rad, conv, adv, wind, radiation_downScaling
         character(len=MAXVARLENGTH) :: phys_suite
         
 !       define the namelist
-        namelist /physics/ pbl, lsm, water, mp, rad, conv, adv, wind, phys_suite
+        namelist /physics/ pbl, lsm, water, mp, rad, conv, adv, wind, phys_suite, radiation_downScaling
 
 !       default values for physics options (advection+linear winds+simple_microphysics)
         pbl = 0 ! 0 = no PBL,
@@ -453,7 +463,9 @@ contains
                 ! 3 = Adjustment to horizontal winds to reduce divergence, based on technique from O'brien et al., 1970
                 ! 4 = Mass-conserving wind solver based on variational calculus technique, requires PETSc
         phys_suite = ''
-        
+
+        radiation_downScaling  = 0 !! MJ added, !! note that radiation down scaling works only for simple and rrtmg schemes as they provide the above-topography radiation  per horizontal plane      
+
 !       read the namelist
         open(io_newunit(name_unit), file=filename)
         read(name_unit,nml=physics)
@@ -469,6 +481,8 @@ contains
         options%physics%radiation     = rad
         options%physics%windtype      = wind
         options%physics%phys_suite    = trim(phys_suite)
+        options%physics%radiation_downScaling      = radiation_downScaling !! MJ added
+        
 
     end subroutine physics_namelist
 
@@ -653,6 +667,8 @@ contains
                                         lat_ext, lon_ext, swe_ext, hsnow_ext, rho_snow_ext, tss_ext, tsoil2D_ext, tsoil3D_ext, z_ext, time_ext
 
 
+        character(len=MAXVARLENGTH) :: svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var   !!MJ added
+
         namelist /var_list/ pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qgvar,qsvar,qncvar,qnivar,qnrvar,qngvar,qnsvar,&
                             i2mvar, i3mvar, i2nvar, i3nvar, i1avar, i2avar, i3avar, i1cvar, i2cvar, i3cvar, &
                             hgtvar,shvar,lhvar,pblhvar,   &
@@ -662,7 +678,7 @@ contains
                             soiltype_var, soil_t_var,soil_vwc_var,swe_var,soil_deept_var,           &
                             vegtype_var,vegfrac_var, vegfracmax_var, lai_var, canwat_var, linear_mask_var, nsq_calibration_var,  &
                             swdown_var, lwdown_var, sst_var, rain_var, time_var, sinalpha_var, cosalpha_var, &
-                            lat_ext, lon_ext, swe_ext, hsnow_ext, rho_snow_ext, tss_ext, tsoil2D_ext, tsoil3D_ext,  z_ext, time_ext
+                            lat_ext, lon_ext, swe_ext, hsnow_ext, rho_snow_ext, tss_ext, tsoil2D_ext, tsoil3D_ext, z_ext, time_ext, svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var!! MJ added
 
         ! no default values supplied for variable names
         hgtvar=""
@@ -747,6 +763,14 @@ contains
         tsoil3D_ext=""
         z_ext = ""
         time_ext = ""
+        
+        !! MJ added
+        svf_var = ""
+        hlm_var = ""
+        slope_var = ""
+        slope_angle_var = ""
+        aspect_angle_var = ""
+
 
         open(io_newunit(name_unit), file=filename)
         read(name_unit,nml=var_list)
@@ -909,9 +933,13 @@ contains
         options%tsoil3D_ext     = tsoil3D_ext    ; options%ext_var_list(j) = tsoil3D_ext;     options%ext_dim_list(j) = 3;    j = j + 1
         ! options%z_ext      = z_ext   ; options%ext_var_list(j) = z_ext;       options%ext_dim_list(j) = 3;    j = j + 1
         options%time_ext        = time_ext    ; options%ext_var_list(j) = time_ext;      options%ext_dim_list(j) = 1;    j = j + 1
-
-
-
+        
+        !! MJ added
+        options%svf_var               = svf_var
+        options%hlm_var               = hlm_var
+        options%slope_var             = slope_var
+        options%slope_angle_var       = slope_angle_var
+        options%aspect_angle_var      = aspect_angle_var
 
     end subroutine var_namelist
 
