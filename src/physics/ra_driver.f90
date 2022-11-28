@@ -24,6 +24,7 @@
 !!----------------------------------------------------------
 module radiation
     use module_ra_simple, only: ra_simple, ra_simple_init, calc_solar_elevation
+    use module_ra_simple, only: calc_solar_azimuth !! MJ added
     use module_ra_rrtmg_lw, only: rrtmg_lwinit, rrtmg_lwrad
     use module_ra_rrtmg_sw, only: rrtmg_swinit, rrtmg_swrad
     use options_interface,  only : options_t
@@ -115,7 +116,7 @@ contains
         ! List the variables that are required to be allocated for the simple radiation code
         call options%alloc_vars( &
                      [kVARS%pressure,    kVARS%potential_temperature,   kVARS%exner,        kVARS%cloud_fraction,   &
-                      kVARS%shortwave,   kVARS%longwave])
+                      kVARS%shortwave,   kVARS%longwave, kVARS%cosine_zenith_angle])
 
         ! List the variables that are required to be advected for the simple radiation code
         call options%advect_vars( &
@@ -123,7 +124,7 @@ contains
 
         ! List the variables that are required when restarting for the simple radiation code
         call options%restart_vars( &
-                       [kVARS%pressure,     kVARS%potential_temperature, kVARS%shortwave,   kVARS%longwave, kVARS%cloud_fraction] )
+                       [kVARS%pressure,     kVARS%potential_temperature, kVARS%shortwave,   kVARS%longwave, kVARS%cloud_fraction, kVARS%cosine_zenith_angle] )
 
     end subroutine ra_simple_var_request
 
@@ -175,6 +176,7 @@ contains
 
         real, dimension(:,:,:,:), pointer :: tauaer_sw=>null(), ssaaer_sw=>null(), asyaer_sw=>null()
         real, allocatable :: day_frac(:), solar_elevation(:)
+        real, allocatable :: solar_azimuth(:), cos_project_angle(:,:), solar_elevation_store(:,:), solar_azimuth_store(:,:), SW_dif(:,:), SW_dir(:,:) !! MJ added
         real, allocatable:: albedo(:,:),gsw(:,:)
         integer :: j
         real ::ra_dt
@@ -187,6 +189,12 @@ contains
 
         logical :: f_qr, f_qc, f_qi, F_QI2, F_QI3, f_qs, f_qg, f_qv, f_qndrop
         integer :: mp_options
+        
+        
+        !! MJ added
+        real :: trans_atm, trans_atm_dir, max_dir_1, max_dir_2, max_dir, elev_th, ratio_dif
+        integer :: zdx
+
 
         ims = domain%grid%ims
         ime = domain%grid%ime
@@ -228,6 +236,14 @@ contains
         allocate(solar_elevation(ims:ime))
         allocate(albedo(ims:ime,jms:jme))
         allocate(gsw(ims:ime,jms:jme))
+
+        allocate(solar_azimuth(ims:ime)) !! MJ added
+        allocate(cos_project_angle(ims:ime,jms:jme)) !! MJ added
+        allocate(solar_elevation_store(ims:ime,jms:jme)) !! MJ added
+        allocate(solar_azimuth_store(ims:ime,jms:jme)) !! MJ added
+        allocate(SW_dif(ims:ime,jms:jme)) !! MJ added
+        allocate(SW_dir(ims:ime,jms:jme)) !! MJ added
+
 
         ! Note, need to link NoahMP to update albedo
         
@@ -489,6 +505,83 @@ contains
             domain%potential_temperature%data_3d = domain%potential_temperature%data_3d+domain%tend%th_lwrad*dt+domain%tend%th_swrad*dt
             domain%temperature%data_3d = domain%potential_temperature%data_3d*domain%exner%data_3d
             domain%tend_swrad%data_3d = domain%tend%th_swrad
+        endif
+        
+        !! note that radiation down scaling works only for simple and rrtmg schemes as they provide the above-topography radiation  per horizontal plane
+        if (options%physics%radiation_downScaling==1 .and. options%physics%radiation>1) then
+            do j = jms,jme
+
+
+                solar_elevation  = calc_solar_elevation(date=domain%model_time, lon=domain%longitude%data_2d, &
+                                j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac)
+                                
+                solar_azimuth  = calc_solar_azimuth(date=domain%model_time, lon=domain%longitude%data_2d, &
+                                j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac, solar_elevation=solar_elevation)
+                                
+                cos_project_angle(its:ite,j)= cos(domain%slope_angle%data_2d(its:ite,j)) * sin(solar_elevation(its:ite)) + &
+                                          sin(domain%slope_angle%data_2d(its:ite,j))* cos(solar_elevation(its:ite)) *cos(solar_azimuth(its:ite)-domain%aspect_angle%data_2d(its:ite,j))
+                
+                solar_elevation_store(its:ite,j) = solar_elevation(its:ite)
+                
+                solar_azimuth_store(its:ite,j) = solar_azimuth(its:ite)
+                
+                domain%cosine_zenith_angle%data_2d(its:ite,j)=sin(solar_elevation(its:ite))
+                                
+            enddo 
+            
+            !if (this_image()==2) write(*,*),"1--ele,azim, proj "
+            ! due to float precision errors, it is possible to exceed (-1 - 1) in which case asin will break
+            where(cos_project_angle < -1)
+               cos_project_angle = -1
+            elsewhere(cos_project_angle > 1)
+               cos_project_angle = 1
+            endwhere       
+            
+            !! partitioning the total radiation per horizontal plane into the diffusive and direct ones based on https://www.sciencedirect.com/science/article/pii/S0168192320300058, HPEval
+            ratio_dif=0.            
+            do j = jts,jte
+                do i = its,ite
+                    !trans_atm = domain%shortwave%data_2d(i,j)/1367*domain%cosine_zenith_angle%data_2d(i,j)   ! atmospheric transmissivity
+                    trans_atm = max(min(domain%shortwave%data_2d(i,j)/(1367*sin(solar_elevation_store(i,j))),1.),0.)   ! atmospheric transmissivity
+                    if (trans_atm<=0.22) then
+                        ratio_dif=1.-0.09*trans_atm  
+                    elseif (0.22<trans_atm .and. trans_atm<=0.8) then
+                        ratio_dif=0.95-0.16*trans_atm+4.39*trans_atm**2.-16.64*trans_atm**3.+12.34*trans_atm**4.   
+                    elseif (trans_atm>0.8) then
+                        ratio_dif=0.165
+                    endif
+                    SW_dif(i,j)=ratio_dif*domain%shortwave%data_2d(i,j)
+                    SW_dir(i,j)=max(domain%shortwave%data_2d(i,j)-SW_dif(i,j),0.0)
+                    !if (this_image()==4) write(*,*),"**--trans_atm, ratio_dif, dif, dir, total ",trans_atm, ratio_dif, SW_dif(i,j), SW_dir(i,j), domain%shortwave%data_2d(i,j)
+                enddo
+            enddo
+            
+
+            !!
+            do j = jts,jte
+                do i = its,ite
+                    ! determin maximum allowed direct swr
+                    trans_atm_dir = max(min(SW_dir(i,j)/(1367*sin(solar_elevation_store(i,j))),1.),0.)             ! atmospheric transmissivity for direct sw radiation
+                    max_dir_1     = 1367.*exp(log(1.-0.165)/max(sin(solar_elevation_store(i,j)),0.))            
+                    max_dir_2     = 1367.*trans_atm_dir                          
+                    max_dir       = min(max_dir_1,max_dir_2)                     ! applying both above criteria 1 and 2                    
+                    
+                    !!
+                    zdx=floor(solar_azimuth_store(i,j)*(180./pi)/4.0) !! MJ added= we have 90 by 4 deg for hlm ...zidx is the right index based on solar azimuthal angle
+
+                    elev_th=domain%hlm%data_3d(i,zdx,j)*(pi/180.) !! MJ added: it is the solar elevation threshold above wich we see the sun from the pixel  
+                    if (solar_elevation_store(i,j)>=elev_th) then
+                        domain%shortwave_direct%data_2d(i,j)=min(SW_dir(i,j)/max(sin(solar_elevation_store(i,j)),0.01),max_dir)*max(cos_project_angle(i,j),0.)
+                    else
+                        domain%shortwave_direct%data_2d(i,j)=0.
+                    endif
+                    domain%shortwave_diffuse%data_2d(i,j)=SW_dif(i,j)*domain%svf%data_2d(i,j)
+                    
+                    !if (this_image()==4) write(*,*),"1--ele,elev_th,azim, proj ", solar_elevation_store(i,j)*180./pi, elev_th*180./pi, solar_azimuth_store(i,j)*180./pi, acos(cos_project_angle(i,j))*180./pi 
+                    !if (this_image()==4) write(*,*),"2--dif, dir ", SW_dif(i,j), SW_dir(i,j), domain%shortwave%data_2d(i,j)
+                    !if (this_image()==4) write(*,*),"3--diff_ds, dir_ds ", domain%shortwave_diffuse%data_2d(i,j), domain%shortwave_direct%data_2d(i,j)
+                enddo
+            enddo
         endif
 
     end subroutine rad
