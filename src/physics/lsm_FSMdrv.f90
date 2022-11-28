@@ -61,17 +61,19 @@ module module_sf_FSMdrv
     implicit none
 
     private
-    public :: lsm_FSM_init,lsm_FSM,Esrf_,H_,LE_,Tsrf,KH_ !,windspd_FSM,
+    public :: lsm_FSM_init,lsm_FSM,Esrf_,H_,LE_,Tsrf,KH_
+    public :: snowfall_sum, rainfall_sum, Roff_sum, meltflux_out_sum
    !public :: windspd_FSM,current_rain_FSM,current_snow_FSM !,windspd_FSM,
     
     integer :: ids,ide,jds,jde,kds,kde ! Domain dimensions
     integer :: ims,ime,jms,jme,kms,kme ! Local Memory dimensions
     integer :: its,ite,jts,jte,kts,kte ! Processing Tile dimensions
    
-   !real, allocatable :: &
-   !  windspd_FSM(:,:),       &!Wind speed calculated in HICARm/s)
-   !  current_rain_FSM(:,:),       &!Wind speed calculated in HICARm/s)
-   !  current_snow_FSM(:,:)       !Wind speed calculated in HICARm/s)
+   real, allocatable :: &
+     snowfall_sum(:,:),       &!aggregated per output interval
+     rainfall_sum(:,:),       &!aggregated per output interval
+     Roff_sum(:,:),           &!aggregated per output interval
+     meltflux_out_sum(:,:)     !aggregated per output interval
 
 contains
 
@@ -112,11 +114,14 @@ contains
         !!
         !allocate(windspd_FSM(Nx_HICAR,Ny_HICAR)); windspd_FSM=0.
         !allocate(current_rain_FSM(Nx_HICAR,Ny_HICAR)); current_rain_FSM=0.
-        !allocate(current_snow_FSM(Nx_HICAR,Ny_HICAR)); current_snow_FSM=0.		
+        !allocate(current_snow_FSM(Nx_HICAR,Ny_HICAR)); current_snow_FSM=0.
         !!
-        if (this_image()==1) write(*,*) "  its,ite = ", its,ite
-        if (this_image()==1) write(*,*) "  jts,jte = ", jts,jte
-        if (this_image()==1) write(*,*) "  jts,jte = ", domain%dzdx(1,1,1),domain%dzdx(1,20,1)
+        allocate(snowfall_sum(Nx_HICAR,Ny_HICAR)); snowfall_sum=0.
+        allocate(rainfall_sum(Nx_HICAR,Ny_HICAR)); rainfall_sum=0.
+        allocate(Roff_sum(Nx_HICAR,Ny_HICAR)); Roff_sum=0.
+        allocate(meltflux_out_sum(Nx_HICAR,Ny_HICAR)); meltflux_out_sum=0.        
+        !!
+        !if (this_image()==1) write(*,*) "  its,ite = ", its,ite
         !!
         call FSM_SETUP()
         !!
@@ -150,7 +155,7 @@ contains
 
       do j = 1, Ny_HICAR
           do i = 1, Nx_HICAR
-		if (this_image()==1) write(*,*) "  albsH, albsF  ",i, j, domain%albs%data_2d(i+its-1,j+jts-1), albs(i,j)
+           !if (this_image()==1) write(*,*) "  albsH, albsF  ",i, j, domain%albs%data_2d(i+its-1,j+jts-1), albs(i,j)
          end do
        end do
         
@@ -220,7 +225,7 @@ contains
         !!
         do j = 1, NY_HICAR
             do i = 1, Nx_HICAR
-                if ( isnan(H_(i,j)) .or. abs(H_(i,j))>300 ) write(*,*) "img-H222",i,j,this_image(), H_(i,j), Tsrf(i,j), Ta(i,j), Ua(i,j), KH_(i,j)
+                !if ( isnan(H_(i,j)) .or. abs(H_(i,j))>300 ) write(*,*) "img-H222",i,j,this_image(), H_(i,j), Tsrf(i,j), Ta(i,j), Ua(i,j), KH_(i,j)
                 !if ( isnan(Ua(i,j)) .or. abs(Ua(i,j))>20 .or. Ua(i,j)<0) write(*,*),"befDr-Ua",i,j,this_image(), Ua(i,j), Tsrf(i,j), Ta(i,j), KH_(i,j), H_(i,j), windspd(i,j)
             end do
         end do
@@ -265,7 +270,9 @@ contains
         domain%sensible_heat%data_2d(its:ite,jts:jte)=H_
         domain%latent_heat%data_2d(its:ite,jts:jte)=LE_
         domain%snow_water_equivalent%data_2d(its:ite,jts:jte)=SWE_
-        domain%runoff%data_2d(its:ite,jts:jte)=Roff_
+        !domain%runoff_tstep%data_2d(its:ite,jts:jte)=Roff_
+        !domain%meltflux_out_tstep%data_2d(its:ite,jts:jte)=meltflux_out_
+        !!
         domain%skin_temperature%data_2d(its:ite,jts:jte)=Tsrf
         domain%snowdepth%data_2d(its:ite,jts:jte)=snowdepth_
         !!
@@ -282,6 +289,11 @@ contains
         domain%fsnow%data_2d(its:ite,jts:jte)=fsnow
         domain%Nsnow%data_2d(its:ite,jts:jte)=Nsnow
         domain%albs%data_2d(its:ite,jts:jte)=albs
+        !!
+        snowfall_sum=snowfall_sum+Sf
+        rainfall_sum=rainfall_sum+Rf
+        Roff_sum=Roff_sum+Roff_
+        meltflux_out_sum=meltflux_out_sum+meltflux_out_
         !!
         !SYNC ALL  
     end subroutine lsm_FSM

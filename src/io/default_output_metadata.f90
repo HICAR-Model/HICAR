@@ -1026,7 +1026,7 @@ contains
             var%three_d     = .False.
             var%two_d       = .True.
             var%unlimited_dim=.True.
-            var%attributes  = [attribute_t("standard_name", "surface_direct_downwelling_shortwave_flux_in_air"), &
+            var%attributes  = [attribute_t("standard_name", "surface_direct_downwelling_shortwave_flux_in_air, downscaled"), &
                                attribute_t("units",         "W m-2"),                                            &
                                attribute_t("coordinates",   "lat lon")]
         end associate
@@ -1039,7 +1039,7 @@ contains
             var%three_d     = .False.
             var%two_d       = .True.
             var%unlimited_dim=.True.
-            var%attributes  = [attribute_t("standard_name", "surface_diffuse_downwelling_shortwave_flux_in_air"), &
+            var%attributes  = [attribute_t("standard_name", "surface_diffuse_downwelling_shortwave_flux_in_air, downscaled"), &
                                attribute_t("units",         "W m-2"),                                             &
                                attribute_t("coordinates",   "lat lon")]
         end associate
@@ -2835,22 +2835,7 @@ contains
                                attribute_t("units",         "degrees_east")]
         end associate
 
-
-		!! MJ added for needed new vars for FSM
-        !>------------------------------------------------------------
-        !!  runoff from FSM
-        !!------------------------------------------------------------
-        associate(var=>var_meta(kVARS%runoff))
-            var%name        = "runoff"
-            var%dimensions  = two_d_t_dimensions
-            var%three_d     = .False.
-            var%two_d       = .True.
-            var%unlimited_dim=.True.
-            var%attributes  = [attribute_t("standard_name", "runoff, from FSM"),   &
-                               attribute_t("units",         "kg m-2"),                        &
-                               attribute_t("coordinates",   "lat lon")]
-        end associate       		
-		!! MJ added for needed new vars for FSM
+        !! MJ added for needed new vars for FSM
         !>------------------------------------------------------------
         !!  snowdepth from FSM
         !!------------------------------------------------------------
@@ -2954,8 +2939,60 @@ contains
             var%attributes  = [attribute_t("standard_name", "Nsnow"),   &
                                attribute_t("units",         "-"),                        &
                                attribute_t("coordinates",   "lat lon")]
-        end associate	
-                         	
+        end associate
+        !>------------------------------------------------------------
+        !!  snowfall aggregated per output interval
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%snowfall_tstep))
+            var%name        = "snowfall_tstep"
+            var%dimensions  = two_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%attributes  = [attribute_t("standard_name", "snowfall amount aggregated per output interval"),                     &
+                               attribute_t("units",         "kg m-2"),                              &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate                        
+        !>------------------------------------------------------------
+        !!  snowfall aggregated per output interval
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%rainfall_tstep))
+            var%name        = "rainfall_tstep"
+            var%dimensions  = two_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%attributes  = [attribute_t("standard_name", "rainfall amount aggregated per output interval"),                     &
+                               attribute_t("units",         "kg m-2"),                              &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate  
+        !>------------------------------------------------------------
+        !!  runoff_tstep from FSM
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%runoff_tstep))
+            var%name        = "runoff_tstep"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "total runoff from FSM aggregated per output interval "),   &
+                               attribute_t("units",         "kg m-2"),                        &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate  
+        !>------------------------------------------------------------
+        !!  meltflux_out_tstep from FSM
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%meltflux_out_tstep))
+            var%name        = "meltflux_out_tstep"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "snow-melt runoff from FSM aggregated per output interval "),   &
+                               attribute_t("units",         "kg m-2"),                        &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate  
+                              
         ! loop through entire array setting n_dimensions and n_attrs based on the data that were supplied
         do i=1,size(var_meta)
             var_meta(i)%n_dimensions = size(var_meta(i)%dimensions)

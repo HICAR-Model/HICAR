@@ -23,6 +23,7 @@ module domain_interface
     type(grid_t)         :: grid_monthly, grid_soil
     type(grid_t)         :: grid_snow, grid_snowsoil
     type(grid_t)         :: grid_soilcomp, grid_gecros, grid_croptype
+    type(grid_t)         :: grid_hlm !! MJ added
 
     type(Time_type) :: model_time
 
@@ -347,7 +348,7 @@ module domain_interface
                 
     !! MJ added for needed new vars for FSM
     !real,allocatable :: FSM_slopemu(:,:)
-    type(variable_t) :: runoff 
+    type(variable_t) :: runoff_tstep 
     type(variable_t) :: snowdepth
     type(variable_t) :: Tsnow
     type(variable_t) :: Sice
@@ -356,6 +357,14 @@ module domain_interface
     type(variable_t) :: Ds
     type(variable_t) :: fsnow
     type(variable_t) :: Nsnow
+    type(variable_t) :: rainfall_tstep
+    type(variable_t) :: snowfall_tstep
+    type(variable_t) :: meltflux_out_tstep
+    type(variable_t) :: slope
+    type(variable_t) :: slope_angle
+    type(variable_t) :: aspect_angle
+    type(variable_t) :: svf
+    type(variable_t) :: hlm
                 
 
   contains
