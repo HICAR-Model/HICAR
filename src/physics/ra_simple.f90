@@ -188,6 +188,55 @@ contains
         where(calc_solar_elevation<0) calc_solar_elevation=0
     end function calc_solar_elevation
 
+
+    !! MJ added to caculate the solar azimuthal angle 
+    function calc_solar_azimuth(date, lon, j, ims,ime, jms,jme, its,ite, day_frac, solar_elevation)
+        implicit none
+        real                       :: calc_solar_azimuth(ims:ime)
+        type(Time_type),intent(in) :: date
+        real,           intent(in) :: lon(ims:ime, jms:jme)
+        integer,        intent(in) :: j
+        integer,        intent(in) :: ims, ime, jms, jme
+        integer,        intent(in) :: its, ite
+        real,           intent(out):: day_frac(ims:ime)
+        real,           intent(in):: solar_elevation(ims:ime)
+
+        integer :: i
+        real, dimension(ims:ime) :: declination, day_of_year, hour_angle
+
+        calc_solar_azimuth = 0
+
+        do i = its, ite
+            day_of_year(i) = date%day_of_year(lon=lon(i,j))
+
+            ! hour angle is 0 at noon
+            hour_angle(i) = 2*pi* mod(day_of_year(i)+0.5, 1.0)
+
+            day_frac(i) = date%year_fraction(lon=lon(i,j))
+        end do
+
+        ! fast approximation see : http://en.wikipedia.org/wiki/Position_of_the_Sun
+        declination = (-0.4091) * cos(2.0*pi/365.0*(day_of_year+10))
+
+        calc_solar_azimuth(its:ite) = ( cos_lat_m(its:ite,j) * sin(declination(its:ite)) - &
+                               sin_lat_m(its:ite,j) * cos(declination(its:ite)) * cos(hour_angle(its:ite)) )/(1.e-16+cos(solar_elevation(its:ite)))
+
+        ! due to float precision errors, it is possible to exceed (-1 - 1) in which case asin will break
+        where(calc_solar_azimuth < -1)
+            calc_solar_azimuth = -1
+        elsewhere(calc_solar_azimuth > 1)
+            calc_solar_azimuth = 1
+        endwhere
+
+        ! partitioning the answer based on the hour angle:
+        where(hour_angle > pi)
+            calc_solar_azimuth = acos(calc_solar_azimuth)
+        elsewhere(calc_solar_azimuth <= pi)
+            calc_solar_azimuth = 2*pi - acos(calc_solar_azimuth)
+        endwhere
+        
+    end function calc_solar_azimuth
+
     subroutine ra_simple(theta, pii, qv, qc, qs, qr, p, swdown, lwdown, cloud_cover, lat, lon, date, options, dt, &
                 ims, ime, jms, jme, kms, kme, &
                 its, ite, jts, jte, kts, kte)
