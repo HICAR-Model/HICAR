@@ -704,7 +704,7 @@ $(BUILD)reader_h.o: $(IO)reader_h.f90 $(BUILD)icar_constants.o $(BUILD)options_h
 $(BUILD)reader_obj.o: $(IO)reader_obj.f90 $(BUILD)reader_h.o $(BUILD)debug_utils.o $(BUILD)time_io.o $(BUILD)variable_h.o
 
 $(BUILD)output_h.o: $(IO)output_h.f90 $(BUILD)icar_constants.o $(BUILD)variable_h.o $(BUILD)grid_h.o $(BUILD)meta_data_h.o $(BUILD)domain_h.o
-$(BUILD)output_obj.o: $(IO)output_obj.f90 $(BUILD)output_h.o $(BUILD)default_output_metadata.o $(BUILD)time_h.o $(BUILD)time_io.o $(BUILD)debug_utils.o
+$(BUILD)output_obj.o: $(IO)output_obj.f90 $(BUILD)output_h.o $(BUILD)default_output_metadata.o $(BUILD)string.o  $(BUILD)time_h.o $(BUILD)time_io.o $(BUILD)debug_utils.o
 
 
 $(BUILD)boundary_h.o: $(OBJECTS)boundary_h.f90 $(BUILD)options_h.o				\

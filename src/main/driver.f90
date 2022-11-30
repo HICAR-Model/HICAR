@@ -382,13 +382,22 @@ contains
         nx_w = 0; ny_w = 0; nz_w = 0; nx_r = 0; ny_r = 0; nz_r = 0;
         n_w = 0; n_r = 0; n_restart = 0;
         
-        
-
-        
         childrens = 0
+        
         select case (exec_team)
         case (kCOMPUTE_TEAM)
             color = 0
+        case(kIO_TEAM)
+            color = 1
+        end select
+        
+        CALL MPI_COMM_DUP( MPI_COMM_WORLD, globalComm, ierr )
+        ! Assign all images in the IO team to the IO_comms MPI communicator. Use image indexing within initial team to get indexing of global MPI ranks
+        CALL MPI_COMM_SPLIT( globalComm, color, (this_image()-1), splitComm, ierr )
+        
+        select case (exec_team)
+        case (kCOMPUTE_TEAM)
+            CALL MPI_COMM_DUP( splitComm, domain%IO_comms, ierr )
             call ioclient%init(domain, boundary, options)
             
             i_s_w(this_image()) = ioclient%i_s_w; i_e_w(this_image()) = ioclient%i_e_w
@@ -408,7 +417,7 @@ contains
     
         select case(exec_team)
         case(kIO_TEAM)
-            color = 1
+            CALL MPI_COMM_DUP( splitComm, ioserver%IO_comms, ierr )
             call ioserver%init(domain, options,i_s_r,i_e_r,k_s_r,k_e_r,j_s_r,j_e_r,i_s_w,i_e_w,k_s_w,k_e_w,j_s_w,j_e_w)
             
             if (ioserver%server_id==1) then
@@ -429,15 +438,10 @@ contains
             childrens(ioserver%server_id,1:ioserver%n_children) = ioserver%children
         end select
 
-        CALL MPI_COMM_DUP( MPI_COMM_WORLD, globalComm, ierr )
-        ! Assign all images in the IO team to the IO_comms MPI communicator. Use image indexing within initial team to get indexing of global MPI ranks
-        CALL MPI_COMM_SPLIT( globalComm, color, (this_image()-1), splitComm, ierr )
-
         call co_max(childrens)
         
         select case(exec_team)
         case(kCOMPUTE_TEAM)
-            CALL MPI_COMM_DUP( splitComm, domain%IO_comms, ierr )
             do i = 1,size(childrens,1)
                 if (findloc(childrens(i,:),this_image(),dim=1) > 0) then
                     ioclient%server = i*(num_images()/kNUM_SERVERS)
@@ -453,9 +457,6 @@ contains
             nx_r = i_e_r(this_image()) - i_s_r(this_image()) + 1
             ny_r = j_e_r(this_image()) - j_s_r(this_image()) + 1
             nz_r = k_e_r(this_image()) - k_s_r(this_image()) + 1
-            
-        case(kIO_TEAM)
-            CALL MPI_COMM_DUP( splitComm, ioserver%IO_comms, ierr )
         end select
 
         call co_max(nx_w)

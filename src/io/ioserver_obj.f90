@@ -88,6 +88,7 @@ contains
             endif
         enddo
 
+        if (options%parameters%restart) call this%outputer%init_restart(options, this%IO_comms, this%out_var_indices)
 
     end subroutine
     
