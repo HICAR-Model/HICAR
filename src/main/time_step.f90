@@ -317,6 +317,8 @@ contains
 
             ! ! apply/update boundary conditions including internal wind and pressure changes.
             call domain%apply_forcing(forcing,dt)
+            
+            call domain%diagnostic_update(options)
 
             ! if using advect_density winds need to be balanced at each update
             if (options%parameters%advect_density) call balance_uvw(domain,options)
@@ -334,7 +336,7 @@ contains
                 ! first process the halo section of the domain (currently hard coded at 1 should come from domain?)
                 call rad(domain, options, real(dt%seconds()))
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" rad(domain", fix=.True.)
-
+                
                 call lsm(domain, options, real(dt%seconds()))!, halo=1)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" lsm")
 
@@ -365,14 +367,13 @@ contains
                 endif
                 call exch_timer%stop()
 
+
                 call adv_timer%start()
 
                 call advect(domain, options, real(dt%seconds()))
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain", fix=.True.)
                 call adv_timer%stop()
-
-                call domain%diagnostic_update(options)
-                
+                                
                 call mp_timer%start()
 
                 call mp(domain, options, real(dt%seconds()))

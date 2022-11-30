@@ -42,7 +42,7 @@ module land_surface
     use mod_atm_utilities,   only : sat_mr, calc_Richardson_nr
     use time_object,         only : Time_type
     use data_structures
-    use icar_constants,      only : kVARS, kLSM_SIMPLE, kLSM_NOAH, kLSM_NOAHMP
+    use icar_constants,      only : kVARS, kLSM_SIMPLE, kLSM_NOAH, kLSM_NOAHMP, kPBL_DIAGNOSTIC
     use options_interface,   only : options_t
     use domain_interface,    only : domain_t
     use module_ra_simple, only: calc_solar_elevation
@@ -462,8 +462,13 @@ contains
         ! write(*,*) MINVAL(lhdQV), MAXVAL(lhdQV), 'kg/kg (min/max) added to QV at', domain%model_time%hour
 
         ! enforce some minimum water vapor content... just in case
+<<<<<<< HEAD
         where(qv < SMALL_QV) qv = SMALL_QV
 
+=======
+        where(qv(its:ite,kts,jts:jte) < SMALL_QV) qv(its:ite,kts,jts:jte) = SMALL_QV
+        
+>>>>>>> master
         end associate
 
     end subroutine apply_fluxes
@@ -1188,7 +1193,7 @@ contains
 
 
             where(windspd<1) windspd=1 ! minimum wind speed to prevent the exchange coefficient from blowing up
-            CHS = CHS * windspd * 2            
+            CHS = CHS * windspd !* 2            
             CHS2 = CHS
             CQS2 = CHS
 
@@ -1592,7 +1597,7 @@ contains
 
             endif
         endif
-        if (options%physics%landsurface>0 .OR. options%physics%watersurface>0) then
+        if (options%physics%landsurface>0 .OR. options%physics%watersurface>0 .not.(options%physics%boundarylayer==kPBL_DIAGNOSTIC)) then
             call apply_fluxes(domain, dt)
         endif
 
