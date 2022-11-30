@@ -22,14 +22,8 @@ contains
 
         integer :: err
 
-<<<<<<< HEAD
-=======
         this%dtype = kREAL
         if (present(dtype)) this%dtype = dtype
-
-        this%dimensions = grid%dimensions
-        this%dim_len    = grid%get_dims()
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
         this%two_d   = grid%is2d
         this%three_d = grid%is3d

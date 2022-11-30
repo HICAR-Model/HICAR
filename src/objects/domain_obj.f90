@@ -10,11 +10,7 @@
 submodule(domain_interface) domain_implementation
     use assertions_mod,       only : assert, assertions
     use mod_atm_utilities,    only : exner_function, update_pressure
-<<<<<<< HEAD
     use icar_constants
-=======
-    use icar_constants,       only : kVARS, kLC_LAND, kLC_WATER, kWATER_LAKE, kDOUBLE
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
     use string,               only : str
     use co_util,              only : broadcast
     use io_routines,          only : io_write, io_read
@@ -356,7 +352,7 @@ contains
         class(domain_t),  intent(inout)   :: this
         type(options_t), intent(in)      :: options
         integer :: z
-        real, allocatable :: temp_1(:,:), temp_2(:,:), temp_3(:,:,:), qsum(:,:,:)
+        real, allocatable :: temp_1(:,:), temp_2(:,:), temporary_data(:,:,:), qsum(:,:,:)
         logical :: use_delta_terrain
 
         associate(ims => this%ims, ime => this%ime,                             &
@@ -379,6 +375,8 @@ contains
                   u_mass                => this%u_mass%data_3d,                 &
                   v_mass                => this%v_mass%data_3d,                 &
                   potential_temperature => this%potential_temperature%data_3d )
+
+        allocate(temporary_data(ims:ime, kms:kme, jms:jme))
 
         exner = exner_function(pressure)
 
@@ -414,41 +412,32 @@ contains
             v_mass = (v(:,:,jms+1:jme+1) + v(:,:,jms:jme)) / 2
         endif
 
-        !if( .not.(allocated(temp_3))) allocate( temp_3( ims:ime, kms:kme, jms:jme))
-        !temp_3(:,kms:kme-1,:) = ( density(:,kms:kme-1,:)*dz_i(:,kms:kme-1,:) + density(:,kms+1:kme,:)*dz_i(:,kms+1:kme,:) ) / (dz_i(:,kms:kme-1,:)+dz_i(:,kms+1:kme,:))
-
-        !do z=(kme-1),kms,-1
-        !   pressure(:,z,:) = pressure(:,z+1,:) + temp_3(:,z,:)*9.81*dz_mass(:,z+1,:)
-        !enddo
-        
-        !if (associated(this%density%data_3d)) then
-        !   density =  pressure /(Rd * temperature*(1+qsum)) ! kg/m^3
-        !endif
-        ! domain%p_inter=domain%p
-        ! call update_pressure(domain%p_inter, domain%z, domain%z_inter, domain%t)
         pressure_i(:,kms+1:kme, :) = (pressure(:,kms:kme-1, :) + pressure(:,kms+1:kme, :)) / 2
         pressure_i(:, kms, :) = pressure(:, kms, :) + (pressure(:, kms, :) - pressure(:, kms+1, :)) / 2
-        ! this isn't correct, we should be using update_pressure or similar to solve this
-        ! domain%ptop = 2*domain%p(:,nz,:) - domain%p(:,nz-1,:)
+        
         if (associated(this%surface_pressure%data_2d)) then
             psfc = pressure_i(:, kms, :)
         endif
+        if (associated(domain%ivt%data_2d)) then
+            call compute_ivt(domain%ivt%data_2d, water_vapor, u_mass, v_mass, pressure_i)
+        endif
+        if (associated(domain%iwv%data_2d)) then
+            call compute_iq(domain%iwv%data_2d, water_vapor, pressure_i)
+        endif
+        if (associated(domain%iwl%data_2d)) then
+            temporary_data = 0
+            if (associated(domain%cloud_water_mass%data_3d)) temporary_data = temporary_data + cloud_water
+            if (associated(domain%rain_mass%data_3d)) temporary_data = temporary_data + rain_water
+            call compute_iq(domain%iwl%data_2d, temporary_data, pressure_i)
+        endif
+        if (associated(domain%iwi%data_2d)) then
+            temporary_data = 0
+            if (associated(domain%cloud_ice_mass%data_3d)) temporary_data = temporary_data + cloud_ice
+            if (associated(domain%snow_mass%data_3d)) temporary_data = temporary_data + snow_ice
+            if (associated(domain%graupel_mass%data_3d)) temporary_data = temporary_data + graupel_ice
+            call compute_iq(domain%iwi%data_2d, temporary_data, pressure_i)
+        endif
         
-    ! NOTE: all code below is not implemented in ICAR 2.0 yet
-    ! it is left as a reminder of what needs to be done, and example when the time comes
-    !
-    !     ! update mut
-    !
-    !     domain%p_inter=domain%p
-    !     call update_pressure(domain%p_inter, domain%z, domain%z_inter, domain%t)
-    !     domain%psfc = domain%p_inter(:,1,:)
-    !     ! technically this isn't correct, we should be using update_pressure or similar to solve this
-    !     domain%ptop = 2*domain%p(:,nz,:) - domain%p(:,nz-1,:)
-    !
-    !     ! dry mass in the gridcell is equivalent to the difference in pressure from top to bottom
-    !     domain%mut(:,1:nz-1,:) = domain%p_inter(:,1:nz-1,:) - domain%p_inter(:,2:nz,:)
-    !     domain%mut(:,nz,:) = domain%p_inter(:,nz,:) - domain%ptop
-    !
         allocate( temp_1( its:ite, jts:jte))
         allocate( temp_2( its:ite, jts:jte))
 
@@ -673,7 +662,6 @@ contains
         if (0<opt%vars_to_allocate( kVARS%snow_in_air) )                call setup(this%snow_mass,                this%grid,     forcing_var=opt%parameters%qsvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%snow_number_concentration) )  call setup(this%snow_number,              this%grid,     forcing_var=opt%parameters%qnsvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%graupel_in_air) )             call setup(this%graupel_mass,             this%grid,     forcing_var=opt%parameters%qgvar,      list=this%variables_to_force, force_boundaries=.True.)
-<<<<<<< HEAD
         if (0<opt%vars_to_allocate( kVARS%graupel_number_concentration))call setup(this%graupel_number,           this%grid,     forcing_var=opt%parameters%qngvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%ice1_a))                      call setup(this%ice1_a,           this%grid,     forcing_var=opt%parameters%i1avar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%ice1_c))                      call setup(this%ice1_c,           this%grid,     forcing_var=opt%parameters%i1cvar,      list=this%variables_to_force, force_boundaries=.True.)
@@ -685,12 +673,7 @@ contains
         if (0<opt%vars_to_allocate( kVARS%ice3_number))                 call setup(this%ice3_number,      this%grid,     forcing_var=opt%parameters%i3nvar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%ice3_a))                      call setup(this%ice3_a,           this%grid,     forcing_var=opt%parameters%i3avar,      list=this%variables_to_force, force_boundaries=.True.)
         if (0<opt%vars_to_allocate( kVARS%ice3_c))                      call setup(this%ice3_c,           this%grid,     forcing_var=opt%parameters%i3cvar,      list=this%variables_to_force, force_boundaries=.True.)
-
-        if (0<opt%vars_to_allocate( kVARS%precipitation) )              call setup(this%accumulated_precipitation,this%grid2d )
-=======
-        if (0<opt%vars_to_allocate( kVARS%graupel_number_concentration))call setup(this%graupel_number,           this%grid )
         if (0<opt%vars_to_allocate( kVARS%precipitation) )              call setup(this%accumulated_precipitation,this%grid2d, dtype=kDOUBLE )
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
         if (0<opt%vars_to_allocate( kVARS%convective_precipitation) )   call setup(this%accumulated_convective_pcp,this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%external_precipitation) )     call setup(this%external_precipitation,   this%grid2d,   forcing_var=opt%parameters%rain_var,  list=this%variables_to_force)
         if (0<opt%vars_to_allocate( kVARS%snowfall) )                   call setup(this%accumulated_snowfall,     this%grid2d, dtype=kDOUBLE )
@@ -708,12 +691,8 @@ contains
         if (0<opt%vars_to_allocate( kVARS%shortwave) )                  call setup(this%shortwave,                this%grid2d,   forcing_var=opt%parameters%swdown_var,  list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%shortwave_direct) )           call setup(this%shortwave_direct,         this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%shortwave_diffuse) )          call setup(this%shortwave_diffuse,        this%grid2d)
-<<<<<<< HEAD
         if (0<opt%vars_to_allocate( kVARS%longwave) )                   call setup(this%longwave,                 this%grid2d,   forcing_var=opt%parameters%lwdown_var,  list=this%variables_to_force, force_boundaries=.False.)
-=======
-        if (0<opt%vars_to_allocate( kVARS%longwave) )                   call setup(this%longwave,                 this%grid2d,   forcing_var=opt%parameters%lwdown_var,  list=this%variables_to_force)
         if (0<opt%vars_to_allocate( kVARS%albedo) )                     call setup(this%albedo,                   this%grid_monthly )
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
         if (0<opt%vars_to_allocate( kVARS%vegetation_fraction) )        call setup(this%vegetation_fraction,      this%grid_monthly )
         if (0<opt%vars_to_allocate( kVARS%vegetation_fraction_max) )    call setup(this%vegetation_fraction_max,  this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%vegetation_fraction_out) )    call setup(this%vegetation_fraction_out,  this%grid2d )
@@ -1509,11 +1488,6 @@ contains
             dz_scl                => this%dz_scl,                         &
             zr_u                  => this%zr_u,                           &
             zr_v                  => this%zr_v)
-<<<<<<< HEAD
-            
-            max_level = find_flat_model_level(options, nz, dz)
-=======
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
             ! Still not 100% convinced this works well in cases other than flat_z_height = 0 (w sleve). So for now best to keep at 0 when using sleve?
             max_level = find_flat_model_level(options, nz, dz)
@@ -2818,12 +2792,8 @@ contains
                       kVARS%latitude,               kVARS%longitude,                &
                       kVARS%u_latitude,             kVARS%u_longitude,              &
                       kVARS%v_latitude,             kVARS%v_longitude,              &
-<<<<<<< HEAD
-                      kVars%temperature_interface,  kVars%density                   ])
-=======
-                      kVARS%temperature_interface,  kVARS%ivt,                      &
+                      kVARS%temperature_interface,  kVars%density, kVARS%ivt,       &
                       kVARS%iwv,    kVARS%iwl,      kVARS%iwi                      ])
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
         if (trim(options%parameters%rain_var) /= "") call options%alloc_vars([kVARS%external_precipitation])
 
@@ -2907,32 +2877,19 @@ contains
         this%v_grid2d_ext%ime = min(this%v_grid2d%ime + nsmooth, this%v_grid2d%ide)
         this%v_grid2d_ext%jms = max(this%v_grid2d%jms - nsmooth, this%v_grid2d%jds)
         this%v_grid2d_ext%jme = min(this%v_grid2d%jme + nsmooth, this%v_grid2d%jde)
-<<<<<<< HEAD
         
-        call this%grid_soil%set_grid_dimensions(     nx_global, ny_global, kSOIL_GRID_Z,adv_order=adv_order)
-        call this%grid_snow%set_grid_dimensions(     nx_global, ny_global, kSNOW_GRID_Z,adv_order=adv_order)
-        call this%grid_snowsoil%set_grid_dimensions( nx_global, ny_global, kSNOWSOIL_GRID_Z,adv_order=adv_order)
-        call this%grid_soilcomp%set_grid_dimensions( nx_global, ny_global, kSOILCOMP_GRID_Z,adv_order=adv_order)
-        call this%grid_gecros%set_grid_dimensions(  nx_global, ny_global, kGECROS_GRID_Z,adv_order=adv_order)
-        call this%grid_croptype%set_grid_dimensions(  nx_global, ny_global, kCROP_GRID_Z,adv_order=adv_order)
-        call this%grid_monthly%set_grid_dimensions( nx_global, ny_global, kMONTH_GRID_Z,adv_order=adv_order)
+        call this%grid_soil%set_grid_dimensions(         nx_global, ny_global, kSOIL_GRID_Z,adv_order=adv_order)
+        call this%grid_snow%set_grid_dimensions(         nx_global, ny_global, kSNOW_GRID_Z,adv_order=adv_order)
+        call this%grid_snowsoil%set_grid_dimensions(     nx_global, ny_global, kSNOWSOIL_GRID_Z,adv_order=adv_order)
+        call this%grid_soilcomp%set_grid_dimensions(     nx_global, ny_global, kSOILCOMP_GRID_Z,adv_order=adv_order)
+        call this%grid_gecros%set_grid_dimensions(       nx_global, ny_global, kGECROS_GRID_Z,adv_order=adv_order)
+        call this%grid_croptype%set_grid_dimensions(     nx_global, ny_global, kCROP_GRID_Z,adv_order=adv_order)
+        call this%grid_monthly%set_grid_dimensions(      nx_global, ny_global, kMONTH_GRID_Z,adv_order=adv_order)
+        call this%grid_lake%set_grid_dimensions(         nx_global, ny_global, kLAKE_Z,adv_order=adv_order)
+        call this%grid_lake_soisno%set_grid_dimensions(  nx_global, ny_global, kLAKE_SOISNO_Z,adv_order=adv_order)
+        call this%grid_lake_soi%set_grid_dimensions(     nx_global, ny_global, kLAKE_SOI_Z,adv_order=adv_order)
+        call this%grid_lake_soisno_1%set_grid_dimensions(nx_global, ny_global, kLAKE_SOISNO_1_Z,adv_order=adv_order)
 
-
-=======
-
-
-        call this%grid_soil%set_grid_dimensions(         nx_global, ny_global, 4)
-        call this%grid_snow%set_grid_dimensions(         nx_global, ny_global, 3)
-        call this%grid_snowsoil%set_grid_dimensions(     nx_global, ny_global, 7)
-        call this%grid_soilcomp%set_grid_dimensions(     nx_global, ny_global, 8)
-        call this%grid_gecros%set_grid_dimensions(       nx_global, ny_global, 60)
-        call this%grid_croptype%set_grid_dimensions(     nx_global, ny_global, 5)
-        call this%grid_monthly%set_grid_dimensions(      nx_global, ny_global, 12)
-        call this%grid_lake%set_grid_dimensions(         nx_global, ny_global, 10) ! nlevlake=10 (in water_lake.f90: should become nml option?)
-        call this%grid_lake_soisno%set_grid_dimensions(  nx_global, ny_global, 9)! nlevsoil=4; nlevsnow=5   real, dimension( ims:ime,-nlevsnow+1:nlevsoil, jms:jme )  ,INTENT(inout)  :: t_soisno3d,   h2osoi_ice3d, h2osoi_liq3d, h2osoi_vol3d, z3d,   dz3d
-        call this%grid_lake_soi%set_grid_dimensions(     nx_global, ny_global, 4) ! separate from grid_soil in case we want fewer layers under the lake.
-        call this%grid_lake_soisno_1%set_grid_dimensions(nx_global, ny_global, 10) !soisno+1 (for layer interface depth zi3d)
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
         deallocate(temporary_data)
 
         this%north_boundary = (this%grid%yimg == this%grid%yimages)

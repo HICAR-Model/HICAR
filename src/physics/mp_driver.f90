@@ -31,14 +31,9 @@ module microphysics
     use mod_wrf_constants
     use module_mp_thompson_aer,     only: mp_gt_driver_aer, thompson_aer_init
     use module_mp_thompson,         only: mp_gt_driver, thompson_init
-<<<<<<< HEAD
     use MODULE_MP_MORR_TWO_MOMENT,  only: MORR_TWO_MOMENT_INIT, MP_MORR_TWO_MOMENT
     use module_mp_wsm6,             only: wsm6, wsm6init
-=======
-    ! use module_mp_morr_two_moment,  only: MORR_TWO_MOMENT_INIT, MP_MORR_TWO_MOMENT
-    use module_mp_wsm6,             only: wsm6, wsm6init
     use module_mp_wsm3,             only: wsm3, wsm3init
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
     use module_mp_simple,           only: mp_simple_driver, mp_simple_var_request
     use module_mp_jensen_ishmael,   only: mp_jensen_ishmael, jensen_ishmael_init
 
@@ -89,42 +84,28 @@ contains
             if (this_image()==1) write(*,*) "    Thompson Microphysics"
             call thompson_init(options%mp_options)
             precip_delta=.True.
-
         elseif (options%physics%microphysics    == kMP_THOMP_AER) then
             if (this_image()==1) write(*,*) "    Thompson Eidhammer Microphysics"
             call thompson_aer_init()
             precip_delta=.True.
-
         elseif (options%physics%microphysics == kMP_SB04) then
             if (this_image()==1) write(*,*) "    Simple Microphysics"
             precip_delta=.True.
-<<<<<<< HEAD
         elseif (options%physics%microphysics==kMP_MORRISON) then
             if (this_image()==1) write(*,*) "    Morrison Microphysics"
             call MORR_TWO_MOMENT_INIT(hail_opt=1)
             precip_delta=.False.
-        elseif (options%physics%microphysics==kMP_WSM6) then
-            if (this_image()==1) write(*,*) "    WSM6 Microphysics"
-            call wsm6init(rhoair0,rhowater,rhosnow,cliq,cpv)
         elseif (options%physics%microphysics==kMP_ISHMAEL) then
             if (this_image()==1) write(*,*) "    Jensen-Ischmael Microphysics"
             call jensen_ishmael_init()
-=======
-        ! elseif (options%physics%microphysics==kMP_MORRISON) then
-        !     write(*,*) "    Morrison Microphysics"
-        !     call MORR_TWO_MOMENT_INIT(hail_opt=0)
-        !     precip_delta=.False.
-
         elseif (options%physics%microphysics==kMP_WSM6) then
             if (this_image()==1) write(*,*) "    WSM6 Microphysics"
             call wsm6init(rhoair0,rhowater,rhosnow,cliq,cpv)
             precip_delta=.True.
-
         elseif (options%physics%microphysics==kMP_WSM3) then
             if (this_image()==1) write(*,*) "    WSM3 Microphysics"
             call wsm3init(rhoair0,rhowater,rhosnow,cliq,cpv, allowed_to_read=.True.)
             precip_delta=.True.
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
         endif
 
         update_interval = options%mp_options%update_interval
@@ -192,6 +173,32 @@ contains
 
     end subroutine
 
+
+    subroutine mp_wsm3_var_request(options)
+        implicit none
+        type(options_t), intent(inout) :: options
+
+        ! List the variables that are required to be allocated for the simple microphysics
+        call options%alloc_vars( &
+                     [kVARS%pressure,    kVARS%potential_temperature,   kVARS%exner,        kVARS%density,      &
+                      kVARS%water_vapor, kVARS%cloud_water,             kVARS%rain_in_air,                      &
+                      kVARS%dz,          kVARS%snowfall,                kVARS%precipitation ])
+
+        ! List the variables that are required to be advected for the simple microphysics
+        call options%advect_vars( &
+                      [kVARS%potential_temperature, kVARS%water_vapor, kVARS%cloud_water,  &
+                       kVARS%rain_in_air ] )
+
+        ! List the variables that are required to be allocated for the simple microphysics
+        call options%restart_vars( &
+                       [kVARS%pressure,     kVARS%potential_temperature,    kVARS%water_vapor,   &
+                        kVARS%cloud_water,  kVARS%rain_in_air,              kVARS%snow_in_air,   &
+                        kVARS%precipitation,kVARS%snowfall,                 kVARS%graupel,       &
+                        kVARS%dz, kVARS%rain_in_air ] )
+
+
+    end subroutine
+
     subroutine mp_ishmael_var_request(options)
         implicit none
         type(options_t), intent(inout) :: options
@@ -225,18 +232,13 @@ contains
 
     end subroutine
 
-<<<<<<< HEAD
     subroutine mp_morr_var_request(options)
-=======
-    subroutine mp_wsm3_var_request(options)
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
         implicit none
         type(options_t), intent(inout) :: options
 
         ! List the variables that are required to be allocated for the simple microphysics
         call options%alloc_vars( &
                      [kVARS%pressure,    kVARS%potential_temperature,   kVARS%exner,        kVARS%density,      &
-<<<<<<< HEAD
                       kVARS%water_vapor, kVARS%cloud_water,             kVARS%rain_in_air,  kVARS%rain_number_concentration, &
                       kVARS%snow_in_air, kVARS%cloud_ice,               kVARS%w,            kVARS%ice_number_concentration,      &
                       kVARS%snowfall,    kVARS%precipitation,           kVARS%graupel,      kVARS%graupel_in_air,     &
@@ -250,22 +252,12 @@ contains
                        kVARS%snow_in_air,           kVARS%cloud_ice,   &
                        kVARS%rain_in_air,           kVARS%ice_number_concentration, kVARS%graupel_in_air, &
                        kVARS%graupel_number_concentration, kVARS%snow_number_concentration] )
-=======
-                      kVARS%water_vapor, kVARS%cloud_water,             kVARS%rain_in_air,                      &
-                      kVARS%dz,          kVARS%snowfall,                kVARS%precipitation ])
-
-        ! List the variables that are required to be advected for the simple microphysics
-        call options%advect_vars( &
-                      [kVARS%potential_temperature, kVARS%water_vapor, kVARS%cloud_water,  &
-                       kVARS%rain_in_air ] )
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
         ! List the variables that are required to be allocated for the simple microphysics
         call options%restart_vars( &
                        [kVARS%pressure,     kVARS%potential_temperature,    kVARS%water_vapor,   &
                         kVARS%cloud_water,  kVARS%rain_in_air,              kVARS%snow_in_air,   &
                         kVARS%precipitation,kVARS%snowfall,                 kVARS%graupel,       &
-<<<<<<< HEAD
                         kVARS%dz,           kVARS%snow_in_air,              kVARS%cloud_ice,     &
                         kVARS%rain_number_concentration, kVARS%rain_in_air,  &
                         kVARS%ice_number_concentration,  kVARS%graupel_in_air, &
@@ -273,43 +265,25 @@ contains
                         kVARS%re_cloud, kVARS%re_ice, kVARS%re_snow   ] )
 
 
-=======
-                        kVARS%dz, kVARS%rain_in_air ] )
-
 
     end subroutine
 
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
-
-    end subroutine
-    
     subroutine mp_var_request(options)
         implicit none
         type(options_t), intent(inout) :: options
 
         if (options%physics%microphysics    == kMP_THOMPSON) then
             call mp_thompson_aer_var_request(options)
-
         elseif (options%physics%microphysics    == kMP_THOMP_AER) then
             call mp_thompson_aer_var_request(options)
-
         elseif (options%physics%microphysics == kMP_SB04) then
             call mp_simple_var_request(options)
-
         elseif (options%physics%microphysics==kMP_MORRISON) then
-<<<<<<< HEAD
-            !stop "Morrison physics not re-implemented yet"
             call mp_morr_var_request(options)
-        elseif (options%physics%microphysics==kMP_WSM6) then
-            call mp_wsm6_var_request(options)
         elseif (options%physics%microphysics==kMP_ISHMAEL) then
             call mp_ishmael_var_request(options)
-=======
-            stop "Morrison physics not re-implemented yet"
-
         elseif (options%physics%microphysics==kMP_WSM6) then
             call mp_wsm6_var_request(options)
-
         elseif (options%physics%microphysics==kMP_WSM3) then
             call mp_wsm3_var_request(options)
 
@@ -318,7 +292,6 @@ contains
                 if (this_image()==1) write(*,*) "    allocating water vapor for ideal test case."
                 call options%alloc_vars( [kVARS%water_vapor] )
                 call options%advect_vars( [kVARS%water_vapor] )
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
         endif
 
     end subroutine mp_var_request
@@ -503,12 +476,10 @@ contains
         integer,        intent(in)    :: ids,ide, jds,jde, kds,kde
         real :: precipitation(ims:ime, jms:jme), graupel(ims:ime, jms:jme), snowfall(ims:ime, jms:jme)
 
-<<<<<<< HEAD
-=======
         precipitation = 0
         graupel = 0
         snowfall = 0
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
+        
         ! run the thompson microphysics
         if (options%physics%microphysics==kMP_THOMPSON) then
             ! call the thompson microphysics
@@ -613,11 +584,11 @@ contains
                              P = domain%pressure%data_3d,                 &
                              DT_IN = dt, DZ = domain%dz_interface%data_3d,     &
                              W = domain%w_real%data_3d,                        &
-                             RAINNC = domain%accumulated_precipitation%data_2d, &
+                             RAINNC = precipitation &
                              RAINNCV = last_rain, SR=SR,                  &
-                             SNOWNC = domain%accumulated_snowfall%data_2d,&
+                             SNOWNC = snowfall,&
                              SNOWNCV = last_snow,                         &
-                             GRAUPELNC = domain%graupel%data_2d,          &
+                             GRAUPELNC = graupel,          &
                              GRAUPELNCV = this_precip,                    & ! hm added 7/13/13
                              EFFC = domain%re_cloud%data_3d,          &
                              EFFI = domain%re_ice%data_3d,            &
@@ -661,9 +632,9 @@ contains
                              IDS=ids,IDE=ide, JDS=jds,JDE=jde, KDS=kds,KDE=kde, &
                              IMS=ims,IME=ime, JMS=jms,JME=jme, KMS=kms,KME=kme, &
                              ITS=its,ITE=ite, JTS=jts,JTE=jte, KTS=kts,KTE=kte, &
-                             RAINNC = domain%accumulated_precipitation%data_2d, &
+                             RAINNC = precipitation, &
                              RAINNCV = last_rain,                    &
-                             SNOWNC = domain%accumulated_snowfall%data_2d,&
+                             SNOWNC = snowfall,&
                              SNOWNCV = last_snow,                         &
                              diag_effc3d=domain%re_cloud%data_3d,               &
                              diag_effi3d=domain%re_ice%data_3d                  &

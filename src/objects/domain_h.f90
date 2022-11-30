@@ -335,12 +335,9 @@ module domain_interface
     real,                       allocatable :: ustar(:,:)
     real,                       allocatable :: znu(:)
     real,                       allocatable :: znw(:)
-<<<<<<< HEAD
     real,                       allocatable :: froude(:,:,:) !Froude number
     real,                       allocatable :: Ri(:,:,:)     !Bulk richardson number
     
-=======
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
     ! these data are stored on the domain wide grid even if this process is only looking at a subgrid
     ! these variables are necessary with linear winds, especially with spatially variable dz, to compute the LUT
     real,                       allocatable :: global_terrain(:,:)

@@ -46,11 +46,7 @@ module land_surface
     use options_interface,   only : options_t
     use domain_interface,    only : domain_t
     use module_ra_simple, only: calc_solar_elevation
-<<<<<<< HEAD
-    use io_routines,          only : io_write
-=======
     use ieee_arithmetic
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
     implicit none
 
@@ -435,19 +431,6 @@ contains
                   qv            => domain%water_vapor%data_3d          &
             )
 
-
-<<<<<<< HEAD
-        ! convert latent heat flux to a mixing ratio tendancy term
-        ! (J/(s*m^2) * s / (J/kg) => kg/m^2) ... / (kg/m^3 * m) => kg/kg
-        
-        !latent_heat = latent_heat+100
-        !where (latent_heat < 0) latent_heat = 0
-        
-        lhdQV=((latent_heat(its:ite,jts:jte)) / LH_vaporization * dt) &
-             / (density(its:ite,kts,jts:jte) * dz(its:ite,kts,jts:jte))
-        ! add water vapor in kg/kg
-        qv(its:ite,kts,jts:jte) = qv(its:ite,kts,jts:jte) + lhdQV !+ lhdQV
-=======
         do j = jts, jte
         do k = kts, kts + nz
         do i = its, ite
@@ -477,7 +460,6 @@ contains
         end do ! j
 
         ! write(*,*) MINVAL(lhdQV), MAXVAL(lhdQV), 'kg/kg (min/max) added to QV at', domain%model_time%hour
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
         ! enforce some minimum water vapor content... just in case
         where(qv < SMALL_QV) qv = SMALL_QV
@@ -1130,14 +1112,10 @@ contains
                                   domain%land_mask,                     &
                                   QSFC,                                 &
                                   QFX,                                  &
-<<<<<<< HEAD
                                   domain%skin_temperature%data_2d,      &
+                                  domain%veg_type,                      &
                                   its, ite, kts, kte, jts, jte)
-=======
-                                  domain%skin_temperature%data_2d       &
-                                  ,domain%veg_type                      &
                                 !   ,domain%terrain%data_2d               & ! terrain height [m] if ht(i,j)>=lake_min_elev -> lake (in case no lake category is provided, but lake model is selected, we need to not run the simple water as well - left comment in for future reference)
-                                  )
             endif
 
             !___________________ Lake model _____________________
@@ -1205,7 +1183,6 @@ contains
                     ,q2=domain%humidity_2m%data_2d                              & !(OUT)-- q2         diagnostic 2-m mixing ratio from surface layer and lsm
                 )
 
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
             endif
 
 
@@ -1615,16 +1592,9 @@ contains
 
             endif
         endif
-<<<<<<< HEAD
-        !if (options%physics%landsurface>0) then
-        !    call apply_fluxes(domain, dt)
-        !endif
-=======
-        ! if (options%physics%landsurface>0) then
         if (options%physics%landsurface>0 .OR. options%physics%watersurface>0) then
             call apply_fluxes(domain, dt)
         endif
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
     end subroutine lsm
 end module land_surface

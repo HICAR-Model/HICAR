@@ -685,7 +685,6 @@ contains
             stop_pos  = nint((real(my_index) / kNUM_COMPUTE) * total_LUT_entries) - 1
         endif
 
-<<<<<<< HEAD
         ! create the array of spd, dir, and nsq values to create LUTs for
         ! generates the values for each look up table dimension
         ! generate table of wind directions to be used
@@ -695,21 +694,12 @@ contains
         ! generate table of Brunt-Vaisalla frequencies (Nsq) to be used
         call linear_space(spd_values,spdmin,spdmax,n_spd_values)
 
-        if (options%parameters%debug) then
-            if (this_image()==1) write(*,*) "Local Look up Table size:", 4*product(shape(hi_u_LUT))/real(2**20), "MB"
-            if (this_image()==1) write(*,*) "Wind Speeds:",spd_values
-            if (this_image()==1) write(*,*) "Directions:",360*dir_values/(2*pi)
-            if (this_image()==1) write(*,*) "Stabilities:",exp(nsq_values)
-        endif
-=======
         ! if (options%parameters%debug) then
         if (this_image()==1) write(*,*) "Local Look up Table size:", 4*product(shape(hi_u_LUT))/real(2**20), "MB"
         if (this_image()==1) write(*,*) "Wind Speeds:",spd_values
         if (this_image()==1) write(*,*) "Directions:",360*dir_values/(2*pi)
         if (this_image()==1) write(*,*) "Stabilities:",exp(nsq_values)
         ! endif
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
-
 
         if (reverse.or.(.not.((options%lt_options%read_LUT).and.(error==0)))) then
             ! loop over combinations of U, V, and Nsq values
@@ -729,14 +719,6 @@ contains
             this_n = stop_pos-start_pos+1
             ! $omp do
 
-<<<<<<< HEAD
-            if (this_image()==1) print*, "Starting"
-            !if (this_image()==1) print*, maxval(domain%z_interface%data_3d(:,nz,:)), maxval(domain%global_terrain), maxval(domain%z_interface%data_3d(:,nz,:)-domain%global_terrain)
-            !if (this_image()==1) print*, minval(domain%z_interface%data_3d(:,nz,:)), minval(domain%global_terrain), minval(domain%z_interface%data_3d(:,nz,:)-domain%global_terrain)
-            !if (this_image()==1) print*, shape(domain%z_interface%data_3d), shape(domain%global_terrain)
-
-=======
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
             do ijk = start_pos, stop_pos
                 ! loop over the combined ijk space to improve parallelization (more granular parallelization)
                 ! because it is one combined loop, we have to calculate the i,k indicies from the combined ik variable
@@ -819,19 +801,11 @@ contains
                     loops_completed = loops_completed+1
                     !$omp end critical (print_lock)
 
-<<<<<<< HEAD
                     ! for now sync images ([DOM_IMG_INDX]) has to be inside the z loop to conserve memory for large domains
                     !$omp critical
                     sync images ([DOM_IMG_INDX])
                     !$omp end critical
 
-=======
-                    ! for now sync all has to be inside the z loop to conserve memory for large domains
-
-                    !$omp critical (print_lock)
-                    sync all
-                    !$omp end critical (print_lock)
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
                 enddo
 
             end do
