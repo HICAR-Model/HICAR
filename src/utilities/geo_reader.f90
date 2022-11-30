@@ -153,7 +153,7 @@ contains
             write(*,*) x2, y2
             write(*,*) x3, y3
             write(*,*) w1, w2, w3
-            error stop "Triangulation is broken"
+            !error stop "Triangulation is broken"
         endif
         w1=max(0.,w1); w2=max(0.,w2); w3=max(0.,w3);
 

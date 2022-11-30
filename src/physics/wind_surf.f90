@@ -359,31 +359,46 @@ contains
     
     subroutine apply_Sx(Sx, TPI, u, v, w, Ri, dzdx, dzdy)
         implicit none
-        real, intent(in)                       :: Sx(:,:,:,:), TPI(:,:), Ri(:,:,:), dzdx(:,:,:), dzdy(:,:,:)
+        real, intent(in)                       :: Sx(:,:,:,:), TPI(:,:), Ri(:,:,:), dzdx(:,:,:), dzdy(:,:,:), z(:,:,:)
         real, intent(inout),  dimension(:,:,:) :: u, v, w
         
         real, allocatable, dimension(:,:)   :: winddir, x_norm, y_norm, thresh_ang
         real, allocatable, dimension(:,:,:)   :: Sx_U_corr, Sx_V_corr, Sx_curr, Sx_corr, TPI_corr
 
-        integer ::  i, j, k, ims, ime, jms, jme, kms, k_cor_top
-        real    ::  Ri_num, WS, DEFAULT_SCALE_ANG, max_spd, ang_scale
+        integer ::  i, j, k, ims, ime, jms, jme, kms, Sx_k_max, TPI_k_max
+        real    ::  Ri_num, WS, max_spd, z_mean, SX_Z_MAX, TPI_Z_MAX, SX_SCALE_ANG, TPI_SCALE
                 
+        SX_SCALE_ANG = 30.0 !This means that for a (SX_SCALE_ANG/2)-degree difference between threshold and Sx, 
+                            !reversal starts. Can be thought of as minimum terrain slope necesarry for flow reversal
+        TPI_SCALE = 200.0
+        SX_Z_MAX = 1500.0
+        TPI_Z_MAX = 200.0
+        
+        TPI_k_max = 0
+        Sx_k_max = 0
         ims = lbound(w,1)
         ime = ubound(w,1)
         kms = lbound(w,2)
-        k_cor_top = min(30,ubound(w,2)) !Arbitrary at the moment, but high enough to ensure good vertical coverage
         jms = lbound(w,3)
         jme = ubound(w,3)
+        
+        do k = kms,ubound(w,2)
+            z_mean =SUM(z(:,k,:))/SIZE(z(:,k,:))
+            if (z_mean > SX_Z_MAX .and. Sx_k_max==0) Sx_k_max = max(2,k-1)
+            if (z_mean > TPI_Z_MAX .and. TPI_k_max==0) TPI_k_max = max(2,k-1)
+        enddo
+        
+        Sx_k_max = max(Sx_k_max,TPI_k_max) !Ensure that Sx_k_max is larger than TPI_k_max, since we use this max to index correction vars
         
         allocate(x_norm(ims:ime,jms:jme))
         allocate(y_norm(ims:ime,jms:jme))
         allocate(thresh_ang(ims:ime,jms:jme))
         
-        allocate(Sx_curr(ims:ime,kms:k_cor_top,jms:jme))
-        allocate(Sx_corr(ims:ime,kms:k_cor_top,jms:jme))
-        allocate(TPI_corr(ims:ime,kms:k_cor_top,jms:jme))
-        allocate(Sx_U_corr(ims:ime,kms:k_cor_top,jms:jme))
-        allocate(Sx_V_corr(ims:ime,kms:k_cor_top,jms:jme))
+        allocate(Sx_curr(ims:ime,kms:Sx_k_max,jms:jme))
+        allocate(Sx_corr(ims:ime,kms:Sx_k_max,jms:jme))
+        allocate(TPI_corr(ims:ime,kms:Sx_k_max,jms:jme))
+        allocate(Sx_U_corr(ims:ime,kms:Sx_k_max,jms:jme))
+        allocate(Sx_V_corr(ims:ime,kms:Sx_k_max,jms:jme))
 
 
         !Initialize Sx_curr. This will keep the border values from being updated
@@ -391,8 +406,6 @@ contains
         
         thresh_ang = 0.
         max_spd = 0.
-        DEFAULT_SCALE_ANG = 30.0 !This means that for a (DEFAULT_SCALE_ANG/2)-degree difference between threshold and Sx, 
-                                 !reversal starts. Can be thought of as minimum terrain slope necesarry for flow reversal
         
         !Calculate horizontal normal vector components of terrain
         thresh_ang = sqrt( dzdx(ims:ime,kms,jms:jme)**2+dzdy(ims:ime,kms,jms:jme)**2)
@@ -401,7 +414,7 @@ contains
         thresh_ang = 0.
         
         !Pick appropriate Sx for wind direction
-        do k = kms, k_cor_top
+        do k = kms, Sx_k_max
             call pick_Sx(Sx(:,:,k,:), Sx_curr(:,k,:), u(:,k,:), v(:,k,:))
         end do
         
@@ -413,7 +426,7 @@ contains
         do i = ims, ime
             do j = jms, jme
                 !Loop through vertical column
-                do k = kms, k_cor_top
+                do k = kms, Sx_k_max
                     !Compute threshold separation angle from atmospheric conditions
                     !If we are potentially sheltered (on a lee-slope)
                     if (Sx_curr(i,1,j) > 0)  then
@@ -422,34 +435,28 @@ contains
                         WS = sqrt( u(i,1,j)**2 + v(i,1,j)**2 )
                         thresh_ang(i,j) = calc_thresh_ang(Ri_num,WS)
                         
-                        if (Ri_num <= 0.) then
-                            max_spd = 0.3*Ri_num+0.3
-                        else if (Ri_num < 0.25) then
-                            max_spd = 1/(13.9*(Ri_num+0.15)) - 0.18
-                        else
-                            max_spd = 0.0
-                        endif
-                        max_spd = max(max_spd,0.0)
-                        ang_scale = DEFAULT_SCALE_ANG
+                        !if (Ri_num <= 0.) then
+                        !    max_spd = 0.3*Ri_num+0.3
+                        !else if (Ri_num < 0.25) then
+                        !    max_spd = 1/(13.9*(Ri_num+0.15)) - 0.18
+                        !else
+                        !    max_spd = 0.0
+                        !endif
+                        !max_spd = max(max_spd,0.0)
               
                         !Consider sheltering corrections
-                        !If surface was sheltered and we are still sheltered: U-grid
+                        !If surface was sheltered and we are still sheltered
                         if ((Sx_curr(i,kms,j) > thresh_ang(i,j)) .and. (Sx_curr(i,k,j) > thresh_ang(i,j))) then
                             !Sheltered correction
-                            !if (k==kms) then
-                            !    if ( ((Sx_curr(i,k,j)-thresh_ang)/ang_scale) > (1+max_spd)) then
-                            !        ang_scale = (Sx_curr(i,k,j)-thresh_ang)/(1+max_spd)
-                            !    endif
-                            !endif
-                            Sx_corr(i,k,j) = (Sx_curr(i,k,j)-thresh_ang(i,j))/ang_scale
+                            Sx_corr(i,k,j) = (Sx_curr(i,k,j)-thresh_ang(i,j))/SX_SCALE_ANG
                         end if
                     endif
 
                 
                     !Compute TPI_corr, only for negative TPI's (valleys)
-                    if ((k <= 10) .and. (TPI(i,j) < 0)) then
+                    if ((k <= TPI_k_max) .and. (TPI(i,j) < 0)) then
                         !Scale TPI correction and exposure with height so we smoothly merge with forcing data
-                        TPI_corr(i,k,j) = (TPI(i,j)/200) * ((11-k)/10.0) !This is setup such that valleys <= -100
+                        TPI_corr(i,k,j) = (TPI(i,j)/TPI_SCALE) * (1.0*(TPI_k_max+1-k)/TPI_k_max) !This is setup such that valleys <= -100
                     end if
                 end do
             end do
@@ -458,29 +465,27 @@ contains
         TPI_corr  = min(max(TPI_corr,-0.5),0.0)
         Sx_corr = min(max(Sx_corr,0.0),1.0)
     
-        do k=kms,k_cor_top
-            Sx_U_corr(:,k,:) = 2*Sx_corr(:,k,:)*(x_norm*( (u(ims+1:ime+1,k,:)+u(ims:ime,k,:))/2 ) + &
-                                 y_norm*( (v(:,k,jms+1:jme+1)+v(:,k,jms:jme))/2 ))*x_norm
-            Sx_V_corr(:,k,:) = 2*Sx_corr(:,k,:)*(x_norm*( (u(ims+1:ime+1,k,:)+u(ims:ime,k,:))/2 ) + &
-                                 y_norm*( (v(:,k,jms+1:jme+1)+v(:,k,jms:jme))/2 ))*y_norm
-        end do                        
+        Sx_corr = 2*Sx_corr*(x_norm*( (u(ims+1:ime+1,kms:Sx_k_max,:)+u(ims:ime,kms:Sx_k_max,:))/2 ) + &
+                                 y_norm*( (v(:,kms:Sx_k_max,jms+1:jme+1)+v(:,kms:Sx_k_max,jms:jme))/2 ))
+        Sx_U_corr = Sx_corr*x_norm
+        Sx_V_corr = Sx_corr*y_norm
         
         !Finally, apply TPI and Sx corrections, staggering corrections to U/V grids
-        u(ims+1:ime,kms:k_cor_top,:) = u(ims+1:ime,kms:k_cor_top,:) - ( (Sx_U_corr(ims+1:ime,:,:) + Sx_U_corr(ims:ime-1,:,:))/2 )
-        u(ims,kms:k_cor_top,:) = u(ims,kms:k_cor_top,:) - Sx_U_corr(ims,:,:)
-        u(ime+1,kms:k_cor_top,:) = u(ime+1,kms:k_cor_top,:) - Sx_U_corr(ime,:,:)
+        u(ims+1:ime,kms:Sx_k_max,:) = u(ims+1:ime,kms:Sx_k_max,:) - ( (Sx_U_corr(ims+1:ime,:,:) + Sx_U_corr(ims:ime-1,:,:))/2 )
+        u(ims,kms:Sx_k_max,:) = u(ims,kms:Sx_k_max,:) - Sx_U_corr(ims,:,:)
+        u(ime+1,kms:Sx_k_max,:) = u(ime+1,kms:Sx_k_max,:) - Sx_U_corr(ime,:,:)
         
-        v(:,kms:k_cor_top,jms+1:jme) = v(:,kms:k_cor_top,jms+1:jme) - ( (Sx_V_corr(:,:,jms+1:jme) + Sx_V_corr(:,:,jms:jme-1))/2 )
-        v(:,kms:k_cor_top,jms) = v(:,kms:k_cor_top,jms) - Sx_V_corr(:,:,jms)
-        v(:,kms:k_cor_top,jme+1) = v(:,kms:k_cor_top,jme+1) - Sx_V_corr(:,:,jme)
+        v(:,kms:Sx_k_max,jms+1:jme) = v(:,kms:Sx_k_max,jms+1:jme) - ( (Sx_V_corr(:,:,jms+1:jme) + Sx_V_corr(:,:,jms:jme-1))/2 )
+        v(:,kms:Sx_k_max,jms) = v(:,kms:Sx_k_max,jms) - Sx_V_corr(:,:,jms)
+        v(:,kms:Sx_k_max,jme+1) = v(:,kms:Sx_k_max,jme+1) - Sx_V_corr(:,:,jme)
 
-        u(ims+1:ime,kms:k_cor_top,:) = u(ims+1:ime,kms:k_cor_top,:) * (1 + (TPI_corr(ims+1:ime,:,:)+TPI_corr(ims:ime-1,:,:))/2 )
-        u(ims,kms:k_cor_top,:) = u(ims,kms:k_cor_top,:) - TPI_corr(ims,:,:)
-        u(ime+1,kms:k_cor_top,:) = u(ime+1,kms:k_cor_top,:) - TPI_corr(ime,:,:)
+        u(ims+1:ime,kms:Sx_k_max,:) = u(ims+1:ime,kms:Sx_k_max,:) * (1 + (TPI_corr(ims+1:ime,:,:)+TPI_corr(ims:ime-1,:,:))/2 )
+        u(ims,kms:Sx_k_max,:) = u(ims,kms:Sx_k_max,:) * (1+TPI_corr(ims,:,:))
+        u(ime+1,kms:Sx_k_max,:) = u(ime+1,kms:Sx_k_max,:) * (1+TPI_corr(ime,:,:))
         
-        v(:,kms:k_cor_top,jms+1:jme) = v(:,kms:k_cor_top,jms+1:jme) * (1 + (TPI_corr(:,:,jms+1:jme)+TPI_corr(:,:,jms:jme-1))/2 )
-        v(:,kms:k_cor_top,jms) = v(:,kms:k_cor_top,jms) - TPI_corr(:,:,jms)
-        v(:,kms:k_cor_top,jme+1) = v(:,kms:k_cor_top,jme+1) - TPI_corr(:,:,jme)
+        v(:,kms:Sx_k_max,jms+1:jme) = v(:,kms:Sx_k_max,jms+1:jme) * (1 + (TPI_corr(:,:,jms+1:jme)+TPI_corr(:,:,jms:jme-1))/2 )
+        v(:,kms:Sx_k_max,jms) = v(:,kms:Sx_k_max,jms) * (1+TPI_corr(:,:,jms))
+        v(:,kms:Sx_k_max,jme+1) = v(:,kms:Sx_k_max,jme+1) * (1+TPI_corr(:,:,jme))
 
     end subroutine apply_Sx
     
