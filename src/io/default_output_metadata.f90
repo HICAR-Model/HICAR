@@ -2813,6 +2813,8 @@ contains
         associate(var=>var_meta(kVARS%t_lake3d))
             var%name        = "t_lake3d"
             var%dimensions  = three_d_t_lake_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "lake_water_temperature"),     &
                                attribute_t("units",         "K"),                               &
@@ -2824,6 +2826,8 @@ contains
         associate(var=>var_meta(kVARS%lake_icefrac3d))
             var%name        = "lake_icefrac3d"
             var%dimensions  = three_d_t_lake_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "lake_icefraction_3d"),     &
                                attribute_t("units",         "-"),                               &
@@ -2835,6 +2839,8 @@ contains
         associate(var=>var_meta(kVARS%z_lake3d))
             var%name        = "z_lake3d"
             var%dimensions  = three_d_t_lake_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "lake_layer_depth"),     &
                                attribute_t("units",         "m"),                               &
@@ -2846,6 +2852,8 @@ contains
         associate(var=>var_meta(kVARS%dz_lake3d))
             var%name        = "dz_lake3d"
             var%dimensions  = three_d_t_lake_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "lake_layer_thickness"),     &
                                attribute_t("units",         "m"),                               &
@@ -2857,6 +2865,8 @@ contains
         associate(var=>var_meta(kVARS%snl2d))
             var%name        = "snl2d"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "lake_snow_layer_2d"),           &
                                attribute_t("units",         "-"),                               &
@@ -2868,6 +2878,8 @@ contains
         associate(var=>var_meta(kVARS%t_grnd2d))
             var%name        = "t_grnd2d"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "t_grnd2d"),           &
                                attribute_t("units",         "K"),                               &
@@ -2879,6 +2891,8 @@ contains
         associate(var=>var_meta(kVARS%t_soisno3d))
             var%name        = "t_soisno3d"
             var%dimensions  = three_d_t_lake_soisno_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "temperature_soil_snow_below_or_above_lake"),     &
                                attribute_t("units",         "K"),                               &
@@ -2890,6 +2904,8 @@ contains
         associate(var=>var_meta(kVARS%h2osoi_ice3d))
             var%name        = "h2osoi_ice3d"
             var%dimensions  = three_d_t_lake_soisno_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "h2osoi_ice3d"),     &
                                attribute_t("units",         ""),                               &
@@ -2901,6 +2917,8 @@ contains
         associate(var=>var_meta(kVARS%h2osoi_liq3d))
             var%name        = "h2osoi_liq3d"
             var%dimensions  = three_d_t_lake_soisno_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "lake_soil_or_snow_liquid water_content"),     &
                                attribute_t("units",         "kg/m2"),                               &
@@ -2912,6 +2930,8 @@ contains
         associate(var=>var_meta(kVARS%h2osoi_vol3d))
             var%name        = "h2osoi_vol3d"
             var%dimensions  = three_d_t_lake_soisno_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "volumetric_soil_water"),     &
                                attribute_t("units",         "m3/m3"),                               &
@@ -2923,6 +2943,8 @@ contains
         associate(var=>var_meta(kVARS%z3d))
             var%name        = "z3d"
             var%dimensions  = three_d_t_lake_soisno_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "layer_depth_for_lake_snow&soil"),     &
                                attribute_t("units",         "m"),                               &
@@ -2934,6 +2956,8 @@ contains
         associate(var=>var_meta(kVARS%dz3d))
             var%name        = "dz3d"
             var%dimensions  = three_d_t_lake_soisno_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "layer_thickness_for_lake_snow&soil"),     &
                                attribute_t("units",         "m"),                               &
@@ -2945,6 +2969,8 @@ contains
         associate(var=>var_meta(kVARS%zi3d))
             var%name        = "zi3d"
             var%dimensions  = three_d_t_lake_soisno_1_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "interface_layer_depth_for_lake_snow&soil"),     &
                                attribute_t("units",         "m"),                               &
@@ -2956,6 +2982,8 @@ contains
         associate(var=>var_meta(kVARS%watsat3d))
             var%name        = "watsat3d"
             var%dimensions  = three_d_t_lake_soi_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "volumetric soil water at saturation (porosity)"),     &
                                attribute_t("units",         ""),                               &
@@ -2967,6 +2995,8 @@ contains
         associate(var=>var_meta(kVARS%csol3d))
             var%name        = "csol3d"
             var%dimensions  = three_d_t_lake_soi_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "heat capacity, soil solids "),     &
                                attribute_t("units",         "(J/m**3/Kelvin)"),                               &
@@ -2978,6 +3008,8 @@ contains
         associate(var=>var_meta(kVARS%tkmg3d))
             var%name        = "tkmg3d"
             var%dimensions  = three_d_t_lake_soi_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "thermal conductivity, soil minerals  [W/m-K]"),     &
                                attribute_t("units",         ""),                               &
@@ -2989,6 +3021,8 @@ contains
         associate(var=>var_meta(kVARS%lakemask))
             var%name        = "lakemask"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("standard_name", "lakemask"),     &
                                attribute_t("units",         ""),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2999,6 +3033,8 @@ contains
         associate(var=>var_meta(kVARS%lakedepth2d))
             var%name        = "lakedepth2d"
             var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%attributes  = [attribute_t("standard_name", "lake_depth"),     &
                                attribute_t("units",         "m"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -3009,6 +3045,8 @@ contains
         associate(var=>var_meta(kVARS%savedtke12d))
             var%name        = "savedtke12d"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "savedtke12d"),           &
                                attribute_t("units",         "-?"),                               &
@@ -3020,6 +3058,8 @@ contains
         associate(var=>var_meta(kVARS%tksatu3d))
             var%name        = "tksatu3d"
             var%dimensions  = three_d_t_lake_soi_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "thermal conductivity, saturated soil [W/m-K]"),     &
                                attribute_t("units",         ""),                               &
@@ -3031,6 +3071,8 @@ contains
         associate(var=>var_meta(kVARS%tkdry3d))
             var%name        = "tkdry3d"
             var%dimensions  = three_d_t_lake_soi_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "thermal conductivity, dry soil (W/m/Kelvin)"),     &
                                attribute_t("units",         "?"),                               &
@@ -3045,6 +3087,8 @@ contains
         associate(var=>var_meta(kVARS%ivt))
             var%name        = "ivt"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "integrated_vapor_transport"),  &
                                attribute_t("units",         "kg m-1 s-1"),                      &
@@ -3057,6 +3101,8 @@ contains
         associate(var=>var_meta(kVARS%iwv))
             var%name        = "iwv"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "atmosphere_mass_content_of_water_vapor"),  &
                                attribute_t("units",         "kg m-2"),                      &
@@ -3069,6 +3115,8 @@ contains
         associate(var=>var_meta(kVARS%iwl))
             var%name        = "iwl"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "atmosphere_mass_content_of_water_liquid"),  &
                                attribute_t("units",         "kg m-2"),                      &
@@ -3081,6 +3129,8 @@ contains
         associate(var=>var_meta(kVARS%iwi))
             var%name        = "iwi"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "atmosphere_mass_content_of_water_ice"),  &
                                attribute_t("units",         "kg m-2"),                      &

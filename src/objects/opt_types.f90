@@ -232,11 +232,7 @@ module options_types
         character (len=MAXFILELENGTH), dimension(:), allocatable :: boundary_files
 
         ! variable names from init/BC/wind/... files
-<<<<<<< HEAD
-        character (len=MAXVARLENGTH) :: landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar, &
-=======
-        character (len=MAXVARLENGTH) :: landvar,lakedepthvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon, &
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
+        character (len=MAXVARLENGTH) :: landvar,lakedepthvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar, &
                                         hgt_hi,lat_hi,lon_hi,ulat_hi,ulon_hi,vlat_hi,vlon_hi, &
                                         pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qsvar,qgvar,i2mvar,i3mvar,&
                                         qncvar,qnivar,qnrvar,qnsvar,qngvar,i2nvar,i3nvar,&

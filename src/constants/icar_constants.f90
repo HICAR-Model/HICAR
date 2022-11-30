@@ -412,6 +412,11 @@ module icar_constants
     integer, parameter :: kMONTH_GRID_Z      = 12
     integer, parameter :: kGECROS_GRID_Z     = 60
     integer, parameter :: kSOILCOMP_GRID_Z   = 8
+    
+    integer, parameter :: kLAKE_Z            = 10
+    integer, parameter :: kLAKE_SOISNO_Z     = 9
+    integer, parameter :: kLAKE_SOI_Z        = 4
+    integer, parameter :: kLAKE_SOISNO_1_Z   = 10
 
 
     ! mm of accumulated precip before "tipping" into the bucket

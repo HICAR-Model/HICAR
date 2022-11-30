@@ -1,15 +1,9 @@
 submodule(options_interface) options_implementation
 
-<<<<<<< HEAD
-
-    use icar_constants,             only : kMAINTAIN_LON, MAXFILELENGTH, MAXVARLENGTH, MAX_NUMBER_FILES, MAXLEVELS, kNO_STOCHASTIC, kVERSION_STRING, kMAX_FILE_LENGTH, kMAX_NAME_LENGTH, pi
-
-=======
     use icar_constants,             only : kMAINTAIN_LON, MAXFILELENGTH, MAXVARLENGTH, MAX_NUMBER_FILES, MAXLEVELS, &
                                            kNO_STOCHASTIC, kVERSION_STRING, kMAX_FILE_LENGTH, kMAX_NAME_LENGTH, pi, &
                                            kWATER_LAKE, &
                                            kWIND_LINEAR, kLINEAR_ITERATIVE_WINDS, kITERATIVE_WINDS, kCONSERVE_MASS
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
     use io_routines,                only : io_newunit
     use time_io,                    only : find_timestep_in_file
     use time_delta_object,          only : time_delta_t
@@ -696,11 +690,7 @@ contains
         character(len=*),             intent(in)    :: filename
         type(parameter_options_type), intent(inout) :: options
         integer :: name_unit, i, j
-<<<<<<< HEAD
-        character(len=MAXVARLENGTH) :: landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar,zvar,zbvar,  &
-=======
-        character(len=MAXVARLENGTH) :: landvar,lakedepthvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,zvar,zbvar,  &
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
+        character(len=MAXVARLENGTH) :: landvar,lakedepthvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar,zvar,zbvar,  &
                                         hgt_hi,lat_hi,lon_hi,ulat_hi,ulon_hi,vlat_hi,vlon_hi,           &
                                         pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qgvar,qsvar,            &
                                         qncvar,qnivar,qnrvar,qngvar,qnsvar,hgtvar,shvar,lhvar,pblhvar,  &
@@ -711,16 +701,10 @@ contains
                                         swdown_var, lwdown_var, sst_var, rain_var, time_var, sinalpha_var, cosalpha_var, &
                                         lat_ext, lon_ext, swe_ext, hsnow_ext, rho_snow_ext, tss_ext, tsoil2D_ext, tsoil3D_ext, z_ext, time_ext
 
-<<<<<<< HEAD
-
         namelist /var_list/ pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qgvar,qsvar,qncvar,qnivar,qnrvar,qngvar,qnsvar,&
                             i2mvar, i3mvar, i2nvar, i3nvar, i1avar, i2avar, i3avar, i1cvar, i2cvar, i3cvar, &
                             hgtvar,shvar,lhvar,pblhvar,   &
-                            landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar,zvar,zbvar, &
-=======
-        namelist /var_list/ pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qgvar,qsvar,hgtvar,shvar,lhvar,pblhvar,   &
-                            landvar,lakedepthvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,zvar,zbvar, &
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
+                            landvar,lakedepthvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar,zvar,zbvar, &
                             psvar, pslvar, snowh_var, &
                             hgt_hi,lat_hi,lon_hi,ulat_hi,ulon_hi,vlat_hi,vlon_hi,           &
                             soiltype_var, soil_t_var,soil_vwc_var,swe_var,soil_deept_var,           &

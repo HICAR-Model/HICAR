@@ -1,10 +1,6 @@
 module exchangeable_interface
   use assertions_mod,          only : assert, assertions
-<<<<<<< HEAD
   use icar_constants
-=======
-  use icar_constants,          only : kMAX_NAME_LENGTH, kREAL
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
   use grid_interface,          only : grid_t
   use variable_interface,      only : variable_t
   implicit none
@@ -27,7 +23,6 @@ module exchangeable_interface
     logical :: south_boundary=.false.
     logical :: east_boundary=.false.
     logical :: west_boundary=.false.
-<<<<<<< HEAD
     
     !x-extra and y-extra to support exchanges on staggered grids
     integer :: xe
@@ -39,10 +34,7 @@ module exchangeable_interface
     integer :: jte
     integer :: kts
     integer :: kte
-
-=======
     integer :: dtype=kREAL
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
 
   contains
     private

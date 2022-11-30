@@ -517,14 +517,9 @@ contains
                             )
                 domain%tend_swrad%data_3d = domain%tend%th_swrad
             endif
-<<<<<<< HEAD
             domain%potential_temperature%data_3d = domain%potential_temperature%data_3d+domain%tend%th_lwrad*dt+domain%tend%th_swrad*dt
             domain%temperature%data_3d = domain%potential_temperature%data_3d*domain%exner%data_3d
             domain%tend_swrad%data_3d = domain%tend%th_swrad
-=======
-            domain%potential_temperature%data_3d = domain%potential_temperature%data_3d + domain%tend%th_lwrad*dt + domain%tend%th_swrad*dt
-            domain%temperature%data_3d = domain%potential_temperature%data_3d * domain%exner%data_3d
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
         endif
 
     end subroutine rad

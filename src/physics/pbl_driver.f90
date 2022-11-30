@@ -29,10 +29,8 @@ module planetary_boundary_layer
     use domain_interface,   only : domain_t
     use options_interface,  only : options_t
     use pbl_simple,    only : simple_pbl, finalize_simple_pbl, init_simple_pbl
-<<<<<<< HEAD
     use pbl_diagnostic, only : diagnostic_pbl, finalize_diagnostic_pbl, init_diagnostic_pbl
     !use module_bl_ysu, only : ysuinit, ysu
-=======
     use module_bl_ysu, only : ysuinit, ysu
     use mod_atm_utilities, only : calc_Richardson_nr
     use mod_wrf_constants, only : EOMEG
@@ -42,7 +40,6 @@ module planetary_boundary_layer
     use array_utilities, only : array_offset_x_3d, array_offset_y_3d
 
 
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
     implicit none
     real,allocatable, dimension(:,:)    ::  windspd, Ri, z_atm, zol, hol, hpbl, psim, &
                                             psih, u10d, v10d, t2d, q2d, gz1oz0, CHS, xland_real,regime
@@ -128,13 +125,9 @@ contains
         if (options%physics%boundarylayer==kPBL_SIMPLE) then
             if (this_image()==1) write(*,*) "    Simple PBL"
             call init_simple_pbl(domain, options)
-<<<<<<< HEAD
         else if (options%physics%boundarylayer==kPBL_DIAGNOSTIC) then
             if (this_image()==1) write(*,*) "    Diagnostic PBL"
             call init_diagnostic_pbl(domain, options)
-=======
-
->>>>>>> 3b9062537bad18607fb33febc3c2b2d4c3c0e6e0
         else if (options%physics%boundarylayer==kPBL_YSU) then
 
             if (this_image()==1) write(*,*) "    YSU PBL"
