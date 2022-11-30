@@ -424,7 +424,7 @@ contains
         real :: Ri                                  ! []
         real :: denom
 
-        denom = ( ((u_shear/dz)**2) + ((v_shear/dz)**2) )
+        denom = ((u_shear/dz)**2) + ((v_shear/dz)**2)
 
         if (denom==0) then
             Ri = 10 ! anything over ~5 is effectively infinite anyway
@@ -457,7 +457,7 @@ contains
         
         !When we have very unstable conditions (Ri < 0), theta = 0, very stable conditions (Ri > 1), never separation
         !WS modulates this, reducing the separation angle by 2 degrees for each m/s over 2 m/s
-        theta = 0 + 45*4*min(max(Ri,0.0),0.25) !- 2*min((WS-2.0),0.0)
+        theta = 45*4*min(max(Ri,0.0),0.25) !- 2*min((WS-2.0),0.0)
         
         !Only allow separation for a max angle of 10º
         theta = max(theta,0.0)
@@ -830,13 +830,14 @@ contains
         ENDDO
         if (k_m12C .le. kts) k_m12C = kts
 
-        if (k_m12C.gt.kte-3) then
-            WRITE (*,*) 'DEBUG-GT: WARNING, no possible way neg12C can occur this high up: ', k_m12C
-            do k = kte, kts, -1
-                WRITE (*,*) 'DEBUG-GT,  k,  P, T : ', k,P1d(k)*0.01,T1d(k)-273.15
-            enddo
-            write(*,*) ('FATAL ERROR, problem in temperature profile.')
-        endif
+        !Below code assumes that model top should be very high
+        !if (k_m12C.gt.kte-3) then
+        !    WRITE (*,*) 'DEBUG-GT: WARNING, no possible way neg12C can occur this high up: ', k_m12C
+        !    do k = kte, kts, -1
+        !        WRITE (*,*) 'DEBUG-GT,  k,  P, T : ', k,P1d(k)*0.01,T1d(k)-273.15
+        !    enddo
+        !    write(*,*) ('FATAL ERROR, problem in temperature profile.')
+        !endif
 
        !..Find tropopause height, best surrogate, because we would not really
        !.. wish to put fake clouds into the stratosphere.  The 10/1500 ratio
