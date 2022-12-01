@@ -97,10 +97,10 @@ contains
                         kVARS%skin_temperature, kVARS%terrain, kVARS%ground_surf_temperature,              &
                         kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m,                  &
                         kVARS%humidity_2m, kVARS%surface_pressure, kVARS%ground_heat_flux,                 &
-                        kVARS%znu, kVARS%znw, kVARS%roughness_z0, kVARS%ustar, kVARS%cloud_ice,            &
-                        kVARS%tend_th_pbl, kVARS%tend_qc_pbl, kVARS%tend_qi_pbl,  kVARS%temperature_2m,    &
-                        kVARS%tend_u, kVARS%tend_v, kVARS%tend_qv_pbl, kVARS%pressure, kVARS%kpbl,         &
-                        kVARS%land_mask, kVARS%cloud_water,kVARS%coeff_heat_exchange_3d, kVARS%hpbl  ]) !kVARS%u_mass, kVARS%v_mass,
+                        kVARS%roughness_z0, kVARS%cloud_ice,            &
+                        kVARS%temperature_2m,    &
+                        kVARS%pressure,         &
+                        kVARS%cloud_water,kVARS%coeff_heat_exchange_3d, kVARS%hpbl  ]) !kVARS%u_mass, kVARS%v_mass,
         endif
     end subroutine pbl_var_request
 

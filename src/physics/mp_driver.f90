@@ -584,7 +584,7 @@ contains
                              P = domain%pressure%data_3d,                 &
                              DT_IN = dt, DZ = domain%dz_interface%data_3d,     &
                              W = domain%w_real%data_3d,                        &
-                             RAINNC = precipitation &
+                             RAINNC = precipitation, &
                              RAINNCV = last_rain, SR=SR,                  &
                              SNOWNC = snowfall,&
                              SNOWNCV = last_snow,                         &

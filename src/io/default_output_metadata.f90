@@ -2728,6 +2728,8 @@ contains
         associate(var=>var_meta(kVARS%coeff_heat_exchange_3d))
             var%name        = "coeff_heat_exchange_3d"
             var%dimensions  = three_d_t_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "sensible_heat_exchange_coefficient_3d"), &
                                attribute_t("units",         "1"),                                      &
@@ -2739,6 +2741,8 @@ contains
         associate(var=>var_meta(kVARS%hpbl))
             var%name        = "hpbl"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "height_of_planetary_boundary_layer"), &
                                attribute_t("units",         "m"),                                      &
@@ -2750,6 +2754,8 @@ contains
         associate(var=>var_meta(kVARS%kpbl))
             var%name        = "kpbl"
             var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "index_of_planetary_boundary_layer_height"), &
                                attribute_t("units",         "-"),                                      &
@@ -2816,6 +2822,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_Z
             var%attributes  = [attribute_t("standard_name", "lake_water_temperature"),     &
                                attribute_t("units",         "K"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2829,6 +2836,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_Z
             var%attributes  = [attribute_t("standard_name", "lake_icefraction_3d"),     &
                                attribute_t("units",         "-"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2842,6 +2850,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_Z
             var%attributes  = [attribute_t("standard_name", "lake_layer_depth"),     &
                                attribute_t("units",         "m"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2855,6 +2864,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_Z
             var%attributes  = [attribute_t("standard_name", "lake_layer_thickness"),     &
                                attribute_t("units",         "m"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2894,6 +2904,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_SOISNO_Z
             var%attributes  = [attribute_t("standard_name", "temperature_soil_snow_below_or_above_lake"),     &
                                attribute_t("units",         "K"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2907,6 +2918,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_SOISNO_Z
             var%attributes  = [attribute_t("standard_name", "h2osoi_ice3d"),     &
                                attribute_t("units",         ""),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2920,6 +2932,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_SOISNO_Z
             var%attributes  = [attribute_t("standard_name", "lake_soil_or_snow_liquid water_content"),     &
                                attribute_t("units",         "kg/m2"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2933,6 +2946,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_SOISNO_Z
             var%attributes  = [attribute_t("standard_name", "volumetric_soil_water"),     &
                                attribute_t("units",         "m3/m3"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2946,6 +2960,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_SOISNO_Z
             var%attributes  = [attribute_t("standard_name", "layer_depth_for_lake_snow&soil"),     &
                                attribute_t("units",         "m"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2959,6 +2974,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_SOISNO_Z
             var%attributes  = [attribute_t("standard_name", "layer_thickness_for_lake_snow&soil"),     &
                                attribute_t("units",         "m"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2972,6 +2988,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_SOISNO_1_Z
             var%attributes  = [attribute_t("standard_name", "interface_layer_depth_for_lake_snow&soil"),     &
                                attribute_t("units",         "m"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2985,6 +3002,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_SOI_Z
             var%attributes  = [attribute_t("standard_name", "volumetric soil water at saturation (porosity)"),     &
                                attribute_t("units",         ""),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -2998,6 +3016,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_SOI_Z
             var%attributes  = [attribute_t("standard_name", "heat capacity, soil solids "),     &
                                attribute_t("units",         "(J/m**3/Kelvin)"),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -3011,6 +3030,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_SOI_Z
             var%attributes  = [attribute_t("standard_name", "thermal conductivity, soil minerals  [W/m-K]"),     &
                                attribute_t("units",         ""),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -3061,6 +3081,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_SOI_Z
             var%attributes  = [attribute_t("standard_name", "thermal conductivity, saturated soil [W/m-K]"),     &
                                attribute_t("units",         ""),                               &
                                attribute_t("coordinates",   "lat lon")]
@@ -3074,6 +3095,7 @@ contains
             var%three_d     = .True.
             var%two_d       = .False.
             var%unlimited_dim=.True.
+            var%dim_len(3)  = kLAKE_SOI_Z
             var%attributes  = [attribute_t("standard_name", "thermal conductivity, dry soil (W/m/Kelvin)"),     &
                                attribute_t("units",         "?"),                               &
                                attribute_t("coordinates",   "lat lon")]

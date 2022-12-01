@@ -344,49 +344,6 @@ contains
             endif
         endif
 
-        ! wind calculations almost require fixed_dz_advection settings
-        if ((options%physics%windtype.eq.kITERATIVE_WINDS).and.(.not.options%parameters%fixed_dz_advection)) then
-            if (options%parameters%warning_level>3) then
-                if (this_image()==1) write(*,*) ""
-                if (this_image()==1) write(*,*) "WARNING WARNING WARNING"
-                if (this_image()==1) write(*,*) "WARNING, wind=3 setting is best used with fixed_dz_advection=.True."
-                if (this_image()==1) write(*,*) "WARNING, setting fixed_dz_advection=.True."
-                if (this_image()==1) write(*,*) "WARNING WARNING WARNING"
-                options%parameters%fixed_dz_advection = .True.
-            endif
-            if (options%parameters%warning_level==10) then
-                if (this_image()==1) write(*,*) "Set warning_level<10 to continue"
-                stop
-            endif
-        endif
-        if (((options%physics%windtype.eq.kWIND_LINEAR).or.(options%physics%windtype.eq.kLINEAR_ITERATIVE_WINDS)).and.(options%parameters%fixed_dz_advection)) then
-            if (options%parameters%warning_level>3) then
-                if (this_image()==1) write(*,*) ""
-                if (this_image()==1) write(*,*) "WARNING WARNING WARNING"
-                if (this_image()==1) write(*,*) "WARNING, wind=1 or 5 setting is best used with fixed_dz_advection=.False."
-                if (this_image()==1) write(*,*) "WARNING, setting fixed_dz_advection=.False."
-                if (this_image()==1) write(*,*) "WARNING WARNING WARNING"
-                if (this_image()==1) write(*,*) ""
-                options%parameters%fixed_dz_advection = .False.
-            endif
-            if (options%parameters%warning_level==10) then
-                if (this_image()==1) write(*,*) "Set warning_level<10 to continue"
-                stop
-            endif
-        endif
-        if ((options%physics%windtype.eq.0).and.(options%parameters%fixed_dz_advection)) then
-            if (this_image()==1) write(*,*) "WARNING WARNING WARNING"
-            if (this_image()==1) write(*,*) "WARNING setting fixed_dz_advection=False for wind=0"
-            if (this_image()==1) write(*,*) "WARNING WARNING WARNING"
-            options%parameters%fixed_dz_advection = .False.
-        endif
-        if ((options%physics%windtype.eq.kCONSERVE_MASS).and.(.not.options%parameters%fixed_dz_advection)) then
-            if (this_image()==1) write(*,*) "WARNING WARNING WARNING"
-            if (this_image()==1) write(*,*) "WARNING setting fixed_dz_advection=True for wind=2"
-            if (this_image()==1) write(*,*) "WARNING WARNING WARNING"
-            options%parameters%fixed_dz_advection = .True.
-        endif
-
         ! if using a real LSM, feedback will probably keep hot-air from getting even hotter, so not likely a problem
         if ((options%physics%landsurface>1).and.(options%physics%boundarylayer==0)) then
             if (options%parameters%warning_level>2) then
