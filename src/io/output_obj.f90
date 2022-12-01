@@ -490,9 +490,10 @@ contains
         type(Time_type), intent(in) :: time
         integer, intent(in)         :: var_indx_list(:)
         
+        type(Time_type) :: output_time
         real, allocatable :: var_3d(:,:,:)
         integer :: i, k_s, k_e
-
+        
         integer :: start_three_D_t(4), start_three_D_t_b(4), start_three_D_t_b2(4)
         integer :: start_two_D_t(3), start_two_D_t_b(3), start_two_D_t_b2(3)
         integer :: cnt_3d(3), cnt_3d_b(3), cnt_3d_b2(3)
@@ -605,6 +606,7 @@ contains
                                 call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id,  var%data_2d(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2), &
                                         start=(/ this%start_3d_b2(1), this%start_3d_b2(2) /), &
                                         count=(/ cnt_3d_b2(1), cnt_3d_b2(2) /)), "saving UR block:"//trim(var%name) )
+                            endif
                         endif
                     elseif (var%dtype == kDOUBLE) then
                         if (var%unlimited_dim) then
@@ -627,6 +629,7 @@ contains
                                 call check_ncdf( nf90_put_var(this%active_nc_id, var%var_id,  var%data_2dd(v_i_s_b2:v_i_e_b2,v_j_s_b2:v_j_e_b2), &
                                         start=(/ this%start_3d_b2(1), this%start_3d_b2(2) /), &
                                         count=(/ cnt_3d_b2(1), cnt_3d_b2(2) /)), "saving UR block:"//trim(var%name) )
+                            endif
                         endif
                     endif
                 endif

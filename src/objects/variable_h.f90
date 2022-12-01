@@ -1,5 +1,5 @@
 module variable_interface
-    use icar_constants,          only : kMAX_DIM_LENGTH, kMAX_STRING_LENGTH, kMAX_NAME_LENGTH
+    use icar_constants,          only : kMAX_DIM_LENGTH, kMAX_STRING_LENGTH, kMAX_NAME_LENGTH, kREAL, kDOUBLE
     use grid_interface,          only : grid_t
     use meta_data_interface,     only : meta_data_t
     use iso_fortran_env,         only : real64
@@ -25,7 +25,7 @@ module variable_interface
         character(len=kMAX_NAME_LENGTH) :: forcing_var = ""
 
         integer :: n_dimensions
-        integer :: dtype
+        integer :: dtype = kREAL
         integer,                        allocatable :: dim_len(:)
         integer,                        allocatable :: global_dim_len(:)
         type(grid_t)                                :: grid

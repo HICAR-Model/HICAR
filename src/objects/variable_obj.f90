@@ -1,5 +1,4 @@
 submodule(variable_interface) variable_implementation
-    use icar_constants, only : kREAL, kDOUBLE
     use co_util,        only : broadcast
     implicit none
 

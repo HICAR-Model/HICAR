@@ -6,7 +6,7 @@
 !!
 !!----------------------------------------------------------
 module module_water_simple
-    use data_structures,
+    use data_structures
     use options_interface,   only : options_t
     use icar_constants
     implicit none
@@ -85,6 +85,7 @@ contains
                             z_atm, Z0, landmask, &
                             qv_surf, evap_flux, tskin, vegtype, its, ite, kts, kte, jts, jte)
         implicit none
+        type(options_t),intent(in)    :: options        
         real,    dimension(its:ite,kts:kte,jts:jte),intent(in)    :: qv, temperature
         real,    dimension(its:ite,jts:jte),  intent(inout) :: sensible_heat, latent_heat, Z0, qv_surf, evap_flux, tskin
         real,    dimension(its:ite,jts:jte),  intent(in)    :: sst, psfc, wind, ustar, z_atm

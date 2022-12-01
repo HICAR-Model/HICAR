@@ -405,7 +405,7 @@ contains
         !$omp end parallel
     end subroutine surface_diagnostics
 
-        subroutine apply_fluxes(domain,dt)
+    subroutine apply_fluxes(domain,dt)
         ! add sensible and latent heat fluxes to the first atm level
         implicit none
         type(domain_t), intent(inout) :: domain
@@ -462,13 +462,7 @@ contains
         ! write(*,*) MINVAL(lhdQV), MAXVAL(lhdQV), 'kg/kg (min/max) added to QV at', domain%model_time%hour
 
         ! enforce some minimum water vapor content... just in case
-<<<<<<< HEAD
         where(qv < SMALL_QV) qv = SMALL_QV
-
-=======
-        where(qv(its:ite,kts,jts:jte) < SMALL_QV) qv(its:ite,kts,jts:jte) = SMALL_QV
-        
->>>>>>> master
         end associate
 
     end subroutine apply_fluxes
@@ -1597,7 +1591,8 @@ contains
 
             endif
         endif
-        if (options%physics%landsurface>0 .OR. options%physics%watersurface>0 .not.(options%physics%boundarylayer==kPBL_DIAGNOSTIC)) then
+        if (options%physics%landsurface>0 .or. options%physics%watersurface>0 .and. &
+            .not.(options%physics%boundarylayer==kPBL_DIAGNOSTIC .or. options%physics%boundarylayer==kPBL_YSU)) then
             call apply_fluxes(domain, dt)
         endif
 

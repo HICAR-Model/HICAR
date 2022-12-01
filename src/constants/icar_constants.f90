@@ -15,6 +15,8 @@ module icar_constants
     integer :: kNUM_SERVERS = 0
     integer :: kNUM_COMPUTE = 0
     integer :: kNUM_PROC_PER_NODE = 0
+    integer :: kTIMEOUT = 600 !timeout timer in seconds
+    
     !Flag-value to indicate a part of a read-write buffer which was never filled
     real, parameter :: kEMPT_BUFF = -123456789.0
     
@@ -307,7 +309,8 @@ module icar_constants
                                                             201, 202, 203, 204, 205, 206, 207, 208, 209, 210,  &
                                                             211, 212, 213, 214, 215, 216, 217, 218, 219, 220,  &
                                                             221, 222, 223, 224, 225, 226, 227, 228, 229, 230,  &
-                                                            231, 232, 233)
+                                                            231, 232, 233, 234, 235, 236, 237, 238, 239, 240,  &
+                                                            241, 242, 243)
 
 
     integer, parameter :: kINTEGER_BITS     = storage_size(kINTEGER_BITS)

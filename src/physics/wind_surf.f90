@@ -357,13 +357,13 @@ contains
     
     
     
-    subroutine apply_Sx(Sx, TPI, u, v, w, Ri, dzdx, dzdy)
+    subroutine apply_Sx(Sx, TPI, u, v, w, Ri, dzdx, dzdy, z)
         implicit none
         real, intent(in)                       :: Sx(:,:,:,:), TPI(:,:), Ri(:,:,:), dzdx(:,:,:), dzdy(:,:,:), z(:,:,:)
         real, intent(inout),  dimension(:,:,:) :: u, v, w
         
         real, allocatable, dimension(:,:)   :: winddir, x_norm, y_norm, thresh_ang
-        real, allocatable, dimension(:,:,:)   :: Sx_U_corr, Sx_V_corr, Sx_curr, Sx_corr, TPI_corr
+        real, allocatable, dimension(:,:,:) :: Sx_U_corr, Sx_V_corr, Sx_curr, Sx_corr, TPI_corr
 
         integer ::  i, j, k, ims, ime, jms, jme, kms, Sx_k_max, TPI_k_max
         real    ::  Ri_num, WS, max_spd, z_mean, SX_Z_MAX, TPI_Z_MAX, SX_SCALE_ANG, TPI_SCALE
@@ -382,23 +382,24 @@ contains
         jms = lbound(w,3)
         jme = ubound(w,3)
         
-        do k = kms,ubound(w,2)
-            z_mean =SUM(z(:,k,:))/SIZE(z(:,k,:))
-            if (z_mean > SX_Z_MAX .and. Sx_k_max==0) Sx_k_max = max(2,k-1)
-            if (z_mean > TPI_Z_MAX .and. TPI_k_max==0) TPI_k_max = max(2,k-1)
-        enddo
-        
-        Sx_k_max = max(Sx_k_max,TPI_k_max) !Ensure that Sx_k_max is larger than TPI_k_max, since we use this max to index correction vars
-        
         allocate(x_norm(ims:ime,jms:jme))
         allocate(y_norm(ims:ime,jms:jme))
         allocate(thresh_ang(ims:ime,jms:jme))
-        
+       
         allocate(Sx_curr(ims:ime,kms:Sx_k_max,jms:jme))
         allocate(Sx_corr(ims:ime,kms:Sx_k_max,jms:jme))
         allocate(TPI_corr(ims:ime,kms:Sx_k_max,jms:jme))
         allocate(Sx_U_corr(ims:ime,kms:Sx_k_max,jms:jme))
         allocate(Sx_V_corr(ims:ime,kms:Sx_k_max,jms:jme))
+
+
+        do k = kms,ubound(w,2)
+            z_mean =SUM(z(:,k,:))/SIZE(z(:,k,:))
+            if (z_mean > SX_Z_MAX .and. Sx_k_max==0) Sx_k_max = max(2,k-1)
+            if (z_mean > TPI_Z_MAX .and. TPI_k_max==0) TPI_k_max = max(2,k-1)
+        enddo
+
+        Sx_k_max = max(Sx_k_max,TPI_k_max) !Ensure that Sx_k_max is larger than TPI_k_max, since we use this max to index correction vars
 
 
         !Initialize Sx_curr. This will keep the border values from being updated
@@ -465,11 +466,12 @@ contains
         TPI_corr  = min(max(TPI_corr,-0.5),0.0)
         Sx_corr = min(max(Sx_corr,0.0),1.0)
     
-        Sx_corr = 2*Sx_corr*(x_norm*( (u(ims+1:ime+1,kms:Sx_k_max,:)+u(ims:ime,kms:Sx_k_max,:))/2 ) + &
-                                 y_norm*( (v(:,kms:Sx_k_max,jms+1:jme+1)+v(:,kms:Sx_k_max,jms:jme))/2 ))
-        Sx_U_corr = Sx_corr*x_norm
-        Sx_V_corr = Sx_corr*y_norm
-        
+        do k=kms,Sx_k_max
+            Sx_corr(:,k,:) = 2*Sx_corr(:,k,:)*(x_norm*( (u(ims+1:ime+1,k,:)+u(ims:ime,k,:))/2 ) + &
+                                 y_norm*( (v(:,k,jms+1:jme+1)+v(:,k,jms:jme))/2 ))
+            Sx_U_corr(:,k,:) = Sx_corr(:,k,:)*x_norm
+            Sx_V_corr(:,k,:) = Sx_corr(:,k,:)*y_norm
+        enddo
         !Finally, apply TPI and Sx corrections, staggering corrections to U/V grids
         u(ims+1:ime,kms:Sx_k_max,:) = u(ims+1:ime,kms:Sx_k_max,:) - ( (Sx_U_corr(ims+1:ime,:,:) + Sx_U_corr(ims:ime-1,:,:))/2 )
         u(ims,kms:Sx_k_max,:) = u(ims,kms:Sx_k_max,:) - Sx_U_corr(ims,:,:)

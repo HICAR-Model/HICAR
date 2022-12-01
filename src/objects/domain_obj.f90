@@ -9,13 +9,13 @@
 !!------------------------------------------------------------
 submodule(domain_interface) domain_implementation
     use assertions_mod,       only : assert, assertions
-    use mod_atm_utilities,    only : exner_function, update_pressure
+    use mod_atm_utilities,    only : exner_function, update_pressure, compute_ivt, compute_iq
     use icar_constants
     use string,               only : str
     use co_util,              only : broadcast
     use io_routines,          only : io_write, io_read
     use geo,                  only : geo_lut, geo_interp, geo_interp2d, standardize_coordinates
-    use array_utilities,      only : array_offset_x, array_offset_y, smooth_array, make_2d_x, make_2d_y
+    use array_utilities,      only : array_offset_x, array_offset_y, smooth_array, smooth_array_2d, make_2d_x, make_2d_y
     use vertical_interpolation,only : vinterp, vLUT
     use wind_surf,            only : calc_Sx, calc_TPI
     use output_metadata,            only : get_varname
@@ -277,7 +277,9 @@ contains
         if (0<var_list( kVARS%cosine_zenith_angle) )        call this%vars_to_out%add_var( trim( get_varname( kVARS%cosine_zenith_angle          )), this%cosine_zenith_angle)
         if (0<var_list( kVARS%land_emissivity) )            call this%vars_to_out%add_var( trim( get_varname( kVARS%land_emissivity              )), this%land_emissivity)
         if (0<var_list( kVARS%temperature_interface) )      call this%vars_to_out%add_var( trim( get_varname( kVARS%temperature_interface        )), this%temperature_interface)
-        if (0<var_list( kVARS%tend_swrad) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%tend_swrad                  )), this%tend_swrad)
+        if (0<var_list( kVARS%tend_swrad) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%tend_swrad                   )), this%tend_swrad)
+        if (0<var_list( kVARS%hpbl) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%hpbl                         )), this%hpbl)
+        if (0<var_list( kVARS%coeff_heat_exchange_3d) )     call this%vars_to_out%add_var( trim( get_varname( kVARS%coeff_heat_exchange_3d       )), this%coeff_heat_exchange_3d)
 
         if (options%parameters%batched_exch) then
             allocate(this%north_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
@@ -368,7 +370,12 @@ contains
                   psfc                  => this%surface_pressure%data_2d,       &
                   density               => this%density%data_3d,                &
                   temperature           => this%temperature%data_3d,            &
-                  qv                    => this%water_vapor%data_3d,            &       
+                  qv                    => this%water_vapor%data_3d,            &  
+                  cloud_water           => this%cloud_water_mass%data_3d,       &
+                  rain_water            => this%rain_mass%data_3d,              &
+                  cloud_ice             => this%cloud_ice_mass%data_3d,         &
+                  snow_ice              => this%snow_mass%data_3d,              &
+                  graupel_ice           => this%graupel_mass%data_3d,           &
                   temperature_i         => this%temperature_interface%data_3d,  &
                   u                     => this%u%data_3d,                      &
                   v                     => this%v%data_3d,                      &
@@ -418,24 +425,24 @@ contains
         if (associated(this%surface_pressure%data_2d)) then
             psfc = pressure_i(:, kms, :)
         endif
-        if (associated(domain%ivt%data_2d)) then
-            call compute_ivt(domain%ivt%data_2d, water_vapor, u_mass, v_mass, pressure_i)
+        if (associated(this%ivt%data_2d)) then
+            call compute_ivt(this%ivt%data_2d, qv, u_mass, v_mass, pressure_i)
         endif
-        if (associated(domain%iwv%data_2d)) then
-            call compute_iq(domain%iwv%data_2d, water_vapor, pressure_i)
+        if (associated(this%iwv%data_2d)) then
+            call compute_iq(this%iwv%data_2d, qv, pressure_i)
         endif
-        if (associated(domain%iwl%data_2d)) then
+        if (associated(this%iwl%data_2d)) then
             temporary_data = 0
-            if (associated(domain%cloud_water_mass%data_3d)) temporary_data = temporary_data + cloud_water
-            if (associated(domain%rain_mass%data_3d)) temporary_data = temporary_data + rain_water
-            call compute_iq(domain%iwl%data_2d, temporary_data, pressure_i)
+            if (associated(this%cloud_water_mass%data_3d)) temporary_data = temporary_data + cloud_water
+            if (associated(this%rain_mass%data_3d)) temporary_data = temporary_data + rain_water
+            call compute_iq(this%iwl%data_2d, temporary_data, pressure_i)
         endif
-        if (associated(domain%iwi%data_2d)) then
+        if (associated(this%iwi%data_2d)) then
             temporary_data = 0
-            if (associated(domain%cloud_ice_mass%data_3d)) temporary_data = temporary_data + cloud_ice
-            if (associated(domain%snow_mass%data_3d)) temporary_data = temporary_data + snow_ice
-            if (associated(domain%graupel_mass%data_3d)) temporary_data = temporary_data + graupel_ice
-            call compute_iq(domain%iwi%data_2d, temporary_data, pressure_i)
+            if (associated(this%cloud_ice_mass%data_3d)) temporary_data = temporary_data + cloud_ice
+            if (associated(this%snow_mass%data_3d)) temporary_data = temporary_data + snow_ice
+            if (associated(this%graupel_mass%data_3d)) temporary_data = temporary_data + graupel_ice
+            call compute_iq(this%iwi%data_2d, temporary_data, pressure_i)
         endif
         
         allocate( temp_1( its:ite, jts:jte))
