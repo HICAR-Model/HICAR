@@ -4,6 +4,9 @@
 &model_version
     version = "2.1",                      ! This must match the version of the compiled code
     comment = "Add your comment here"     ! This will be stored in output files
+    phys_suite = ''                       ! Overrides certain namelist options to match a given physics suite
+					  ! Current options: 
+					  ! 'HICAR' -- Turns on recomended options for high-resolution runs
 /
 
 !---------------------------------------------------------
@@ -112,7 +115,7 @@
     lsm = 1,   ! 1=use prescribed fluxes    2=Simple LSM (N/A)          3=Noah LSM                   4=NoahMP
 
     ! Open water fluxes
-    water=1,  ! 1=use prescribed (w/lsm=1) 2=Simple sea surface fluxes
+    water=1,  ! 1=use prescribed (w/lsm=1) 2=Simple sea surface fluxes  3=Lake model
 
     ! Microphysics Scheme
     mp  = 3,  ! 1=Thompson                 2=Simple (SB04)              3=Morrison                   4=WSM6     5=Thompson-Eidhammer    6=WSM3   7=ISHMAEL

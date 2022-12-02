@@ -72,7 +72,7 @@ contains
         call bias_parameters_namelist(  this%parameters%bias_options_filename,  this)
         call rad_parameters_namelist(   this%parameters%rad_options_filename,   this)
         
-        if (this%physics%phys_suite /= '') call set_phys_suite(this)
+        if (this%parameters%phys_suite /= '') call set_phys_suite(this)
         
         if (this%parameters%restart) this%parameters%start_time = this%io_options%restart_time
 
@@ -281,15 +281,15 @@ contains
         character(len=*),            intent(in)     :: filename
         type(parameter_options_type),intent(inout)  :: options
 
-        character(len=MAXVARLENGTH) :: version,comment
+        character(len=MAXVARLENGTH) :: version, comment, phys_suite
         integer                     :: name_unit
 
-        namelist /model_version/ version,comment
+        namelist /model_version/ version, comment, phys_suite
 
 
         !default comment:
         comment="Model testing"
-
+        phys_suite = ''
         ! read namelists
         open(io_newunit(name_unit), file=filename)
         read(name_unit,nml=model_version)
@@ -304,6 +304,7 @@ contains
         endif
         options%version = version
         options%comment = comment
+        options%phys_suite = phys_suite
 
         if (this_image()==1) write(*,*) "  Model version: ",trim(version)
 
@@ -396,7 +397,14 @@ contains
                 if (this_image()==1) write(*,*) "WARNING WARNING WARNING"
             endif
         endif
-
+        
+        if (options%time_options%RK3) then
+            if (max(options%adv_options%h_order,options%adv_options%v_order)==5) then
+                options%time_options%cfl_reduction_factor = min(1.4,options%time_options%cfl_reduction_factor)
+            elseif (max(options%adv_options%h_order,options%adv_options%v_order)==3) then
+                options%time_options%cfl_reduction_factor = min(1.6,options%time_options%cfl_reduction_factor)
+            endif
+        endif
     end subroutine options_check
 
 
@@ -413,10 +421,9 @@ contains
         integer :: name_unit
 !       variables to be used in the namelist
         integer :: pbl, lsm, water, mp, rad, conv, adv, wind
-        character(len=MAXVARLENGTH) :: phys_suite
         
 !       define the namelist
-        namelist /physics/ pbl, lsm, water, mp, rad, conv, adv, wind, phys_suite
+        namelist /physics/ pbl, lsm, water, mp, rad, conv, adv, wind
 
 !       default values for physics options (advection+linear winds+simple_microphysics)
         pbl = 0 ! 0 = no PBL,
@@ -458,7 +465,6 @@ contains
                 ! 2 = terrain induced horizontal accelleration
                 ! 3 = Adjustment to horizontal winds to reduce divergence, based on technique from O'brien et al., 1970
                 ! 4 = Mass-conserving wind solver based on variational calculus technique, requires PETSc
-        phys_suite = ''
         
 !       read the namelist
         open(io_newunit(name_unit), file=filename)
@@ -474,7 +480,6 @@ contains
         options%physics%microphysics  = mp
         options%physics%radiation     = rad
         options%physics%windtype      = wind
-        options%physics%phys_suite    = trim(phys_suite)
 
     end subroutine physics_namelist
 
@@ -2158,26 +2163,31 @@ contains
         implicit none
         type(options_t),    intent(inout) :: options
     
-        select case (options%physics%phys_suite)
+        select case (options%parameters%phys_suite)
             case('HICAR')
                 if (options%parameters%dx >= 1000 .and. this_image()==1) then
                     write(*,*) '------------------------------------------------'
                     write(*,*) 'WARNING: Setting HICAR namelist options'
                     write(*,*) 'When user has selected dx => 1000.'
-                    write(*,*) 'PBL scheme will be turned off and the'
-                    write(*,*) 'high-resolution wind solver will be used,'
+                    write(*,*) 'High-resolution wind solver will be used,'
                     write(*,*) 'which may not be appropriate for this resolution'
                     write(*,*) '------------------------------------------------'
                 endif
                 !Add base HICAR options here
-                options%physics%boundarylayer = 0
+                
+                !options%physics%boundarylayer = at some point, add a scale aware / LES turbulence scheme
                 
                 options%physics%windtype = 4
+                options%physics%convection = 0
                 options%wind%Sx = .True.
                 options%time_options%RK3 = .True.
                 options%time_options%cfl_strictness = 4
                 options%parameters%use_agl_height = .True.
                 options%parameters%agl_cap = 800
+                options%parameters%space_varying_dz = .True.
+                options%parameters%sleve = .True.
+                options%parameters%advect_density = .True.
+
         end select
     
     end subroutine

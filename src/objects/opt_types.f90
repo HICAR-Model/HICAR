@@ -21,7 +21,6 @@ module options_types
         integer::radiation
         integer::convection
         integer::windtype
-        character(len=MAXVARLENGTH) :: phys_suite
     end type physics_type
     
     
@@ -224,7 +223,7 @@ module options_types
     ! store all model options
     ! ------------------------------------------------
     type parameter_options_type
-        character (len=MAXVARLENGTH) :: version,comment
+        character (len=MAXVARLENGTH) :: version, comment, phys_suite
 
         ! file names
         character (len=MAXFILELENGTH) :: init_conditions_file, linear_mask_file, nsq_calibration_file, external_files
