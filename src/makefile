@@ -216,7 +216,7 @@ ifeq ($(MODE), debugslow)
 		LINK=
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-h noomp -c -g -h develop -m 0 -R bcsp -M 399
+		COMP=-h noomp -c -g -h develop -m 0 -R bcsp -M 399 -hfp0
 		LINK=-h noomp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
@@ -232,8 +232,8 @@ ifeq ($(MODE), debug)
 		LINK=
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-h omp -O2 -c -g
-		LINK=-fopenmp
+		COMP=-O2 -h noomp -c -g -hfp0
+		LINK=-h noomp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
 	endif
@@ -249,8 +249,8 @@ ifeq ($(MODE), debugompslow)
 		LINK= -fopenmp -lgomp
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-c -g -m 0 -hfp2 -h omp develop -R bcsp -M 399
-		LINK=-fopenmp
+		COMP=-c -g -m 0 -h develop -R bcsp -M 399 -hfp0
+		LINK=
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
 	endif
@@ -266,8 +266,8 @@ ifeq ($(MODE), debugomp)
 		 # -Wall -Wno-unused-variable -Wno-unused-dummy-argument
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-c -g -h omp develop
-		LINK=-fopenmp
+		COMP=-O1 -c -g -hfp0
+		LINK=
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
 	endif
@@ -797,9 +797,6 @@ $(BUILD)mp_driver.o:$(PHYS)mp_driver.f90 $(BUILD)mp_simple.o $(BUILD)mp_thompson
 					$(BUILD)mp_wsm3.o $(BUILD)mp_morrison.o $(BUILD)mp_jensen_ishmael.o $(BUILD)data_structures.o $(BUILD)domain_h.o  \
 					$(BUILD)icar_constants.o $(BUILD)wrf_constants.o
 
-# $(BUILD)mp_driver.o:$(PHYS)mp_driver.f90 $(BUILD)mp_thompson.o $(BUILD)mp_simple.o \
-# 					$(BUILD)mp_morrison.o $(BUILD)data_structures.o $(BUILD)mp_wsm6.o
-# 	${F90} ${FFLAGS} $(PHYS)mp_driver.f90 -o $(BUILD)mp_driver.o
 
 $(BUILD)mp_morrison.o:$(PHYS)mp_morrison.f90 $(BUILD)wrf_constants.o
 
@@ -819,7 +816,7 @@ $(BUILD)mp_simple.o:$(PHYS)mp_simple.f90 $(BUILD)data_structures.o $(BUILD)optio
 #	Convection code
 ###################################################################
 $(BUILD)cu_driver.o:$(PHYS)cu_driver.f90 $(BUILD)cu_tiedtke.o $(BUILD)cu_nsas.o $(BUILD)cu_bmj.o  \
-					$(BUILD)data_structures.o $(BUILD)icar_constants.o $(BUILD)domain_h.o
+					$(BUILD)data_structures.o $(BUILD)icar_constants.o $(BUILD)domain_h.o $(BUILD)options_h.o
 
 $(BUILD)cu_tiedtke.o:$(PHYS)cu_tiedtke.f90
 
@@ -833,7 +830,9 @@ $(BUILD)cu_bmj.o:$(PHYS)cu_bmj.f90
 #	Radiation code
 ###################################################################
 
-$(BUILD)ra_driver.o:$(PHYS)ra_driver.f90 $(BUILD)ra_simple.o $(BUILD)ra_rrtmg_lw.o $(BUILD)ra_rrtmg_sw.o $(BUILD)data_structures.o $(BUILD)icar_constants.o $(BUILD)options_h.o $(BUILD)domain_h.o
+$(BUILD)ra_driver.o:$(PHYS)ra_driver.f90 $(BUILD)ra_simple.o $(BUILD)ra_rrtmg_lw.o $(BUILD)ra_rrtmg_sw.o \
+					$(BUILD)data_structures.o $(BUILD)icar_constants.o $(BUILD)options_h.o 				 \
+					$(BUILD)domain_h.o
 
 $(BUILD)ra_rrtmg_lw.o:$(PHYS)ra_rrtmg_lw.f90 $(BUILD)ra_clWRF_support.o $(BUILD)io_routines.o
 

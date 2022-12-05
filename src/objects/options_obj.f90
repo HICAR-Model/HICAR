@@ -946,7 +946,7 @@ contains
         type(time_delta_t) :: dt
         ! parameters to read
 
-        real    :: dx, dxlow, t_offset, smooth_wind_distance, agl_cap
+        real    :: dx, dxlow, t_offset, rh_limit, sst_min_limit, cp_limit, smooth_wind_distance, agl_cap
         integer :: ntimesteps, wind_iterations
         integer :: longitude_system
         integer :: nz,buffer, warning_level
@@ -966,7 +966,7 @@ contains
 
 
         namelist /parameters/ ntimesteps, wind_iterations, surface_io_only,                &
-                              dx, dxlow, ideal, readz, readdz, nz, t_offset,                             &
+                              dx, dxlow, ideal, readz, readdz, nz, t_offset, rh_limit, sst_min_limit, cp_limit, &
                               debug, warning_level, interactive, restart,                                &
                               buffer, advect_density, smooth_wind_distance,                              &
                               mean_winds, mean_fields, z_is_geopotential, z_is_on_interface,             &
@@ -988,6 +988,9 @@ contains
         mean_fields         = .False.
         mean_winds          = .False.
         t_offset            = (-9999)
+        rh_limit            = -1
+        sst_min_limit       = 273.15
+        cp_limit            = 500
         buffer              = 0
         advect_density      = .False.
         t_is_potential      = .True.
@@ -1075,6 +1078,17 @@ contains
         endif
 
         options%t_offset=t_offset
+
+        if (rh_limit > 5) then
+            write(*,*) "RH limit >5 specified, assuming it is in %"
+            rh_limit = rh_limit/100
+        endif
+        options%rh_limit=rh_limit
+
+        options%sst_min_limit = sst_min_limit
+
+        options%cp_limit = cp_limit / 3600.0 ! convert from mm/hr to mm/s
+
         if (smooth_wind_distance<0) then
             write(*,*) " Wind smoothing must be a positive number"
             write(*,*) " smooth_wind_distance = ",smooth_wind_distance
@@ -1963,7 +1977,6 @@ contains
         options%decay_rate_S_topo = decay_rate_S_topo ! decay_rate_small_scale_topography !
         options%sleve_n = sleve_n
         options%use_terrain_difference = use_terrain_difference
-
 
 
         if (dz_modifies_wind) then
