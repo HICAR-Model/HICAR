@@ -378,7 +378,7 @@ contains
                 u2 = u2*0.5
                 v2 = v2*0.5
                 w2 = w2*0.5*dz
-                if (options%adv_options%flux_corrected_transport) then
+                if (options%adv_options%MPDATA_FCT) then
                     call flux_limiter(q, q2, u2,v2,w2)
                 endif
                 call upwind_advection(q2, u2,v2,w2, rho, q,dz,jaco)
