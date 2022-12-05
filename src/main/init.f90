@@ -82,9 +82,12 @@ contains
         ! initialize the atmospheric helper utilities
         call init_atm_utilities(options)
         
-        if (options%physics%windtype==kITERATIVE_WINDS) then
+        if (options%physics%windtype==kITERATIVE_WINDS .or. options%physics%windtype==kLINEAR_ITERATIVE_WINDS) then
             call init_iter_winds(domain)
-        else if (options%physics%windtype==kWIND_LINEAR) then
+        endif
+        if (options%physics%windtype==kWIND_LINEAR .or. &
+                 options%physics%windtype==kLINEAR_OBRIEN_WINDS .or. &
+                 options%physics%windtype==kLINEAR_ITERATIVE_WINDS) then
             call setup_linwinds(domain, options, .False., options%parameters%advect_density)
         endif
         

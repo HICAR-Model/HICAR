@@ -130,7 +130,7 @@
     adv = 1,  ! 1=Standard                 2=MPDATA                     3=Adams-Bashforth (wishlist)
 
     ! Wind field calculations
-    wind = 0    ! 1=Linear Theory          2=Grid-deformed winds        3=O'Brien iterative winds    4=PETSc solver  5=Linear+O'brien iterative
+    wind = 0    ! 1=Linear Theory          2=Grid-deformed winds        3=O'Brien iterative winds    4=PETSc solver  5=Linear+O'brien iterative  6=Linear+PETSc solver
 /
 
 !---------------------------------------------------------
