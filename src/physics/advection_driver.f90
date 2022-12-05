@@ -9,7 +9,7 @@ module advection
     use data_structures
     use icar_constants
     use adv_std,                    only : adv_std_init, adv_std_var_request, adv_std_advect3d, adv_std_compute_wind
-    use adv_mpdata,                 only : mpdata, mpdata_init, mpdata_advect3d, mpdata_compute_wind
+    use adv_mpdata,                 only : mpdata_init, mpdata_advect3d, mpdata_compute_wind
     use adv_fluxcorr,               only : init_fluxcorr
     ! use debug_module,               only : domain_fix
     use options_interface,          only: options_t
@@ -64,6 +64,7 @@ contains
 
         type(variable_t) :: var_to_advect
         real, allocatable :: temp(:,:,:)
+        integer :: err, nx, nz, ny
 
         ! integer :: nx, nz, ny
         !
@@ -116,8 +117,12 @@ contains
             else
                 if (options%physics%advection==kADV_STD) then
                     call adv_std_advect3d(var_to_advect%data_3d,var_to_advect%data_3d, domain%advection_dz, domain%jacobian,flux_corr=options%adv_options%flux_corr)
-                else if(options%physics%advection==kADV_MPDATA) then
-                    call mpdata_advect3d(var_to_advect%data_3d, domain%jacobian, domain%advection_dz, domain%dx,dt,options)
+                else if(options%physics%advection==kADV_MPDATA) then                
+                    nx=size(var_to_advect%data_3d,1)
+                    nz=size(var_to_advect%data_3d,2)
+                    ny=size(var_to_advect%data_3d,3)
+                    
+                    call mpdata_advect3d(var_to_advect%data_3d, domain%density%data_3d, domain%advection_dz, domain%dx, nx, nz, ny, domain%jacobian, options, err)
                 endif
             endif
 
