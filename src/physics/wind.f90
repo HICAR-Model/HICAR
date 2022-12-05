@@ -63,14 +63,13 @@ contains
             implicit none
             type(options_t), intent(inout) :: options
 
-            if (options%physics%windtype == kWIND_LINEAR) then
-                call wind_linear_var_request(options)
-            endif
-            if (options%physics%windtype == kLINEAR_ITERATIVE_WINDS) then
+            if (options%physics%windtype == kWIND_LINEAR .or. &
+                options%physics%windtype == kLINEAR_OBRIEN_WINDS .or. &
+                options%physics%windtype == kLINEAR_ITERATIVE_WINDS) then
                 call wind_linear_var_request(options)
             endif
 
-            if (options%physics%windtype == kITERATIVE_WINDS) then
+            if (options%physics%windtype == kITERATIVE_WINDS .or. options%physics%windtype == kLINEAR_ITERATIVE_WINDS) then
                 call options%restart_vars([kVARS%w_real])
             endif
         end subroutine wind_var_request
@@ -419,10 +418,34 @@ contains
                 call calc_iter_winds(domain,alpha,div,options%parameters%advect_density)
 
 
-            elseif (options%physics%windtype==kLINEAR_ITERATIVE_WINDS) then
+            elseif (options%physics%windtype==kLINEAR_OBRIEN_WINDS) then
                 call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.False.)
                 call Obrien_winds(domain, options)
+            elseif (options%physics%windtype==kLINEAR_ITERATIVE_WINDS) then
+                call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.False.)
+            
+                allocate(alpha(ims:ime,kms:kme,jms:jme))
+                allocate(div(ims:ime,kms:kme,jms:jme))
+                
+                call calc_alpha(alpha, domain%froude, ims, ime,  kms, kme, jms, jme, &
+                            domain%ids, domain%ide, domain%jds, domain%jde)
 
+                !Call this, passing 0 for w_grid, to get vertical components of vertical motion
+                call calc_w_real(domain% u %data_3d,      &
+                             domain% v %data_3d,      &
+                             domain%w%data_3d*0.0,      &
+                             domain%w%data_3d,      &
+                             domain%dzdx_u, domain%dzdy_v,    &
+                             domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
+
+                !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
+                if (options%parameters%wvar=="") domain%w_real%data_3d = 0.0  
+                domain%w%data_3d = (domain%w_real%data_3d-domain%w%data_3d)/domain%jacobian
+                call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
+                                domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
+                                domain%density%data_3d,options,horz_only=.False.)
+
+                call calc_iter_winds(domain,alpha,div,options%parameters%advect_density)
             endif
             ! else assumes even flow over the mountains
 
@@ -492,9 +515,38 @@ contains
                                 
                 call calc_iter_winds(domain,alpha,div,options%parameters%advect_density,update_in=.True.)
 
-            elseif (options%physics%windtype==kLINEAR_ITERATIVE_WINDS) then
+            elseif (options%physics%windtype==kLINEAR_OBRIEN_WINDS) then
                 call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.True.)
                 call Obrien_winds(domain, options, update_in=.True.)
+            elseif (options%physics%windtype==kLINEAR_ITERATIVE_WINDS) then
+                call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.True.)
+            
+                allocate(alpha(ims:ime,kms:kme,jms:jme))
+                allocate(div(ims:ime,kms:kme,jms:jme))
+
+                call calc_alpha(alpha, domain%froude, ims, ime,  kms, kme, jms, jme, &
+                            domain%ids, domain%ide, domain%jds, domain%jde)
+
+                !Call this, passing 0 for w_grid, to get vertical components of vertical motion
+                call calc_w_real(domain% u %meta_data%dqdt_3d,      &
+                             domain% v %meta_data%dqdt_3d,      &
+                             domain%w%meta_data%dqdt_3d*0.0,      &
+                             domain%w%meta_data%dqdt_3d,      &
+                             domain%dzdx_u, domain%dzdy_v,    &
+                             domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
+                             
+                !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
+                if (options%parameters%wvar=="") then
+                    domain%w%meta_data%dqdt_3d = (0.0-domain%w%meta_data%dqdt_3d)/domain%jacobian
+                else
+                    domain%w%meta_data%dqdt_3d = (domain%w_real%dqdt_3d-domain%w%meta_data%dqdt_3d)/domain%jacobian
+                endif
+
+                call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
+                                domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
+                                domain%density%data_3d,options,horz_only=.False.)
+                                
+                call calc_iter_winds(domain,alpha,div,options%parameters%advect_density,update_in=.True.)
             endif
 
             call balance_uvw(domain,options,update_in=.True.)
@@ -502,7 +554,7 @@ contains
             call calc_w_real(domain% u %meta_data%dqdt_3d,      &
                              domain% v %meta_data%dqdt_3d,      &
                              domain% w %meta_data%dqdt_3d,      &
-                             domain% w_real %dqdt_3d,           &
+                             domain% w_real %data_3d,           &
                              domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
 
