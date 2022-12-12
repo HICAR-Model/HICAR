@@ -7,6 +7,8 @@
 !!----------------------------------------------------------
 module module_water_simple
     use data_structures
+    use options_interface,   only : options_t
+    use icar_constants
     implicit none
 
     real, parameter :: freezing_threshold=273.15
@@ -78,25 +80,35 @@ contains
         z0 = 8e-6 / max(ustar,1e-7)
     end function ocean_roughness
 
-    subroutine water_simple(sst, psfc, wind, ustar, qv, temperature,  &
+    module subroutine water_simple(options, sst, psfc, wind, ustar, qv, temperature,  &
                             sensible_heat, latent_heat, &
                             z_atm, Z0, landmask, &
-                            qv_surf, evap_flux, tskin)
+                            qv_surf, evap_flux, tskin, vegtype, its, ite, kts, kte, jts, jte)
         implicit none
-        real,    dimension(:,:,:),intent(in)    :: qv, temperature
-        real,    dimension(:,:),  intent(inout) :: sensible_heat, latent_heat, Z0, qv_surf, evap_flux, tskin
-        real,    dimension(:,:),  intent(in)    :: sst, psfc, wind, ustar, z_atm
-        integer, dimension(:,:),  intent(in)    :: landmask
+        type(options_t),intent(in)    :: options        
+        real,    dimension(its:ite,kts:kte,jts:jte),intent(in)    :: qv, temperature
+        real,    dimension(its:ite,jts:jte),  intent(inout) :: sensible_heat, latent_heat, Z0, qv_surf, evap_flux, tskin
+        real,    dimension(its:ite,jts:jte),  intent(in)    :: sst, psfc, wind, ustar, z_atm
+        integer, dimension(its:ite,jts:jte),  intent(in)    :: landmask
+        integer, dimension(its:ite,jts:jte),  optional, intent(in)    :: vegtype
+        integer, intent(in)                     :: its, ite, kts, kte, jts, jte
 
         integer :: nx, ny, i, j
         real :: base_exchange_term, lnz_atm_term, exchange_C, z
 
-        nx=size(sst,1)
-        ny=size(sst,2)
 
-        do j=2,ny-1
-            do i=2,nx-1
-                if (landmask(i,j)==kLC_WATER) then
+        do j=jts,jte
+            do i=its,ite
+                if(                                                                         &
+                    ( (options%physics%watersurface==kWATER_SIMPLE) .AND.                   &   ! If lakemodel is not selected, use this
+                      (landmask(i,j)==kLC_WATER)                                            & !(n.b. in case noah (mp or lsm) is not used, landmask may not be set correctly!)
+                    )                                                                       &
+                    .OR.                                                                    &
+                    ( (options%physics%watersurface==kWATER_LAKE) .AND.                     &    ! if lake model is selected, and
+                      (vegtype(i,j).eq.options%lsm_options%water_category) .AND.            &    !   gridcell is water,
+                      (vegtype(i,j).ne.options%lsm_options%lake_category)                   &    !   but not lake (i.e ocean)
+                    )                                                                         &
+                )then
                     qv_surf(i,j) = 0.98 * sat_mr(sst(i,j),psfc(i,j)) ! multiply by 0.98 to account for salinity
 
                     Z0(i,j) = ocean_roughness(ustar(i,j))

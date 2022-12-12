@@ -2,6 +2,7 @@ module debug_module
     use netcdf
     use domain_interface, only  : domain_t
     use string,           only  : str
+    use ieee_arithmetic
 
     implicit none
 contains
@@ -40,8 +41,18 @@ contains
         call check_var(domain%ice3_c%data_3d,                name="ice3c",   msg=error_msg, less_than    =-1e-10, fix=fix_data)
         call check_var(domain%w%data_3d,                     name="w",       msg=error_msg, less_than    =-1e5,  fix=fix_data)
         call check_var(domain%w%data_3d,                     name="w",       msg=error_msg, greater_than =1e5,   fix=fix_data)
+        call check_var2d(domain%sensible_heat%data_2d,       name="hfx",     msg=error_msg) ! check for NaN's only.
+        call check_var2d(domain%latent_heat%data_2d,         name="lfx",     msg=error_msg)
+        call check_var2d(domain%skin_temperature%data_2d,    name="tskin",   msg=error_msg)
+        call check_var2d(domain%roughness_z0%data_2d,        name="z0",      msg=error_msg)
+        call check_var2d(domain%surface_pressure%data_2d,    name="psfc",    msg=error_msg)
+        ! call check_var2d(domain%ustar,                       name="ustar", msg=error_msg)
+        call check_var(domain%exner%data_3d,                 name="pii",     msg=error_msg)
+        call check_var(domain%pressure_interface%data_3d,    name="pi",      msg=error_msg)
+        call check_var(domain%pressure%data_3d,              name="p",       msg=error_msg)
 
     end subroutine domain_check
+
 
     subroutine check_var(var, name, msg, greater_than, less_than, fix)
         implicit none
@@ -49,6 +60,7 @@ contains
         character(len=*),   intent(in)                      :: name, msg
         real,               intent(in),    optional         :: greater_than, less_than
         logical,            intent(in),    optional         :: fix
+        integer :: n
         real :: vmax, vmin
         logical :: printed
 
@@ -56,6 +68,14 @@ contains
 
         if (.not.associated(var)) then
             return
+        endif
+
+        if (any(ieee_is_nan(var))) then
+            n = COUNT(ieee_is_nan(var))
+            ! ALLOCATE(IsNanIdx(n))
+            ! IsNanIdx = PACK( (/(i,i=1,SIZE(var))/), MASK=IsNan(var) )  ! if someone can get this to work it would be nice to have.
+            write(*,*) trim(msg)
+            write(*,*) trim(name)//" has", n," NaN(s) "
         endif
 
         if (present(greater_than)) then
@@ -117,6 +137,42 @@ contains
         endif
 
     end subroutine check_var
+
+    subroutine check_var2d(var, name, msg, greater_than, less_than, fix)
+        implicit none
+        real,               intent(inout), dimension(:,:), pointer :: var
+        character(len=*),   intent(in)                      :: name, msg
+        real,               intent(in),    optional         :: greater_than, less_than
+        logical,            intent(in),    optional         :: fix
+        integer :: n, i, j
+        real :: vmax, vmin
+        logical :: printed
+
+        printed = .False.
+
+        if (.not.associated(var)) then
+            return
+        endif
+
+        if (any(ieee_is_nan(var))) then
+            n = COUNT(ieee_is_nan(var))
+            ! ALLOCATE(IsNanIdx(n))
+            ! IsNanIdx = PACK( (/(i,i=1,SIZE(var))/), MASK=IsNan(var) )  ! if someone can get this to work it would be nice to have.
+            write(*,*) trim(msg)
+            write(*,*) trim(name)//" has", n," NaN(s) "
+            if (n < 9) then
+                do j = lbound(var,2), ubound(var,2)
+                    do i = lbound(var,1), ubound(var,1)
+                        if (ieee_is_nan(var(i,j))) print*, "NaN in ",i,j
+                    enddo
+                enddo
+            else
+                print*, "Too many NaNs, stopping on image:", this_image()
+                error stop
+            endif
+
+        endif
+    end subroutine check_var2d
 
     ! subroutine domain_fix(domain)
     !     implicit none

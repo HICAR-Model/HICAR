@@ -53,6 +53,7 @@ program icar
     type(time_delta_t) :: small_time_delta, phys_dt
     
     integer :: i, ierr, exec_team
+    integer :: sleep_cnt, ev_cnt
 
     double precision    :: future_dt_seconds
     logical :: init_flag
@@ -89,14 +90,34 @@ program icar
     select case(exec_team)
     case(kCOMPUTE_TEAM)
     
+        call EVENT_QUERY(read_ev,ev_cnt)
+        sleep_cnt = 0
+        do while(.not.(ev_cnt == 1))
+            call sleep(1)
+            sleep_cnt = sleep_cnt + 1
+            call EVENT_QUERY(read_ev,ev_cnt)
+            if (sleep_cnt >= kTIMEOUT) stop 'Timeout on waiting for reading of initial conditions'
+        enddo
+        !Finally, do an event wait to decrement the event counter
         EVENT WAIT (read_ev)
+
         call ioclient%receive(boundary, read_buffer)
         call boundary%update_computed_vars(options, update=options%parameters%time_varying_z)
 
         call init_model_state(options, domain, boundary, add_cond) ! added boundary structure for external files (additional conditions)
 
         if (options%parameters%restart) then
+            call EVENT_QUERY(read_ev,ev_cnt)
+            sleep_cnt = 0
+            do while(.not.(ev_cnt == 1))
+                call sleep(1)
+                sleep_cnt = sleep_cnt + 1
+                call EVENT_QUERY(read_ev,ev_cnt)
+                if (sleep_cnt >= kTIMEOUT) stop 'Timeout on waiting for reading of restart data'
+            enddo
+            !Finally, do an event wait to decrement the event counter
             EVENT WAIT (read_ev)
+
             if (this_image()==1) write(*,*) "Reading restart data"
             call ioclient%receive_rst(domain, write_buffer)
         endif
@@ -158,7 +179,17 @@ program icar
                 
                 call input_timer%start()
 
+                call EVENT_QUERY(read_ev,ev_cnt)
+                sleep_cnt = 0
+                do while(.not.(ev_cnt == 1))
+                    call sleep(1)
+                    sleep_cnt = sleep_cnt + 1
+                    call EVENT_QUERY(read_ev,ev_cnt)
+                    if (sleep_cnt >= kTIMEOUT) stop 'Timeout on waiting for reading of input'
+                enddo
+                !Finally, do an event wait to decrement the event counter
                 EVENT WAIT (read_ev)
+
                 call ioclient%receive(boundary, read_buffer)
                 
                 ! after reading all variables that can be read, not compute any remaining variables (e.g. z from p+ps)
@@ -216,7 +247,17 @@ program icar
             if ((domain%model_time + small_time_delta) >= next_output) then
                 if (this_image()==1) write(*,*) "Writing output file"
                 call output_timer%start()
+                call EVENT_QUERY(written_ev,ev_cnt)
+                sleep_cnt = 0
+                do while(.not.(ev_cnt == 1))
+                    call sleep(1)
+                    sleep_cnt = sleep_cnt + 1
+                    call EVENT_QUERY(written_ev,ev_cnt)
+                    if (sleep_cnt >= kTIMEOUT) stop 'Timeout on waiting for previous output file to be written'
+                enddo
+                !Finally, do an event wait to decrement the event counter
                 EVENT WAIT (written_ev)
+
                 call ioclient%push(domain, write_buffer)
                 EVENT POST (write_ev[ioclient%server])
                 next_output = next_output + options%io_options%output_dt
@@ -225,6 +266,15 @@ program icar
         end do
         
         !Wait for final write before ending program
+        call EVENT_QUERY(written_ev,ev_cnt)
+        sleep_cnt = 0
+        do while(.not.(ev_cnt == 1))
+            call sleep(1)
+            sleep_cnt = sleep_cnt + 1
+            call EVENT_QUERY(written_ev,ev_cnt)
+            if (sleep_cnt >= kTIMEOUT) stop 'Timeout on waiting for last output file to be written'
+        enddo
+        !Finally, do an event wait to decrement the event counter
         EVENT WAIT (written_ev)
 
         if (options%physics%windtype==kITERATIVE_WINDS) call finalize_iter_winds() 
@@ -250,8 +300,18 @@ program icar
             endif
             !If we have more time to the next input, do output now
             if (next_input + small_time_delta >= (next_output + options%io_options%input_dt)) then
-                EVENT WAIT (write_ev, UNTIL_COUNT = ioserver%n_children)
-                
+            
+                call EVENT_QUERY(write_ev,ev_cnt)
+                sleep_cnt = 0
+                do while(.not.(ev_cnt == ioserver%n_children))
+                    call sleep(1)
+                    sleep_cnt = sleep_cnt + 1
+                    call EVENT_QUERY(write_ev,ev_cnt)
+                    if (sleep_cnt >= kTIMEOUT) stop 'Timeout on waiting for output data from compute processes'
+                enddo
+                !Finally, do an event wait to decrement the event counter
+                EVENT WAIT (write_ev, UNTIL_COUNT=ioserver%n_children)
+
                 call ioserver%write_file(next_output, write_buffer)
                 do i = 1,ioserver%n_children
                     EVENT POST (written_ev[ioserver%children(i)])
@@ -286,6 +346,25 @@ program icar
     endif
 
 contains
+
+    !subroutine safe_wait(event, err_msg, until_count)
+    !    implicit none
+    !    type(event_type), intent(inout)  :: event[*]
+    !    character(len=*), intent(in)     :: err_msg
+    !    integer, intent(in), optional    :: until_count
+    !    integer :: sleep_cnt, ev_cnt, until_cnt
+    !            
+    !    call EVENT_QUERY(event,ev_cnt)
+    !    sleep_cnt = 0
+    !    do while(.not.(ev_cnt == 1))
+    !        call sleep(1)
+    !        sleep_cnt = sleep_cnt + 1
+    !        call EVENT_QUERY(event,ev_cnt)
+    !        if (sleep_cnt >= kTIMEOUT) stop trim(err_msg)
+    !    enddo
+    !    !Finally, do an event wait to decrement the event counter
+    !    EVENT WAIT (event)!, UNTIL_COUNT=ioserver%n_children)
+    !end subroutine safe_wait
 
     function step_end(time1, time2) result(min_time)
         implicit none

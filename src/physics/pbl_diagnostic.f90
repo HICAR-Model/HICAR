@@ -140,9 +140,9 @@ contains
             enddo
         enddo
 
-        if (associated(domain%latent_heat%data_2d)) th_flux(ims:ime,jms:jme) = (-(sh(ims:ime,jms:jme)) * dt/cp) / (pii(ims:ime,kts,jms:jme))    
+        if (associated(domain%latent_heat%data_2d)) th_flux(ims:ime,jms:jme) = ((sh(ims:ime,jms:jme)) * dt/cp) / (pii(ims:ime,kts,jms:jme))    
         !Updated to include calculation of LHV based on T
-        if (associated(domain%sensible_heat%data_2d)) qv_flux(ims:ime,jms:jme) = (-lh(ims:ime,jms:jme) * dt / (3.1484E6-2370.*(th(ims:ime,kts,jms:jme)*pii(ims:ime,kts,jms:jme))) )
+        if (associated(domain%sensible_heat%data_2d)) qv_flux(ims:ime,jms:jme) = (lh(ims:ime,jms:jme) * dt / (3.1484E6-2370.*(th(ims:ime,kts,jms:jme)*pii(ims:ime,kts,jms:jme))) )
 
         end associate
 
@@ -173,13 +173,6 @@ contains
                         rho_stag, domain%dz_mass%data_3d, dz_mass_i, domain%jacobian, domain%jacobian_w, domain%dx)
 
 
-        !call io_write("shear_m.nc", "shear_m", shear_m(:,:,:) )
-        !call io_write("rig_m.nc", "rig_m", rig_m(:,:,:) )
-        !call io_write("l_m.nc", "l_m", l_m(:,:,:) )
-        !call io_write("stability_h.nc", "stability_h", stability_h(:,:,:) )
-        !call io_write("stability_m.nc", "stability_m", stability_m(:,:,:) )
-        !call io_write("BVF.nc", "BVF", BVF(:,:,:) )
-        !call io_write("Kq_m.nc", "Kq_m", Kq_m(:,:,:) )
     end subroutine diagnostic_pbl
 
     subroutine diffuse_variable(q, rho, rho_stag, dz, dz_mass_i, jaco, jaco_w, dx, bot_flux_in)

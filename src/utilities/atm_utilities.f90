@@ -24,6 +24,83 @@ module mod_atm_utilities
 
 contains
 
+    !>----------------------------------------------------------
+    !! Compute column integrated vapor transport (non-directional)
+    !!
+    !! Input humidity is mixing ratio                   [kg/kg]
+    !! Pressures are in Pascals                         [Pa]
+    !! U/V are EW and NS wind on the mass grid          [m/s]
+    !!
+    !!----------------------------------------------------------
+    subroutine compute_ivt(ivt, qv, u, v, pi)
+        implicit none
+        real, intent(in),            dimension(:,:,:)   :: pi, qv, u, v
+        real, intent(inout),         dimension(:,:)   :: ivt
+
+        integer :: i, ims, ime
+        integer :: k, kms, kme
+        integer :: j, jms, jme
+
+        ims = lbound(qv,1)
+        ime = ubound(qv,1)
+        kms = lbound(qv,2)
+        kme = ubound(qv,2)
+        jms = lbound(qv,3)
+        jme = ubound(qv,3)
+
+        ivt = 0
+        do j = jms, jme
+            do k = kms, kme-1
+                do i = ims, ime
+                    if (pi(i,k+1,j) > 50000) then
+                        ivt(i,j) = ivt(i,j) + ( qv(i,k,j) * sqrt(u(i,k,j)**2 + v(i,k,j)**2) * (pi(i,k,j) - pi(i,k+1,j)) ) / gravity
+                    elseif (pi(i,k,j) > 50000) then
+                        ivt(i,j) = ivt(i,j) + ( qv(i,k,j) * sqrt(u(i,k,j)**2 + v(i,k,j)**2) * (pi(i,k,j) - 50000) ) / gravity
+                    endif
+                enddo
+            enddo
+        end do
+
+    end subroutine compute_ivt
+
+    !>----------------------------------------------------------
+    !! Compute column integrated scalar (q)
+    !!
+    !! Input scalar is mixing ratio                     [kg/kg]
+    !! Pressures are in Pascals                         [Pa]
+    !!
+    !!----------------------------------------------------------
+    subroutine compute_iq(iq, q, pi)
+        implicit none
+        real, intent(in),            dimension(:,:,:)   :: pi, q
+        real, intent(inout),         dimension(:,:)   :: iq
+
+        integer :: i, ims, ime
+        integer :: k, kms, kme
+        integer :: j, jms, jme
+
+        ims = lbound(q,1)
+        ime = ubound(q,1)
+        kms = lbound(q,2)
+        kme = ubound(q,2)
+        jms = lbound(q,3)
+        jme = ubound(q,3)
+
+        iq = 0
+        do j = jms, jme
+            do k = kms, kme-1
+                do i = ims, ime
+                    if (pi(i,k+1,j) > 50000) then
+                        iq(i,j) = iq(i,j) + ( q(i,k,j) * (pi(i,k,j) - pi(i,k+1,j)) ) / gravity
+                    elseif (pi(i,k,j) > 50000) then
+                        iq(i,j) = iq(i,j) + ( q(i,k,j) * (pi(i,k,j) - 50000) ) / gravity
+                    endif
+                enddo
+            enddo
+        end do
+
+    end subroutine compute_iq
+
 
     !>----------------------------------------------------------
     !! Compute a 3D height field given a surface (or sea level) pressure
@@ -424,7 +501,7 @@ contains
         real :: Ri                                  ! []
         real :: denom
 
-        denom = ( ((u_shear/dz)**2) + ((v_shear/dz)**2) )
+        denom = ((u_shear/dz)**2) + ((v_shear/dz)**2)
 
         if (denom==0) then
             Ri = 10 ! anything over ~5 is effectively infinite anyway
@@ -457,7 +534,7 @@ contains
         
         !When we have very unstable conditions (Ri < 0), theta = 0, very stable conditions (Ri > 1), never separation
         !WS modulates this, reducing the separation angle by 2 degrees for each m/s over 2 m/s
-        theta = 0 + 45*4*min(max(Ri,0.0),0.25) !- 2*min((WS-2.0),0.0)
+        theta = 45*4*min(max(Ri,0.0),0.25) !- 2*min((WS-2.0),0.0)
         
         !Only allow separation for a max angle of 10º
         theta = max(theta,0.0)
@@ -768,6 +845,7 @@ contains
                         if (RH_00 .ge. 1.5) then
                             WRITE (*,*) ' FATAL: RH_00 too large (1.5): ', RH_00, RH_00L, tc
                         endif
+                        RH_00 = min(RH_00, 1.45)
                         CLDFRA(K) = MAX(0., 1.0-SQRT((1.5-RHUM)/(1.5-RH_00)))
                     else
    !..but for the GFS model, RH is way lower.
@@ -830,13 +908,14 @@ contains
         ENDDO
         if (k_m12C .le. kts) k_m12C = kts
 
-        if (k_m12C.gt.kte-3) then
-            WRITE (*,*) 'DEBUG-GT: WARNING, no possible way neg12C can occur this high up: ', k_m12C
-            do k = kte, kts, -1
-                WRITE (*,*) 'DEBUG-GT,  k,  P, T : ', k,P1d(k)*0.01,T1d(k)-273.15
-            enddo
-            write(*,*) ('FATAL ERROR, problem in temperature profile.')
-        endif
+        !Below code assumes that model top should be very high
+        !if (k_m12C.gt.kte-3) then
+        !    WRITE (*,*) 'DEBUG-GT: WARNING, no possible way neg12C can occur this high up: ', k_m12C
+        !    do k = kte, kts, -1
+        !        WRITE (*,*) 'DEBUG-GT,  k,  P, T : ', k,P1d(k)*0.01,T1d(k)-273.15
+        !    enddo
+        !    write(*,*) ('FATAL ERROR, problem in temperature profile.')
+        !endif
 
        !..Find tropopause height, best surrogate, because we would not really
        !.. wish to put fake clouds into the stratosphere.  The 10/1500 ratio
@@ -927,7 +1006,7 @@ contains
 
         k_cldb = k_m12C + 3
         in_cloud = .false.
-        k = k_m12C + 2
+        k = min(size(cfr1d), k_m12C + 2)
         DO WHILE (.not. in_cloud .AND. k.gt.kbot)
             k_cldt = 0
             if (cfr1d(k).ge.0.01) then
@@ -1080,5 +1159,21 @@ contains
         endif
 
     END SUBROUTINE adjust_cloudFinal
+
+    !+---+-----------------------------------------------------------------+
+    !
+    !   Calculate the (Bulk?) Richardson number (for use in pbl_driver, lsm_driver)
+    !
+
+    subroutine calc_Richardson_nr(Ri,airt_3d, tskin, z_atm, wind_2d)
+        IMPLICIT NONE
+        REAL, DIMENSION(:,:), INTENT(OUT):: Ri
+        REAL, DIMENSION(:,:,:), INTENT(IN):: airt_3d
+        REAL, DIMENSION(:,:), INTENT(IN):: tskin, wind_2d, z_atm
+        ! ! Richardson number (from lsm driver)
+        ! where(wind_2d==0) wind_2d=1e-5
+        Ri = gravity/airt_3d(:,1,:) * (airt_3d(:,1,:)-tskin)*z_atm/(wind_2d**2)
+    end subroutine calc_Richardson_nr
+
 
 end module mod_atm_utilities

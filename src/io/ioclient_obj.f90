@@ -108,8 +108,13 @@ contains
             nx = i_e_w - i_s_w + 1
             ny = j_e_w - j_s_w + 1
             if (var%two_d) then
-                write_buffer(n,1:nx,1,1:ny) = &
+                if (var%dtype == kREAL) then
+                    write_buffer(n,1:nx,1,1:ny) = &
                         var%data_2d(i_s_w:i_e_w,j_s_w:j_e_w)
+                elseif (var%dtype == kDOUBLE) then
+                    write_buffer(n,1:nx,1,1:ny) = &
+                        real(var%data_2dd(i_s_w:i_e_w,j_s_w:j_e_w))
+                endif
             else
                 write_buffer(n,1:nx,1:var%dim_len(2),1:ny) = &
                         var%data_3d(i_s_w:i_e_w,1:var%dim_len(2),j_s_w:j_e_w)
@@ -148,7 +153,11 @@ contains
                 cycle
             else
                     if (var%two_d) then
-                        var%data_2d = read_buffer(n,1:nx,1,1:ny)
+                        if (var%dtype == kREAL) then
+                            var%data_2d = read_buffer(n,1:nx,1,1:ny)
+                        elseif (var%dtype == kDOUBLE) then
+                            var%data_2dd = dble(read_buffer(n,1:nx,1,1:ny))
+                        endif
                     else
                         var%data_3d = read_buffer(n,1:nx,1:var%dim_len(2),1:ny)
                     endif
@@ -181,8 +190,13 @@ contains
             nx = i_e_w - i_s_w + 1
             ny = j_e_w - j_s_w + 1
             if (var%two_d) then
-                var%data_2d(i_s_w:i_e_w,j_s_w:j_e_w) = &
-                     write_buffer(n,1:nx,1,1:ny)
+                if (var%dtype == kREAL) then
+                    var%data_2d(i_s_w:i_e_w,j_s_w:j_e_w) = &
+                         write_buffer(n,1:nx,1,1:ny)
+                elseif (var%dtype == kDOUBLE) then
+                    var%data_2dd(i_s_w:i_e_w,j_s_w:j_e_w) = &
+                         dble(write_buffer(n,1:nx,1,1:ny))
+                endif
             else
                 var%data_3d(i_s_w:i_e_w,1:var%dim_len(2),j_s_w:j_e_w) = &
                     write_buffer(n,1:nx,1:var%dim_len(2),1:ny)
