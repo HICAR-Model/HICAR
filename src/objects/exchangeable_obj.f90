@@ -31,6 +31,7 @@ contains
         nullify(this%data_3d)
     endif
 
+    this%dtype = kREAL
     allocate(this%data_3d(grid%ims:grid%ime, &
                           grid%kms:grid%kme, &
                           grid%jms:grid%jme), stat=err)
@@ -129,7 +130,9 @@ contains
     type(variable_t),      intent(in),    optional :: metadata
 
 
-
+    this%meta_data%data_3d => this%data_3d
+    this%meta_data%three_d = .True.
+    this%meta_data%dtype = this%dtype
 
   end subroutine
 
@@ -196,7 +199,7 @@ contains
 
     if (.not. this%east_boundary)  call this%put_east(metadata)
     if (.not. this%west_boundary)  call this%put_west(metadata)
-
+    
     sync images( neighbors )
 
     if (.not. this%east_boundary)  call this%retrieve_east_halo(metadata)

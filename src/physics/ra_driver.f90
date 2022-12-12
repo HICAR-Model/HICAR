@@ -166,7 +166,7 @@ contains
                       kVARS%dz_interface, kVARS%skin_temperature,      kVARS%temperature,             kVARS%density,          &
                       kVARS%longwave_cloud_forcing,                    kVARS%land_emissivity,         kVARS%temperature_interface,  &
                       kVARS%cosine_zenith_angle,                       kVARS%shortwave_cloud_forcing, kVARS%tend_swrad,           &
-                      kVARS%cloud_fraction])
+                      kVARS%cloud_fraction, kVARS%albedo])
 
 
         ! List the variables that are required when restarting for the simple radiation code
@@ -276,7 +276,7 @@ contains
         qg = 0
         
         cldfra=0
-        albedo=0.17
+
         F_QI=.false.
         F_QI2 = .false.
         F_QI3 = .false.
@@ -323,10 +323,17 @@ contains
                            options = options,                                    &
                            dt = dt,                                              &
                            ims=ims, ime=ime, jms=jms, jme=jme, kms=kms, kme=kme, &
-                           its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte)
+                           its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte, F_runlw=.True.)
         endif
 
         if (options%physics%radiation==kRA_RRTMG) then
+
+            if (options%lsm_options%monthly_albedo) then
+                ALBEDO = domain%albedo%data_3d(:, domain%model_time%month, :)
+            else
+                ALBEDO = domain%albedo%data_3d(:, 1, :)
+            endif
+
             do j = jms,jme
                !! MJ commented as it does not work in Erupe
                ! solar_elevation  = calc_solar_elevation(date=domain%model_time, lon=domain%longitude%data_2d, &
@@ -464,7 +471,6 @@ contains
                     yr=domain%model_time%year,                            &
                     julian=domain%model_time%day_of_year(),               &
                     mp_options=mp_options                               )
-
                 call RRTMG_LWRAD(rthratenlw=domain%tend%th_lwrad,                 &
 !                           lwupt, lwuptc, lwuptcln, lwdnt, lwdntc, lwdntcln,     &        !if lwupt defined, all MUST be defined
 !                           lwupb, lwupbc, lwupbcln, lwdnb, lwdnbc, lwdnbcln,     &
@@ -527,6 +533,7 @@ contains
 !                           lwupflx, lwupflxc, lwdnflx, lwdnflxc,                  &
                             read_ghg=options%rad_options%read_ghg                  &
                             )
+                domain%tend_swrad%data_3d = domain%tend%th_swrad
             endif
             domain%potential_temperature%data_3d = domain%potential_temperature%data_3d+domain%tend%th_lwrad*dt+domain%tend%th_swrad*dt
             domain%temperature%data_3d = domain%potential_temperature%data_3d*domain%exner%data_3d

@@ -6,7 +6,7 @@ module icar_constants
 
     implicit none
 
-    character(len=5) :: kVERSION_STRING = "2.0"
+    character(len=5) :: kVERSION_STRING = "2.1"
     
     ! Define team IDs for coarray teams
     integer, parameter :: kCOMPUTE_TEAM = 1
@@ -15,6 +15,8 @@ module icar_constants
     integer :: kNUM_SERVERS = 0
     integer :: kNUM_COMPUTE = 0
     integer :: kNUM_PROC_PER_NODE = 0
+    integer :: kTIMEOUT = 600 !timeout timer in seconds
+    
     !Flag-value to indicate a part of a read-write buffer which was never filled
     real, parameter :: kEMPT_BUFF = -123456789.0
     
@@ -88,6 +90,7 @@ module icar_constants
         integer :: shortwave_direct_above   !! MJ: in OSHD as 'sdrd' referring to 'direct shortwave radiation, per horizontal surface area' only accounted for shading but not the slope effects. Tobias Jonas (TJ) scheme based on swr function in metDataWizard/PROCESS_COSMO_DATA_1E2E.m and also https://github.com/Tobias-Jonas-SLF/HPEval
         integer :: shortwave_total          !! MJ: 'total shortwave radiation, per inclided surface area' as the summation 
         integer :: longwave
+        integer :: albedo
         integer :: vegetation_fraction
         integer :: vegetation_fraction_max
         integer :: vegetation_fraction_out
@@ -158,6 +161,7 @@ module icar_constants
         integer :: ustar
         integer :: coeff_momentum_drag
         integer :: coeff_heat_exchange
+        integer :: coeff_heat_exchange_3d
         integer :: surface_rad_temperature
         integer :: temperature_2m
         integer :: humidity_2m
@@ -232,8 +236,11 @@ module icar_constants
         integer :: tend_qv_pbl
         integer :: tend_qv
         integer :: tend_th
+        integer :: tend_th_pbl
         integer :: tend_qc
+        integer :: tend_qc_pbl
         integer :: tend_qi
+        integer :: tend_qi_pbl
         integer :: tend_qs
         integer :: tend_qr
         integer :: tend_u
@@ -269,7 +276,35 @@ module icar_constants
         integer :: Sliq_out           !! MJ added
         integer :: hlm                !! MJ added
         integer :: last_var           !! MJ added
-        
+        integer :: kpbl
+        integer :: hpbl
+        integer :: lake_depth
+        integer :: t_lake3d
+        integer :: snl2d
+        integer :: t_grnd2d
+        integer :: lake_icefrac3d
+        integer :: z_lake3d
+        integer :: dz_lake3d
+        integer :: t_soisno3d
+        integer :: h2osoi_ice3d
+        integer :: h2osoi_liq3d! liquid water (kg/m2)
+        integer :: h2osoi_vol3d! volumetric soil water (0<=h2osoi_vol<=watsat)[m3/m3]
+        integer :: z3d ! layer depth for snow & soil (m)
+        integer :: dz3d
+        integer :: watsat3d
+        integer :: csol3d
+        integer :: tkmg3d
+        integer :: lakemask
+        integer :: zi3d
+        integer :: tksatu3d
+        integer :: tkdry3d
+        integer :: savedtke12d
+        integer :: lakedepth2d
+        integer :: ivt
+        integer :: iwv
+        integer :: iwl
+        integer :: iwi
+        integer :: last_var
     end type var_constants_type
 
 
@@ -295,10 +330,15 @@ module icar_constants
                                                             191, 192, 193, 194, 195, 196, 197, 198, 199, 200,  &
                                                             201, 202, 203, 204, 205, 206, 207, 208, 209, 210,  &
                                                             211, 212, 213, 214, 215, 216, 217, 218, 219, 220,  &
-                                                            221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231)
+                                                            221, 222, 223, 224, 225, 226, 227, 228, 229, 230,  &
+                                                            231, 232, 233, 234, 235, 236, 237, 238, 239, 240,  &
+                                                            241, 242, 243)
 
     integer, parameter :: kINTEGER_BITS     = storage_size(kINTEGER_BITS)
     integer, parameter :: kMAX_STORAGE_VARS = storage_size(kVARS) / kINTEGER_BITS
+
+    integer, parameter :: kREAL             = 4
+    integer, parameter :: kDOUBLE           = 8
 
     ! Initial number of output variables for which pointers are created
     integer, parameter :: kINITIAL_VAR_SIZE= 128
@@ -345,21 +385,25 @@ module icar_constants
     integer, parameter :: kCU_TIEDTKE    = 1
     integer, parameter :: kCU_SIMPLE     = 2
     integer, parameter :: kCU_KAINFR     = 3
+    integer, parameter :: kCU_NSAS       = 4
+    integer, parameter :: kCU_BMJ        = 5
 
     integer, parameter :: kMP_THOMPSON   = 1
     integer, parameter :: kMP_SB04       = 2
     integer, parameter :: kMP_MORRISON   = 3
     integer, parameter :: kMP_WSM6       = 4
     integer, parameter :: kMP_THOMP_AER  = 5
-    integer, parameter :: kMP_ISHMAEL    = 6
-    
+    integer, parameter :: kMP_WSM3       = 6
+    integer, parameter :: kMP_ISHMAEL    = 7
+ 
     integer, parameter :: kPBL_BASIC       = 1
     integer, parameter :: kPBL_SIMPLE      = 2
-    integer, parameter :: kPBL_DIAGNOSTIC  = 3
-    integer, parameter :: kPBL_YSU         = 4
+    integer, parameter :: kPBL_YSU         = 3
+    integer, parameter :: kPBL_DIAGNOSTIC  = 4
 
     integer, parameter :: kWATER_BASIC   = 1
     integer, parameter :: kWATER_SIMPLE  = 2
+    integer, parameter :: kWATER_LAKE    = 3
 
     integer, parameter :: kLSM_BASIC     = 1
     integer, parameter :: kLSM_SIMPLE    = 2
@@ -380,9 +424,11 @@ module icar_constants
     integer, parameter :: kCONSERVE_MASS = 2
     integer, parameter :: kOBRIEN_WINDS = 3
     integer, parameter :: kITERATIVE_WINDS = 4
+    integer, parameter :: kLINEAR_OBRIEN_WINDS = 5
+    integer, parameter :: kLINEAR_ITERATIVE_WINDS = 6
 
     integer, parameter :: kLC_LAND       = 1
-    integer, parameter :: kLC_WATER      = 2
+    integer, parameter :: kLC_WATER      = 2 ! 0  ! This should maybe become an argument in the namelist if we use different hi-es files?
 
     ! the fixed lengths of various land-surface grids
     integer, parameter :: kSOIL_GRID_Z       = 4
@@ -392,6 +438,11 @@ module icar_constants
     integer, parameter :: kMONTH_GRID_Z      = 12
     integer, parameter :: kGECROS_GRID_Z     = 60
     integer, parameter :: kSOILCOMP_GRID_Z   = 8
+    
+    integer, parameter :: kLAKE_Z            = 10
+    integer, parameter :: kLAKE_SOISNO_Z     = 9
+    integer, parameter :: kLAKE_SOI_Z        = 4
+    integer, parameter :: kLAKE_SOISNO_1_Z   = 10
 
 
     ! mm of accumulated precip before "tipping" into the bucket

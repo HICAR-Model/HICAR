@@ -21,7 +21,6 @@ module options_types
         integer::radiation
         integer::convection
         integer::windtype
-        character(len=MAXVARLENGTH) :: phys_suite
         integer::radiation_downScaling        
     end type physics_type
     
@@ -154,14 +153,23 @@ module options_types
     ! ------------------------------------------------
     type lsm_options_type
         character (len=MAXVARLENGTH) :: LU_Categories   ! land use categories to read from VEGPARM.tbl (e.g. "USGS")
+        real :: lh_feedback_fraction                    ! fraction of latent heat added back to the atmosphere
+        real :: sh_feedback_fraction                    ! fraction of sensible heat added back to the atmosphere
+        real :: sfc_layer_thickness                     ! thickness of atmosphere to spread heat flux over.
+        real :: dz_lsm_modification                     ! ability to change the apparent thickness of the lowest model level to compensate for issues in the LSM?
+        real :: wind_enhancement                        ! enhancement to winds in LSM to mitigate low bias in driving models
+        real :: max_swe                                 ! maximum value for Snow water equivalent (excess above this is removed)
         integer :: update_interval                      ! minimum time to let pass before recomputing LSM ~300s (it may be longer)  [s]
         ! the following categories will be set by default if an known LU_Category is used
         integer :: urban_category                       ! LU index value that equals "urban"
         integer :: ice_category
         integer :: water_category
+        integer :: lake_category
+        ! integer :: snow_category ! = ice cat
         ! use monthly vegetation fraction data, not just a single value
         logical :: monthly_vegfrac
         logical :: surface_diagnostics !! MJ added
+        logical :: monthly_albedo
     end type lsm_options_type
 
     ! ------------------------------------------------
@@ -173,6 +181,7 @@ module options_types
        integer :: icloud                               ! How RRTMG interact with clouds
        logical :: read_ghg                             ! Eihter use default green house gas mixing ratio, or read the in from file
        real    :: tzone !! MJ adedd,tzone is UTC Offset and 1 here for centeral Erupe
+       logical :: use_simple_sw
     end type rad_options_type
 
     ! ------------------------------------------------
@@ -216,7 +225,7 @@ module options_types
     ! store all model options
     ! ------------------------------------------------
     type parameter_options_type
-        character (len=MAXVARLENGTH) :: version,comment
+        character (len=MAXVARLENGTH) :: version, comment, phys_suite
 
         ! file names
         character (len=MAXFILELENGTH) :: init_conditions_file, linear_mask_file, nsq_calibration_file, external_files
@@ -224,7 +233,7 @@ module options_types
         character (len=MAXFILELENGTH), dimension(:), allocatable :: boundary_files
 
         ! variable names from init/BC/wind/... files
-        character (len=MAXVARLENGTH) :: landvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar, &
+        character (len=MAXVARLENGTH) :: landvar,lakedepthvar,latvar,lonvar,uvar,ulat,ulon,vvar,vlat,vlon,wvar, &
                                         hgt_hi,lat_hi,lon_hi,ulat_hi,ulon_hi,vlat_hi,vlon_hi, &
                                         pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qsvar,qgvar,i2mvar,i3mvar,&
                                         qncvar,qnivar,qnrvar,qnsvar,qngvar,i2nvar,i3nvar,&
@@ -232,7 +241,7 @@ module options_types
                                         pslvar, psvar, snowh_var, &
                                         shvar,lhvar,pblhvar,zvar,zbvar, &
                                         soiltype_var, soil_t_var,soil_vwc_var,swe_var,soil_deept_var, &
-                                        vegtype_var,vegfrac_var, vegfracmax_var, lai_var, canwat_var, &
+                                        vegtype_var,vegfrac_var, albedo_var, vegfracmax_var, lai_var, canwat_var, &
                                         linear_mask_var, nsq_calibration_var, &
                                         swdown_var, lwdown_var, &
                                         sst_var, rain_var, time_var, sinalpha_var, cosalpha_var, &
@@ -301,6 +310,10 @@ module options_types
         type(Time_type) :: end_time     ! End point for the model simulation
         
         real :: t_offset                ! offset to temperature because WRF outputs potential temperature-300
+        real :: rh_limit                ! limit to impose on relative humidity in the forcing data
+        real :: cp_limit      ! [ mm/hr ] limit to impose on externally supplied convective precipitation in the forcing data in case bad values (e.g. 1e10 mm) are present
+        real :: sst_min_limit   ! [ K ]   limit to impose on minimum SST in the forcing data in case any non-sensical values (e.g. 200 K) are present
+
 
         ! note this can't be allocatable because gfortran does not support allocatable components inside derived type coarrays...
         real, dimension(MAXLEVELS)::dz_levels ! model layer thicknesses to be read from namelist

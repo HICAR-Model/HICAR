@@ -34,7 +34,7 @@ module exchangeable_interface
     integer :: jte
     integer :: kts
     integer :: kte
-
+    integer :: dtype=kREAL
 
   contains
     private

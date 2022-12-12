@@ -229,7 +229,7 @@ ifeq ($(MODE), debugslow)
 		LINK=
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-h noomp -c -g -h develop -m 0 -R bcsp -M 399
+		COMP=-h noomp -c -g -h develop -m 0 -R bcsp -M 399 -hfp0
 		LINK=-h noomp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
@@ -245,8 +245,8 @@ ifeq ($(MODE), debug)
 		LINK=
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-h omp -O2 -c -g
-		LINK=-fopenmp
+		COMP=-O2 -h noomp -c -g -hfp0
+		LINK=-h noomp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
 	endif
@@ -262,8 +262,8 @@ ifeq ($(MODE), debugompslow)
 		LINK= -fopenmp -lgomp
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-c -g -m 0 -hfp2 -h omp develop -R bcsp -M 399
-		LINK=-fopenmp
+		COMP=-c -g -m 0 -h develop -R bcsp -M 399 -hfp0
+		LINK=
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
 	endif
@@ -279,8 +279,8 @@ ifeq ($(MODE), debugomp)
 		 # -Wall -Wno-unused-variable -Wno-unused-dummy-argument
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-c -g -h omp develop
-		LINK=-fopenmp
+		COMP=-O1 -c -g -hfp0
+		LINK=
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
 	endif
@@ -368,7 +368,7 @@ OBJS=	\
 		$(BUILD)time_step.o			\
 		$(BUILD)debug_utils.o		\
 		$(BUILD)icar_constants.o	\
-		$(BUILD)wrf_constants.o	\
+		$(BUILD)wrf_constants.o		\
 		$(BUILD)model_tracking.o	\
 		$(BUILD)string.o        	\
 		$(BUILD)time_delta_obj.o	\
@@ -396,6 +396,7 @@ OBJS=	\
 		$(BUILD)boundary_obj.o		\
 		$(BUILD)assertions.o		\
 		$(BUILD)atm_utilities.o		\
+		$(BUILD)pbl_utilities.o		\
 		$(BUILD)co_utilities.o		\
 		$(BUILD)default_output_metadata.o\
 		$(BUILD)ioserver_h.o                      \
@@ -416,33 +417,38 @@ OBJS=	\
 		$(BUILD)pbl_driver.o		\
 		$(BUILD)pbl_simple.o		\
 		$(BUILD)pbl_diagnostic.o		\
+		$(BUILD)pbl_ysu.o			\
 		$(BUILD)ra_driver.o			\
 		$(BUILD)ra_simple.o			\
-		$(BUILD)ra_rrtmg_lw.o           \
-		$(BUILD)ra_rrtmg_sw.o           \
-		$(BUILD)ra_clWRF_support.o      \
+		$(BUILD)ra_rrtmg_lw.o       \
+		$(BUILD)ra_rrtmg_sw.o       \
+		$(BUILD)ra_clWRF_support.o  \
 		$(BUILD)mp_driver.o			\
 		$(BUILD)mp_simple.o			\
 		$(BUILD)mp_thompson.o		\
 		$(BUILD)mp_thompson_aer.o	\
-		$(BUILD)mp_wsm6.o		\
 		$(BUILD)mp_morrison.o           \
 		$(BUILD)mp_jensen_ishmael.o     \
+		$(BUILD)mp_wsm6.o			\
+		$(BUILD)mp_wsm3.o			\
 		$(BUILD)cu_driver.o			\
 		$(BUILD)cu_tiedtke.o		\
-		$(BUILD)adv_fluxcorr.o      \
+		$(BUILD)cu_nsas.o			\
+		$(BUILD)cu_bmj.o			\
+                $(BUILD)adv_fluxcorr.o      \
 		$(BUILD)advection_driver.o	\
 		$(BUILD)advect.o			\
-		$(BUILD)adv_mpdata.o                        \
+		$(BUILD)adv_mpdata.o        \
 		$(BUILD)lsm_driver.o		\
 		$(BUILD)lsm_FSMdrv.o		\
 		$(BUILD)lsm_noahdrv.o		\
 		$(BUILD)lsm_noahlsm.o		\
-		$(BUILD)lsm_noahmpdrv.o  \
-		$(BUILD)lsm_noahmplsm.o  \
+		$(BUILD)lsm_noahmpdrv.o  	\
+		$(BUILD)lsm_noahmplsm.o  	\
 		$(BUILD)lsm_noahmp_glacier.o \
 		$(BUILD)lsm_noahmp_gecros.o \
 		$(BUILD)water_simple.o		\
+		$(BUILD)water_lake.o		\
 		$(BUILD)geo_reader.o		\
 		$(BUILD)io_routines.o		\
 		$(BUILD)data_structures.o	\
@@ -578,13 +584,15 @@ caf_no_forcing_test: $(BUILD)test_caf_no_forcing.o							\
 					$(BUILD)exchangeable_h.o $(BUILD)exchangeable_obj.o \
 					$(BUILD)icar_constants.o $(BUILD)io_routines.o		\
 					$(BUILD)model_tracking.o $(BUILD)string.o           \
-					$(BUILD)assertions.o	 $(BUILD)atm_utilities.o    \
+					$(BUILD)assertions.o	 $(BUILD)atm_utilities.o    \ $(BUILD)pbl_utilities.o		\
 					$(BUILD)co_utilities.o   $(BUILD)default_output_metadata.o \
 					$(BUILD)ra_driver.o      $(BUILD)ra_simple.o		\
 					$(BUILD)pbl_driver.o     $(BUILD)pbl_simple.o		\
+					$(BUILD)pbl_diagnostic.o     $(BUILD)pbl_ysu.o           \
 					$(BUILD)mp_driver.o      $(BUILD)mp_simple.o $(BUILD)mp_morrison.o	$(BUILD)mp_jensen_ishmael.o	\
-					$(BUILD)mp_thompson.o	 $(BUILD)mp_thompson_aer.o   $(BUILD)mp_wsm6.o\
-					$(BUILD)cu_driver.o		 $(BUILD)cu_tiedtke.o		\
+					$(BUILD)mp_thompson.o	 $(BUILD)mp_thompson_aer.o   $(BUILD)mp_wsm6.o  $(BUILD)mp_wsm3.o\
+					$(BUILD)cu_driver.o		 $(BUILD)cu_tiedtke.o       \
+					$(BUILD)cu_nsas.o		 $(BUILD)cu_bmj.o			\
 					$(BUILD)advection_driver.o $(BUILD)geo_reader.o		\
 					$(BUILD)advect.o		 $(BUILD)data_structures.o	\
 					$(BUILD)vinterp.o		 $(BUILD)array_utilities.o	\
@@ -592,7 +600,7 @@ caf_no_forcing_test: $(BUILD)test_caf_no_forcing.o							\
 					$(BUILD)lsm_FSMdrv.o	\
 					$(BUILD)lsm_noahdrv.o 	 $(BUILD)lsm_noahlsm.o \
 					$(BUILD)lsm_noahmpdrv.o  $(BUILD)lsm_noahmplsm.o \
-					$(BUILD)water_simple.o
+					$(BUILD)water_simple.o   $(BUILD)water_lake.o
 	${LINKER} $^ -o $@ ${LFLAGS}
 
 caf_domain_init_test: $(BUILD)test_caf_domain_init.o $(OBJS)
@@ -714,7 +722,7 @@ $(BUILD)reader_h.o: $(IO)reader_h.f90 $(BUILD)icar_constants.o $(BUILD)options_h
 $(BUILD)reader_obj.o: $(IO)reader_obj.f90 $(BUILD)reader_h.o $(BUILD)debug_utils.o $(BUILD)time_io.o $(BUILD)variable_h.o
 
 $(BUILD)output_h.o: $(IO)output_h.f90 $(BUILD)icar_constants.o $(BUILD)variable_h.o $(BUILD)grid_h.o $(BUILD)meta_data_h.o $(BUILD)domain_h.o
-$(BUILD)output_obj.o: $(IO)output_obj.f90 $(BUILD)output_h.o $(BUILD)string.o $(BUILD)default_output_metadata.o $(BUILD)time_h.o $(BUILD)debug_utils.o
+$(BUILD)output_obj.o: $(IO)output_obj.f90 $(BUILD)output_h.o $(BUILD)default_output_metadata.o $(BUILD)string.o  $(BUILD)time_h.o $(BUILD)time_io.o $(BUILD)debug_utils.o
 
 
 $(BUILD)boundary_h.o: $(OBJECTS)boundary_h.f90 $(BUILD)options_h.o				\
@@ -775,7 +783,11 @@ $(BUILD)string.o:$(UTIL)string.f90
 $(BUILD)array_utilities.o:$(UTIL)array_utilities.f90
 
 $(BUILD)atm_utilities.o:$(UTIL)atm_utilities.f90 $(BUILD)icar_constants.o 	\
-					$(BUILD)data_structures.o $(BUILD)options_h.o $(BUILD)mp_thompson.o
+					$(BUILD)data_structures.o $(BUILD)options_h.o $(BUILD)mp_thompson.o \
+					$(BUILD)opt_types.o
+
+$(BUILD)pbl_utilities.o:$(UTIL)pbl_utilities.f90 $(BUILD)icar_constants.o 	\
+					$(BUILD)data_structures.o
 
 
 ###################################################################
@@ -800,16 +812,15 @@ $(BUILD)vinterp.o: $(UTIL)vinterp.f90 $(BUILD)data_structures.o
 #	Microphysics code
 ###################################################################
 $(BUILD)mp_driver.o:$(PHYS)mp_driver.f90 $(BUILD)mp_simple.o $(BUILD)mp_thompson_aer.o $(BUILD)wind.o $(BUILD)mp_thompson.o $(BUILD)mp_wsm6.o\
-					$(BUILD)mp_morrison.o $(BUILD)mp_jensen_ishmael.o $(BUILD)data_structures.o $(BUILD)domain_h.o  \
+					$(BUILD)mp_wsm3.o $(BUILD)mp_morrison.o $(BUILD)mp_jensen_ishmael.o $(BUILD)data_structures.o $(BUILD)domain_h.o  \
 					$(BUILD)icar_constants.o $(BUILD)wrf_constants.o
 
-# $(BUILD)mp_driver.o:$(PHYS)mp_driver.f90 $(BUILD)mp_thompson.o $(BUILD)mp_simple.o \
-# 					$(BUILD)mp_morrison.o $(BUILD)data_structures.o $(BUILD)mp_wsm6.o
-# 	${F90} ${FFLAGS} $(PHYS)mp_driver.f90 -o $(BUILD)mp_driver.o
 
 $(BUILD)mp_morrison.o:$(PHYS)mp_morrison.f90 $(BUILD)wrf_constants.o
 
 $(BUILD)mp_jensen_ishmael.o:$(PHYS)mp_jensen_ishmael.f90 $(BUILD)io_routines.o
+
+$(BUILD)mp_wsm3.o:$(PHYS)mp_wsm3.f90 $(BUILD)wrf_constants.o
 
 $(BUILD)mp_wsm6.o:$(PHYS)mp_wsm6.f90 $(BUILD)wrf_constants.o
 
@@ -822,18 +833,24 @@ $(BUILD)mp_simple.o:$(PHYS)mp_simple.f90 $(BUILD)data_structures.o $(BUILD)optio
 ###################################################################
 #	Convection code
 ###################################################################
-$(BUILD)cu_driver.o:$(PHYS)cu_driver.f90 $(BUILD)cu_tiedtke.o  \
-					$(BUILD)data_structures.o $(BUILD)icar_constants.o $(BUILD)domain_h.o
+$(BUILD)cu_driver.o:$(PHYS)cu_driver.f90 $(BUILD)cu_tiedtke.o $(BUILD)cu_nsas.o $(BUILD)cu_bmj.o  \
+					$(BUILD)data_structures.o $(BUILD)icar_constants.o $(BUILD)domain_h.o $(BUILD)options_h.o
 
 $(BUILD)cu_tiedtke.o:$(PHYS)cu_tiedtke.f90
 
 $(BUILD)cu_kf.o:$(PHYS)cu_kf.f90
 
+$(BUILD)cu_nsas.o:$(PHYS)cu_nsas.f90
+
+$(BUILD)cu_bmj.o:$(PHYS)cu_bmj.f90
+
 ###################################################################
 #	Radiation code
 ###################################################################
 
-$(BUILD)ra_driver.o:$(PHYS)ra_driver.f90 $(BUILD)ra_simple.o $(BUILD)ra_rrtmg_lw.o $(BUILD)ra_rrtmg_sw.o $(BUILD)data_structures.o $(BUILD)icar_constants.o $(BUILD)options_h.o $(BUILD)domain_h.o
+$(BUILD)ra_driver.o:$(PHYS)ra_driver.f90 $(BUILD)ra_simple.o $(BUILD)ra_rrtmg_lw.o $(BUILD)ra_rrtmg_sw.o \
+					$(BUILD)data_structures.o $(BUILD)icar_constants.o $(BUILD)options_h.o 				 \
+					$(BUILD)domain_h.o
 
 $(BUILD)ra_rrtmg_lw.o:$(PHYS)ra_rrtmg_lw.f90 $(BUILD)ra_clWRF_support.o $(BUILD)io_routines.o
 
@@ -846,16 +863,19 @@ $(BUILD)ra_simple.o:$(PHYS)ra_simple.f90 $(BUILD)data_structures.o $(BUILD)atm_u
 ###################################################################
 #	Surface code
 ###################################################################
-$(BUILD)lsm_driver.o: $(PHYS)lsm_driver.f90 $(BUILD)data_structures.o \
-						$(BUILD)lsm_noahdrv.o $(BUILD)lsm_noahlsm.o \
+$(BUILD)lsm_driver.o: $(PHYS)lsm_driver.f90 $(BUILD)data_structures.o	\
+						$(BUILD)lsm_noahdrv.o $(BUILD)lsm_noahlsm.o		\
 						$(BUILD)lsm_noahmpdrv.o $(BUILD)lsm_noahmplsm.o \
-						$(BUILD)water_simple.o $(BUILD)icar_constants.o \
+						$(BUILD)water_simple.o $(BUILD)water_lake.o		\
 						$(BUILD)domain_h.o $(BUILD)options_h.o			\
-						$(BUILD)atm_utilities.o $(BUILD)ra_simple.o $(BUILD)lsm_FSMdrv.o
+						$(BUILD)atm_utilities.o $(BUILD)ra_simple.o $(BUILD)lsm_FSMdrv.o	\
+						$(BUILD)opt_types.o	$(BUILD)icar_constants.o
 
 # $(BUILD)lsm_basic.o $(BUILD)lsm_simple.o
 
-$(BUILD)water_simple.o: $(PHYS)water_simple.f90 $(BUILD)data_structures.o
+$(BUILD)water_simple.o: $(PHYS)water_simple.f90 $(BUILD)options_h.o $(BUILD)data_structures.o
+
+$(BUILD)water_lake.o: $(PHYS)water_lake.f90 $(BUILD)data_structures.o
 
 $(BUILD)lsm_simple.o: $(PHYS)lsm_simple.f90 $(BUILD)data_structures.o
 
@@ -886,7 +906,8 @@ $(BUILD)lsm_FSMdrv.o: $(PHYS)lsm_FSMdrv.f90 $(BUILD)data_structures.o \
 ###################################################################
 #	Planetary Boundary Layer code
 ###################################################################
-$(BUILD)pbl_driver.o: $(PHYS)pbl_driver.f90 $(BUILD)pbl_diagnostic.o $(BUILD)pbl_simple.o $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)data_structures.o
+$(BUILD)pbl_driver.o: $(PHYS)pbl_driver.f90 $(BUILD)pbl_diagnostic.o $(BUILD)pbl_ysu.o $(BUILD)lsm_driver.o $(BUILD)pbl_simple.o \
+	                                    $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)data_structures.o  $(BUILD)atm_utilities.o $(BUILD)pbl_utilities.o
 
 $(BUILD)pbl_simple.o: $(PHYS)pbl_simple.f90 $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)data_structures.o
 
