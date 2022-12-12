@@ -48,6 +48,7 @@ module time_object
         procedure, public  :: day_of_year => calc_day_of_year
         procedure, public  :: year_fraction=>calc_year_fraction
         procedure, public  :: date_to_mjd => date_to_mjd
+        procedure, public  :: date_to_jd => date_to_jd
         procedure, public  :: as_string   => as_string
         procedure, public  :: equals      => equals_with_precision
         procedure, public  :: units       => units
@@ -179,6 +180,22 @@ interface
         real(real128) :: date_to_mjd
 
     end function date_to_mjd
+    
+    !>------------------------------------------------------------
+    !!  Convert a Year, Month, Day, hour, minute, second into a single number
+    !!
+    !!  This number will be a  Julian Day for the default gregorian calendar
+    !!  
+    !!  MJ added
+    !!------------------------------------------------------------
+    module function date_to_jd(this, year, month, day, hour, minute, second)
+        implicit none
+        class(Time_type), intent(in) :: this
+        integer, intent(in) :: year, month, day, hour, minute, second
+        real(real128) :: date_to_jd
+
+    end function date_to_jd
+    
 
     !>------------------------------------------------------------
     !!  Calculate the year, month, day, hour, minute second for the current date_time object
