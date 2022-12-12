@@ -275,7 +275,6 @@ module icar_constants
         integer :: svf                !! MJ added
         integer :: Sliq_out           !! MJ added
         integer :: hlm                !! MJ added
-        integer :: last_var           !! MJ added
         integer :: kpbl
         integer :: hpbl
         integer :: lake_depth
@@ -332,7 +331,9 @@ module icar_constants
                                                             211, 212, 213, 214, 215, 216, 217, 218, 219, 220,  &
                                                             221, 222, 223, 224, 225, 226, 227, 228, 229, 230,  &
                                                             231, 232, 233, 234, 235, 236, 237, 238, 239, 240,  &
-                                                            241, 242, 243)
+                                                            241, 242, 243, 244, 245, 246, 247, 248, 249, 250,  &
+                                                            251, 252, 253, 254, 255, 256, 257, 258, 259, 260,  &
+                                                            261, 262, 263, 264)
 
     integer, parameter :: kINTEGER_BITS     = storage_size(kINTEGER_BITS)
     integer, parameter :: kMAX_STORAGE_VARS = storage_size(kVARS) / kINTEGER_BITS
