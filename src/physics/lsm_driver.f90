@@ -210,8 +210,7 @@ contains
                          kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg,                                        &
                          kVARS%veg_type, kVARS%soil_type, kVARS%land_mask,                                              &
                          kVARS%runoff_tstep, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow, kVARS%albs, &
-                         kVARS%rainfall_tstep, kVARS%snowfall_tstep, kVARS%meltflux_out_tstep, kVARS%slope, kVARS%slope_angle, kVARS%aspect_angle, &
-                         kVARS%svf, kVARS%hlm, kVARS%shortwave_direct, kVARS%shortwave_diffuse])
+                         kVARS%rainfall_tstep, kVARS%snowfall_tstep, kVARS%meltflux_out_tstep, kVARS%Sliq_out, kVARS%windspd_10m])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
 
@@ -1385,15 +1384,13 @@ contains
                 rain_bucket = domain%precipitation_bucket
             endif
 
-            !! MJ added: this block is for FSM as lsm..
+            !! MJ added: this block is for FSM as lsm.
             if (options%physics%landsurface == kLSM_FSM) then
-                current_precipitation = (domain%accumulated_precipitation%data_2d-RAINBL)+(domain%precipitation_bucket-rain_bucket)*kPRECIP_BUCKET_SIZE ! this total prep=rainfall+snowfall in kg m-2
-                current_snow = (domain%accumulated_snowfall%data_2d-SNOWBL)+(domain%snowfall_bucket-snow_bucket)*kPRECIP_BUCKET_SIZE ! snowfall in kg m-2
-                current_rain = max(current_precipitation-current_snow,0.) ! rainfall in kg m-2
+                current_precipitation = (domain%accumulated_precipitation%data_2d-RAINBL)+(domain%precipitation_bucket-rain_bucket)*kPRECIP_BUCKET_SIZE !! MJ: this is the total prep=rainfall+snowfall in kg m-2
+                current_snow = (domain%accumulated_snowfall%data_2d-SNOWBL)+(domain%snowfall_bucket-snow_bucket)*kPRECIP_BUCKET_SIZE !! MJ: snowfall in kg m-2
+                current_rain = max(current_precipitation-current_snow,0.) !! MJ: rainfall in kg m-2
                 !!
-                !windspd_FSM=windspd(its:ite,jts:jte)
-                !current_snow_FSM=current_snow(its:ite,jts:jte)
-                !current_rain_FSM=current_rain(its:ite,jts:jte)
+                domain%windspd_10m%data_2d(its:ite,jts:jte)=windspd(its:ite,jts:jte)
                 !!
                 call lsm_FSM(domain,options,lsm_dt,current_rain(its:ite,jts:jte),current_snow(its:ite,jts:jte),windspd(its:ite,jts:jte))
                 !!
@@ -1426,16 +1423,12 @@ contains
                                              domain%humidity_2m%data_2d,      &
                                              domain%surface_pressure%data_2d)
                 endif
-
-                !Resting water pixels in FSM and assign it the result of water_simple
-                !           
                 RAINBL = domain%accumulated_precipitation%data_2d
                 rain_bucket = domain%precipitation_bucket
                 SNOWBL = domain%accumulated_snowfall%data_2d
                 snow_bucket = domain%snowfall_bucket
                 !!                                              
             endif
-            
             !!
             !! MJ moved water model here at the end...since FSM considers all pixels non-water
             if (options%physics%watersurface==kWATER_SIMPLE) then
@@ -1453,7 +1446,6 @@ contains
                                   QFX,                                  &
                                   domain%skin_temperature%data_2d)
             endif
-            
             !!
             if (options%physics%landsurface > kLSM_BASIC .and. options%physics%landsurface/=kLSM_FSM) then !! MJ uses different func for FSM as we do not have vegetaion
                 ! accumulate soil moisture over the entire column
@@ -1483,20 +1475,19 @@ contains
             endif
             !!
         endif
-        
-        !! this is to aggregate thge vars such as runoff, meltout, snowfall and rainfall per output interval only FSM 
+        !! MJ: this is to aggregate vars such as runoff, meltout, snowfall and rainfall per output interval during t->t-1 only for FSM 
         if (options%physics%landsurface==kLSM_FSM) then 
             Delta_t=mod(domain%model_time%seconds(),options%io_options%out_dt)
             if ( abs(options%io_options%out_dt-(Delta_t+dt)) <= 1.e-3 ) then
-                if (this_image()==1) write(*,*) "reset-----------t,t+dt,mod", Delta_t,Delta_t+dt
+                if (this_image()==1) write(*,*) "resetting/aggregating vars e.g. runoff during t-1->t"!, Delta_t,Delta_t+dt
                 !!
                 domain%rainfall_tstep%data_2d(its:ite,jts:jte)=rainfall_sum
                 domain%snowfall_tstep%data_2d(its:ite,jts:jte)=snowfall_sum
                 domain%runoff_tstep%data_2d(its:ite,jts:jte)=Roff_sum
                 domain%meltflux_out_tstep%data_2d(its:ite,jts:jte)=meltflux_out_sum
                 !! reseting the container to zero for next output interval
-                snowfall_sum = 0.
                 rainfall_sum = 0.
+                snowfall_sum = 0.                
                 Roff_sum = 0.
                 meltflux_out_sum = 0.
             endif
