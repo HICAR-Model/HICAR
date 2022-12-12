@@ -393,10 +393,10 @@ contains
         endif
         
         !! MJ added
-        if ((options%physics%radiation_downScaling==1).and.(options%physics%radiation==0)) then
+        if ((options%physics%radiation_downScaling==1).and.(options%physics%radiation==0 .or. options%physics%radiation==1)) then
             if (this_image()==1) write(*,*) ""
             if (this_image()==1) write(*,*) "STOP STOP STOP"
-            if (this_image()==1) write(*,*) "STOP, Running radiation_downScaling should not be used with rad=0. "
+            if (this_image()==1) write(*,*) "STOP, Running radiation_downScaling should not be used with rad=0 or 1 "
             if (this_image()==1) write(*,*) "STOP STOP STOP"
             stop
         endif
@@ -1816,8 +1816,9 @@ contains
         integer :: update_interval_rrtmg             ! minimum number of seconds between RRTMG updates
         integer :: icloud                            ! how RRTMG interacts with clouds
         logical :: read_ghg
+        real    :: tzone !! MJ adedd,tzone is UTC Offset and 1 here for centeral Erupe
         ! define the namelist
-        namelist /rad_parameters/ update_interval_rrtmg, icloud, read_ghg
+        namelist /rad_parameters/ update_interval_rrtmg, icloud, read_ghg, tzone !! MJ adedd,tzone is UTC Offset and 1 here for centeral Erupe
 
 
          ! because adv_options could be in a separate file
@@ -1829,9 +1830,10 @@ contains
 
 
         ! set default values
-        update_interval_rrtmg = 1800 ! 30 minutes
+        update_interval_rrtmg = 600 ! 30 minutes
         icloud          = 3    ! effective radius from microphysics scheme
         read_ghg        = .false.
+        tzone=1. !! MJ added
 
         ! read the namelist options
         if (options%parameters%use_rad_options) then
@@ -1844,9 +1846,12 @@ contains
         rad_options%update_interval_rrtmg = update_interval_rrtmg
         rad_options%icloud                = icloud
         rad_options%read_ghg              = read_ghg
+        rad_options%tzone              = tzone
 
         ! copy the data back into the global options data structure
         options%rad_options = rad_options
+        
+         !if (this_image()==1) write(*,*) " tzone, update_interval_rrtmg ", rad_options%tzone, rad_options%update_interval_rrtmg
     end subroutine rad_parameters_namelist
 
 

@@ -135,6 +135,8 @@ contains
         if (0<var_list( kVARS%shortwave) )                  call this%vars_to_out%add_var( trim( get_varname( kVARS%shortwave                    )), this%shortwave)
         if (0<var_list( kVARS%shortwave_direct) )           call this%vars_to_out%add_var( trim( get_varname( kVARS%shortwave_direct             )), this%shortwave_direct)
         if (0<var_list( kVARS%shortwave_diffuse) )          call this%vars_to_out%add_var( trim( get_varname( kVARS%shortwave_diffuse            )), this%shortwave_diffuse)
+        if (0<var_list( kVARS%shortwave_direct_above) )     call this%vars_to_out%add_var( trim( get_varname( kVARS%shortwave_direct_above       )), this%shortwave_direct_above) !! MJ aded
+        if (0<var_list( kVARS%shortwave_total) )            call this%vars_to_out%add_var( trim( get_varname( kVARS%shortwave_total              )), this%shortwave_total) !! MJ aded
         if (0<var_list( kVARS%longwave) )                   call this%vars_to_out%add_var( trim( get_varname( kVARS%longwave                     )), this%longwave)
         if (0<var_list( kVARS%vegetation_fraction) )        call this%vars_to_out%add_var( trim( get_varname( kVARS%vegetation_fraction          )), this%vegetation_fraction)
         if (0<var_list( kVARS%vegetation_fraction_max) )    call this%vars_to_out%add_var( trim( get_varname( kVARS%vegetation_fraction_max      )), this%vegetation_fraction_max)
@@ -210,6 +212,7 @@ contains
         if (0<var_list( kVARS%latent_heat) )                call this%vars_to_out%add_var( trim( get_varname( kVARS%latent_heat                  )), this%latent_heat)
         if (0<var_list( kVARS%u_10m) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%u_10m                        )), this%u_10m)
         if (0<var_list( kVARS%v_10m) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%v_10m                        )), this%v_10m)
+        if (0<var_list( kVARS%windspd_10m) )                call this%vars_to_out%add_var( trim( get_varname( kVARS%windspd_10m                  )), this%windspd_10m) !! MJ added
         if (0<var_list( kVARS%coeff_momentum_drag) )        call this%vars_to_out%add_var( trim( get_varname( kVARS%coeff_momentum_drag          )), this%coeff_momentum_drag)
         if (0<var_list( kVARS%coeff_heat_exchange) )        call this%vars_to_out%add_var( trim( get_varname( kVARS%coeff_heat_exchange          )), this%coeff_heat_exchange)
         if (0<var_list( kVARS%surface_rad_temperature) )    call this%vars_to_out%add_var( trim( get_varname( kVARS%surface_rad_temperature      )), this%surface_rad_temperature)
@@ -292,6 +295,7 @@ contains
         if (0<var_list( kVARS%rainfall_tstep) )             call this%vars_to_out%add_var( trim( get_varname( kVARS%rainfall_tstep               )), this%rainfall_tstep)        
         if (0<var_list( kVARS%snowfall_tstep) )             call this%vars_to_out%add_var( trim( get_varname( kVARS%snowfall_tstep               )), this%snowfall_tstep)        
         if (0<var_list( kVARS%meltflux_out_tstep) )         call this%vars_to_out%add_var( trim( get_varname( kVARS%meltflux_out_tstep           )), this%meltflux_out_tstep)        
+        if (0<var_list( kVARS%Sliq_out) )                   call this%vars_to_out%add_var( trim( get_varname( kVARS%Sliq_out                     )), this%Sliq_out)        
         if (0<var_list( kVARS%slope) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%slope                        )), this%slope)        
         if (0<var_list( kVARS%slope_angle) )                call this%vars_to_out%add_var( trim( get_varname( kVARS%slope_angle                  )), this%slope_angle)        
         if (0<var_list( kVARS%aspect_angle) )               call this%vars_to_out%add_var( trim( get_varname( kVARS%aspect_angle                 )), this%aspect_angle)        
@@ -718,6 +722,8 @@ contains
         if (0<opt%vars_to_allocate( kVARS%shortwave) )                  call setup(this%shortwave,                this%grid2d,   forcing_var=opt%parameters%swdown_var,  list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%shortwave_direct) )           call setup(this%shortwave_direct,         this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%shortwave_diffuse) )          call setup(this%shortwave_diffuse,        this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%shortwave_direct_above) )     call setup(this%shortwave_direct_above,   this%grid2d) !! MJ added
+        if (0<opt%vars_to_allocate( kVARS%shortwave_total) )            call setup(this%shortwave_total,          this%grid2d) !! MJ added
         if (0<opt%vars_to_allocate( kVARS%longwave) )                   call setup(this%longwave,                 this%grid2d,   forcing_var=opt%parameters%lwdown_var,  list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%vegetation_fraction) )        call setup(this%vegetation_fraction,      this%grid_monthly )
         if (0<opt%vars_to_allocate( kVARS%vegetation_fraction_max) )    call setup(this%vegetation_fraction_max,  this%grid2d )
@@ -794,6 +800,7 @@ contains
         if (0<opt%vars_to_allocate( kVARS%latent_heat) )                call setup(this%latent_heat,              this%grid2d,   forcing_var=opt%parameters%lhvar,     list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%u_10m) )                      call setup(this%u_10m,                    this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%v_10m) )                      call setup(this%v_10m,                    this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%windspd_10m) )                call setup(this%windspd_10m,              this%grid2d) !! MJ added
         if (0<opt%vars_to_allocate( kVARS%coeff_momentum_drag) )        call setup(this%coeff_momentum_drag,      this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%coeff_heat_exchange) )        call setup(this%coeff_heat_exchange,      this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%surface_rad_temperature) )    call setup(this%surface_rad_temperature,  this%grid2d)
@@ -909,6 +916,7 @@ contains
         if (0<opt%vars_to_allocate( kVARS%rainfall_tstep) )             call setup(this%rainfall_tstep,     this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%snowfall_tstep) )             call setup(this%snowfall_tstep,     this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%meltflux_out_tstep) )         call setup(this%meltflux_out_tstep, this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%Sliq_out) )                   call setup(this%Sliq_out,           this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%slope) )                      call setup(this%slope,              this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%slope_angle) )                call setup(this%slope_angle,        this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%aspect_angle) )               call setup(this%aspect_angle,       this%grid2d)        
@@ -2499,6 +2507,7 @@ contains
         if (associated(this%latent_heat%data_2d)) this%latent_heat%data_2d=0
         if (associated(this%u_10m%data_2d)) this%u_10m%data_2d=0
         if (associated(this%v_10m%data_2d)) this%v_10m%data_2d=0
+        if (associated(this%windspd_10m%data_2d)) this%windspd_10m%data_2d=0
         if (associated(this%temperature_2m%data_2d)) this%temperature_2m%data_2d=init_surf_temp
         if (associated(this%humidity_2m%data_2d)) this%humidity_2m%data_2d=0.001
         if (associated(this%surface_pressure%data_2d)) this%surface_pressure%data_2d=102000
@@ -2601,6 +2610,9 @@ contains
         if (associated(this%meltflux_out_tstep%data_2d))  this%meltflux_out_tstep%data_2d=0.
         if (associated(this%shortwave_direct%data_2d))  this%shortwave_direct%data_2d=0.
         if (associated(this%shortwave_diffuse%data_2d))  this%shortwave_diffuse%data_2d=0.
+        if (associated(this%shortwave_direct_above%data_2d))  this%shortwave_direct_above%data_2d=0.
+        if (associated(this%shortwave_total%data_2d))  this%shortwave_total%data_2d=0.
+        if (associated(this%Sliq_out%data_2d))  this%Sliq_out%data_2d=0.
         !if (associated(this%slope%data_2d))               this%slope%data_2d=0.
         !if (associated(this%slope_angle%data_2d))         this%slope_angle%data_2d=0.
         !if (associated(this%aspect_angle%data_2d))        this%aspect_angle%data_2d=0.

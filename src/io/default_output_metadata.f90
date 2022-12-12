@@ -1018,41 +1018,67 @@ contains
                                attribute_t("coordinates",   "lat lon")]
         end associate
         !>------------------------------------------------------------
-        !!  Downward Direct Shortwave Radiation at the Surface (positive down)
+        !!  MJ: in OSHD as 'sdri' referring to 'direct shortwave radiation, per inclined surface area' accounted for shading and slope effects. Tobias Jonas (TJ) scheme based on swr function in metDataWizard/PROCESS_COSMO_DATA_1E2E.m and also https://github.com/Tobias-Jonas-SLF/HPEval
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%shortwave_direct))
-            var%name        = "shortwave_direct"
+            var%name        = "swtb"
             var%dimensions  = two_d_t_dimensions
             var%three_d     = .False.
             var%two_d       = .True.
             var%unlimited_dim=.True.
-            var%attributes  = [attribute_t("standard_name", "surface_direct_downwelling_shortwave_flux_in_air, downscaled"), &
+            var%attributes  = [attribute_t("standard_name", "direct shortwave radiation, per inclined surface area"), &
                                attribute_t("units",         "W m-2"),                                            &
                                attribute_t("coordinates",   "lat lon")]
         end associate
         !>------------------------------------------------------------
-        !!  Downward Diffuse Shortwave Radiation at the Surface (positive down)
+        !!  MJ: in OSHD as 'sdfd' referring to 'diffuse shortwave radiation, per horizontal surface area' accounted for partioning (based on transmisivity) and sky view fraction. Tobias Jonas (TJ) scheme based on swr function in metDataWizard/PROCESS_COSMO_DATA_1E2E.m and also https://github.com/Tobias-Jonas-SLF/HPEval
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%shortwave_diffuse))
-            var%name        = "shortwave_diffuse"
+            var%name        = "swtd"
             var%dimensions  = two_d_t_dimensions
             var%three_d     = .False.
             var%two_d       = .True.
             var%unlimited_dim=.True.
-            var%attributes  = [attribute_t("standard_name", "surface_diffuse_downwelling_shortwave_flux_in_air, downscaled"), &
+            var%attributes  = [attribute_t("standard_name", "diffuse shortwave radiation, per horizontal surface area"), &
                                attribute_t("units",         "W m-2"),                                             &
                                attribute_t("coordinates",   "lat lon")]
         end associate
         !>------------------------------------------------------------
-        !!  Downward Longwave Radiation at the Surface (positive down)
+        !!  MJ: in OSHD as 'sdrd' referring to 'direct shortwave radiation, per horizontal surface area' only accounted for shading but not the slope effects. Tobias Jonas (TJ) scheme based on swr function in metDataWizard/PROCESS_COSMO_DATA_1E2E.m and also https://github.com/Tobias-Jonas-SLF/HPEval
         !!------------------------------------------------------------
-        associate(var=>var_meta(kVARS%longwave))
-            var%name        = "rlds"
+        associate(var=>var_meta(kVARS%shortwave_direct_above))
+            var%name        = "sdrd"
             var%dimensions  = two_d_t_dimensions
             var%three_d     = .False.
             var%two_d       = .True.
             var%unlimited_dim=.True.
-            var%attributes  = [attribute_t("standard_name", "surface_downwelling_longwave_flux_in_air"), &
+            var%attributes  = [attribute_t("standard_name", "direct shortwave radiation, per horizontal surface area"), &
+                               attribute_t("units",         "W m-2"),                                             &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate        
+        !>------------------------------------------------------------
+        !!  MJ: 'total shortwave radiation, per inclided surface area' as the summation 
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%shortwave_total))
+            var%name        = "s_dr_df_i"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "direct shortwave radiation, per horizontal surface area"), &
+                               attribute_t("units",         "W m-2"),                                             &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate        
+        !>------------------------------------------------------------
+        !!  Downward Longwave Radiation at the Surface (positive down)
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%longwave))
+            var%name        = "lwtr"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "incoming direct shortwave radiation"), &
                                attribute_t("units",         "W m-2"),                                    &
                                attribute_t("coordinates",   "lat lon")]
         end associate
@@ -1861,12 +1887,12 @@ contains
         !!  Snow water equivalent on the surface
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%snow_water_equivalent))
-            var%name        = "swe"
+            var%name        = "swet"
             var%dimensions  = two_d_t_dimensions
             var%three_d     = .False.
             var%two_d       = .True.
             var%unlimited_dim=.True.
-            var%attributes  = [attribute_t("standard_name", "surface_snow_amount"),                 &
+            var%attributes  = [attribute_t("standard_name", "snow water equivalent"),                 &
                                attribute_t("units",         "kg m-2"),                              &
                                attribute_t("coordinates",   "lat lon")]
         end associate
@@ -2560,7 +2586,7 @@ contains
         !!  2 meter air temperture
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%temperature_2m))
-            var%name        = "ta2m"
+            var%name        = "taix"
             var%dimensions  = two_d_t_dimensions
             var%three_d     = .False.
             var%two_d       = .True.
@@ -2662,6 +2688,19 @@ contains
                                attribute_t("coordinates",   "lat lon")]
         end associate
         !>------------------------------------------------------------
+        !!  10 meter height wind speed magnitude, sqrt(u_10m**2+v_10m**2)
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%windspd_10m))
+            var%name        = "wnsx"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "wind speed magnitude"),             &
+                               attribute_t("units",         "m s-1"),                               &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
         !!  Momentum Drag Coefficient
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%coeff_momentum_drag))
@@ -2691,7 +2730,7 @@ contains
         !!  Land surface radiative skin temperature
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%skin_temperature))
-            var%name        = "ts"
+            var%name        = "tsfe"
             var%dimensions  = two_d_t_dimensions
             var%three_d     = .False.
             var%two_d       = .True.
@@ -2840,7 +2879,7 @@ contains
         !!  snowdepth from FSM
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%snowdepth))
-            var%name        = "snowdepth"
+            var%name        = "hsnt"
             var%dimensions  = two_d_t_dimensions
             var%three_d     = .False.
             var%two_d       = .True.
@@ -2918,12 +2957,12 @@ contains
         !!  fsnow from FSM
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%fsnow))
-            var%name        = "fsnow"
+            var%name        = "scfe"
             var%dimensions  = two_d_t_dimensions
             var%three_d     = .False.
             var%two_d       = .True.
             var%unlimited_dim=.True.
-            var%attributes  = [attribute_t("standard_name", "fsnow"),   &
+            var%attributes  = [attribute_t("standard_name", "snow covered fraction"),   &
                                attribute_t("units",         "-"),                        &
                                attribute_t("coordinates",   "lat lon")]
         end associate	
@@ -2944,12 +2983,12 @@ contains
         !!  snowfall aggregated per output interval
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%snowfall_tstep))
-            var%name        = "snowfall_tstep"
+            var%name        = "snfx"
             var%dimensions  = two_d_t_dimensions
             var%unlimited_dim=.True.
             var%three_d     = .False.
             var%two_d       = .True.
-            var%attributes  = [attribute_t("standard_name", "snowfall amount aggregated per output interval"),                     &
+            var%attributes  = [attribute_t("standard_name", "snowfall, aggregated per output interval during t-1->t"),                     &
                                attribute_t("units",         "kg m-2"),                              &
                                attribute_t("coordinates",   "lat lon")]
         end associate                        
@@ -2957,12 +2996,12 @@ contains
         !!  snowfall aggregated per output interval
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%rainfall_tstep))
-            var%name        = "rainfall_tstep"
+            var%name        = "rnfx"
             var%dimensions  = two_d_t_dimensions
             var%unlimited_dim=.True.
             var%three_d     = .False.
             var%two_d       = .True.
-            var%attributes  = [attribute_t("standard_name", "rainfall amount aggregated per output interval"),                     &
+            var%attributes  = [attribute_t("standard_name", "rainfall, aggregated per output interval during t-1->t"),                     &
                                attribute_t("units",         "kg m-2"),                              &
                                attribute_t("coordinates",   "lat lon")]
         end associate  
@@ -2970,12 +3009,12 @@ contains
         !!  runoff_tstep from FSM
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%runoff_tstep))
-            var%name        = "runoff_tstep"
+            var%name        = "rotc"
             var%dimensions  = two_d_t_dimensions
             var%three_d     = .False.
             var%two_d       = .True.
             var%unlimited_dim=.True.
-            var%attributes  = [attribute_t("standard_name", "total runoff from FSM aggregated per output interval "),   &
+            var%attributes  = [attribute_t("standard_name", "total runoff, aggregated per output interval during t-1->t"),   &
                                attribute_t("units",         "kg m-2"),                        &
                                attribute_t("coordinates",   "lat lon")]
         end associate  
@@ -2983,12 +3022,25 @@ contains
         !!  meltflux_out_tstep from FSM
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%meltflux_out_tstep))
-            var%name        = "meltflux_out_tstep"
+            var%name        = "romc"
             var%dimensions  = two_d_t_dimensions
             var%three_d     = .False.
             var%two_d       = .True.
             var%unlimited_dim=.True.
-            var%attributes  = [attribute_t("standard_name", "snow-melt runoff from FSM aggregated per output interval "),   &
+            var%attributes  = [attribute_t("standard_name", "runoff from snow, aggregated per output interval during t-1->t"),   &
+                               attribute_t("units",         "kg m-2"),                        &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate  
+        !>------------------------------------------------------------
+        !!  Sliq_out from FSM
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%Sliq_out))
+            var%name        = "slqt"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("standard_name", "liquid water content"),   &
                                attribute_t("units",         "kg m-2"),                        &
                                attribute_t("coordinates",   "lat lon")]
         end associate  

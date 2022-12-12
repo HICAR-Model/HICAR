@@ -87,12 +87,15 @@ module domain_interface
     type(variable_t) :: shortwave
     type(variable_t) :: shortwave_direct
     type(variable_t) :: shortwave_diffuse
+    type(variable_t) :: shortwave_direct_above !! MJ aded
+    type(variable_t) :: shortwave_total !! MJ added
     type(variable_t) :: terrain
     type(variable_t) :: forcing_terrain  ! BK 05/2020: The forcing terrain interpolated 2d to the hi-res grid. In order to calculate difference in slope
     type(variable_t) :: forcing_terrain2 ! test 9-6-2020
         ! type(variable_t) :: forcing_terrain_u1 ! test 9-6-2020
     type(variable_t) :: u_10m
     type(variable_t) :: v_10m
+    type(variable_t) :: windspd_10m
     type(variable_t) :: coeff_momentum_drag
     type(variable_t) :: coeff_heat_exchange
     type(variable_t) :: surface_rad_temperature
@@ -346,7 +349,7 @@ module domain_interface
                 ims,ime, jms,jme, kms,kme, & ! for the memory in these arrays (m)
                 its,ite, jts,jte, kts,kte    ! for the data tile to process   (t)
                 
-    !! MJ added for needed new vars for FSM
+    !! MJ added new vars needed for FSM
     !real,allocatable :: FSM_slopemu(:,:)
     type(variable_t) :: runoff_tstep 
     type(variable_t) :: snowdepth
@@ -364,6 +367,7 @@ module domain_interface
     type(variable_t) :: slope_angle
     type(variable_t) :: aspect_angle
     type(variable_t) :: svf
+    type(variable_t) :: Sliq_out
     type(variable_t) :: hlm
                 
 
