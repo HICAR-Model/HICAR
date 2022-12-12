@@ -172,7 +172,7 @@ module options_types
                                                        ! RRTMG scheme is expensive. Default is 1800s (30 minutes)
        integer :: icloud                               ! How RRTMG interact with clouds
        logical :: read_ghg                             ! Eihter use default green house gas mixing ratio, or read the in from file
-
+       real    :: tzone !! MJ adedd,tzone is UTC Offset and 1 here for centeral Erupe
     end type rad_options_type
 
     ! ------------------------------------------------
