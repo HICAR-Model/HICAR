@@ -18,7 +18,7 @@ submodule(time_object) time_implementation
     ! integer, parameter :: MAXSTRINGLENGTH = 1024
     ! integer, parameter, public :: GREGORIAN=0, NOLEAP=1, THREESIXTY=2, NOCALENDAR=-1
     ! integer, parameter, public :: NON_VALID_YEAR = -9999
-
+    
 contains
 
     !>------------------------------------------------------------
@@ -266,6 +266,31 @@ contains
         end if
 
     end function date_to_mjd
+
+    !>------------------------------------------------------------
+    !!  Convert a Year, Month, Day, hour, minute, second into a single number
+    !!
+    !!  This number will be a  Julian Day for the default gregorian calendar
+    !!  
+    !! MJ added  
+    !!------------------------------------------------------------
+    module function date_to_jd(this, year, month, day, hour, minute, second)
+        implicit none
+        class(Time_type), intent(in) :: this
+        integer, intent(in) :: year, month, day, hour, minute, second
+        real(real128) :: date_to_jd
+
+        if (this%calendar==GREGORIAN) then
+            date_to_jd = gregorian_julian_day(year, month, day, hour, minute, second)
+
+        else if (this%calendar==NOLEAP) then
+            date_to_jd = (year*365 + this%month_start(month)-1 + day-1 + (hour + (minute+second/60d+0)/60d+0)/24d+0)
+                         
+        else if (this%calendar==THREESIXTY) then
+            date_to_jd = (year*360 + this%month_start(month)-1 + day-1 + (hour + (minute+second/60d+0)/60d+0)/24d+0)
+        end if
+
+    end function date_to_jd
 
     !>------------------------------------------------------------
     !!  Calculate the year, month, day, hour, minute second for the current date_time object
