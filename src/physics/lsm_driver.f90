@@ -45,7 +45,7 @@ module land_surface
     use icar_constants,      only : kVARS, kLSM_SIMPLE, kLSM_NOAH, kLSM_NOAHMP, kPBL_DIAGNOSTIC, kLSM_FSM
     use options_interface,   only : options_t
     use domain_interface,    only : domain_t
-    use module_ra_simple, only: calc_solar_elevation
+    use module_ra_simple, only: calc_solar_elevation, calc_solar_elevation_corr !! MJ added
     use ieee_arithmetic
 
     use module_sf_FSMdrv,   only : lsm_FSM_init, lsm_FSM,Esrf_,Tsrf, KH_ !! MJ added for for FSM
@@ -1203,9 +1203,11 @@ contains
                 ! enddo
             ! else
 
+            !! MJ uses the water model after FSM call since FSM considers all pixels and it needs to be overwritten for water pixels
             if(                                                         &
                 (options%physics%watersurface==kWATER_SIMPLE) .or.      &
                 (options%physics%watersurface==kWATER_LAKE)             & ! also call for kWATER_LAKE (for ocean cells)
+                .and. options%physics%landsurface/=kLSM_FSM             & ! also call for kWATER_LAKE (for ocean cells)
             )then
 
                 call water_simple(options,                              &
@@ -1232,7 +1234,7 @@ contains
             ! It also is advised to supply a lake_depth parameter in the hi-res input, otherwise the default depth of 50m is used (see lakeini above)
             ! It requires the VEGPARM.TBL landuse category to be one which has a separate lake category (i.e. MODIFIED_IGBP_MODIS_NOAH, USGS-RUC or MODI-RUC).
             ! For the grid cells that are defined as water, but not as lake (i.e. oceans), the simple water model above will be run.
-            if (options%physics%watersurface==kWATER_LAKE) then    ! WRF's lake model
+            if (options%physics%watersurface==kWATER_LAKE .and. options%physics%landsurface/=kLSM_FSM) then    ! WRF's lake model
 
                 ! current_precipitation = (domain%accumulated_precipitation%data_2dd-RAINBL)+(domain%precipitation_bucket-rain_bucket)*kPRECIP_BUCKET_SIZE  ! analogous to noah calls
 
@@ -1486,8 +1488,12 @@ contains
 
 
                 do j = jms,jme
-                    solar_elevation  = calc_solar_elevation(date=domain%model_time, lon=domain%longitude%data_2d, &
-                                    j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac)
+                    !! MJ commented as it does not work in Erupe
+                    !solar_elevation  = calc_solar_elevation(date=domain%model_time, lon=domain%longitude%data_2d, &
+                    !                j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac)
+
+                    solar_elevation  = calc_solar_elevation_corr(date=domain%model_time, lon=domain%longitude%data_2d, &
+                                     j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac)
                     domain%cosine_zenith_angle%data_2d(its:ite,j)=sin(solar_elevation(its:ite))
                 enddo
 
@@ -1718,9 +1724,10 @@ contains
                 !!                                              
             endif
             !!
-            !! MJ moved water model here at the end...since FSM considers all pixels non-water
-            if (options%physics%watersurface==kWATER_SIMPLE) then
-                call water_simple(domain%sst%data_2d,                   &
+            !
+            if (options%physics%watersurface==kWATER_SIMPLE .and. options%physics%landsurface==kLSM_FSM) then !! MJ uses the water model here since FSM considers all pixels and it needs to be overwritten for water pixels
+                call water_simple(options,                              &
+                                  domain%sst%data_2d,                   &
                                   domain%surface_pressure%data_2d,      &
                                   windspd,                              &
                                   domain%ustar,                         &
@@ -1732,7 +1739,10 @@ contains
                                   domain%land_mask,                     &
                                   QSFC,                                 &
                                   QFX,                                  &
-                                  domain%skin_temperature%data_2d)
+                                  domain%skin_temperature%data_2d,      &
+                                  domain%veg_type,                      &
+                                  its, ite, kts, kte, jts, jte)
+                                !   ,domain%terrain%data_2d               & ! terrain height [m] if ht(i,j)>=lake_min_elev -> lake (in case no lake category is provided, but lake model is selected, we need to not run the simple water as well - left comment in for future reference)
             endif
             !!
             if (options%physics%landsurface > kLSM_BASIC .and. options%physics%landsurface/=kLSM_FSM) then !! MJ uses different func for FSM as we do not have vegetaion
