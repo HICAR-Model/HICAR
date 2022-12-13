@@ -386,12 +386,6 @@ contains
         allocate(y_norm(ims:ime,jms:jme))
         allocate(thresh_ang(ims:ime,jms:jme))
        
-        allocate(Sx_curr(ims:ime,kms:Sx_k_max,jms:jme))
-        allocate(Sx_corr(ims:ime,kms:Sx_k_max,jms:jme))
-        allocate(TPI_corr(ims:ime,kms:Sx_k_max,jms:jme))
-        allocate(Sx_U_corr(ims:ime,kms:Sx_k_max,jms:jme))
-        allocate(Sx_V_corr(ims:ime,kms:Sx_k_max,jms:jme))
-
 
         do k = kms,ubound(w,2)
             z_mean =SUM(z(:,k,:))/SIZE(z(:,k,:))
@@ -401,6 +395,11 @@ contains
 
         Sx_k_max = max(Sx_k_max,TPI_k_max) !Ensure that Sx_k_max is larger than TPI_k_max, since we use this max to index correction vars
 
+        allocate(Sx_curr(ims:ime,kms:Sx_k_max,jms:jme))
+        allocate(Sx_corr(ims:ime,kms:Sx_k_max,jms:jme))
+        allocate(TPI_corr(ims:ime,kms:Sx_k_max,jms:jme))
+        allocate(Sx_U_corr(ims:ime,kms:Sx_k_max,jms:jme))
+        allocate(Sx_V_corr(ims:ime,kms:Sx_k_max,jms:jme))
 
         !Initialize Sx_curr. This will keep the border values from being updated
         Sx_curr = 0
