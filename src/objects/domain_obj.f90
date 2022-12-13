@@ -2032,9 +2032,6 @@ contains
         do i=2,this%kme
             global_z(:,i,:) = global_z(:,i-1,:) + (((options%parameters%dz_levels(i)) / 2)*this%global_jacobian(:,i,:)) + &
                                                   (((options%parameters%dz_levels(i-1)) / 2)*this%global_jacobian(:,i-1,:))
-                                                  
-            !global_z(:,i,:) = global_z(:,i-1,:) + (((options%parameters%dz_levels(i)) / 2)) + &
-            !                                      (((options%parameters%dz_levels(i-1)) / 2))        
         enddo
 
         global_dzdx = 0
