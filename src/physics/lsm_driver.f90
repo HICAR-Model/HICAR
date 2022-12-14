@@ -109,7 +109,8 @@ module land_surface
     real, allocatable :: day_frac(:), solar_elevation(:)
 
     ! MJ added for FSM
-    real,allocatable, dimension(:,:) :: current_snow, SNOWBL, current_rain
+    double precision,allocatable, dimension(:,:)    :: SNOWBL    
+    real,allocatable, dimension(:,:) :: current_snow, current_rain
     integer,allocatable, dimension(:,:) :: snow_bucket      
 
     ! Lake model: (allocated on lake init)
@@ -219,7 +220,7 @@ contains
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%ustar,        &
                          kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg,                                        &
-                         kVARS%veg_type, kVARS%soil_type, kVARS%land_mask,                                              &
+                         kVARS%veg_type, kVARS%soil_type, kVARS%land_mask, kVARS%snowfall,                              &
                          kVARS%runoff_tstep, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow, kVARS%albs, &
                          kVARS%rainfall_tstep, kVARS%snowfall_tstep, kVARS%meltflux_out_tstep, kVARS%Sliq_out, kVARS%windspd_10m])
 
@@ -231,7 +232,7 @@ contains
                          kVARS%longwave, kVARS%canopy_water, kVARS%snow_water_equivalent,                               &
                          kVARS%skin_temperature, kVARS%soil_water_content, kVARS%soil_temperature, kVARS%terrain,       &
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
-                         kVARS%snow_height,                                                                             &  ! BK 2020/10/26
+                         kVARS%snow_height,  kVARS%snowfall,                                                            &  ! BK 2020/10/26
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0,                     &
                          kVARS%runoff_tstep, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow, kVARS%albs  ])
@@ -738,7 +739,7 @@ contains
         current_rain = 0
         
         allocate(SNOWBL(ims:ime,jms:jme))! for snowfall:
-        SNOWBL = domain%accumulated_snowfall%data_2d  ! used to store last time step accumulated precip so that it can be subtracted from the current step
+        SNOWBL = domain%accumulated_snowfall%data_2dd  ! used to store last time step accumulated precip so that it can be subtracted from the current step
 
         allocate(snow_bucket(ims:ime,jms:jme))
         snow_bucket = domain%snowfall_bucket
@@ -1205,8 +1206,8 @@ contains
 
             !! MJ uses the water model after FSM call since FSM considers all pixels and it needs to be overwritten for water pixels
             if(                                                         &
-                (options%physics%watersurface==kWATER_SIMPLE) .or.      &
-                (options%physics%watersurface==kWATER_LAKE)             & ! also call for kWATER_LAKE (for ocean cells)
+                ((options%physics%watersurface==kWATER_SIMPLE) .or.      &
+                (options%physics%watersurface==kWATER_LAKE) )            & ! also call for kWATER_LAKE (for ocean cells)
                 .and. options%physics%landsurface/=kLSM_FSM             & ! also call for kWATER_LAKE (for ocean cells)
             )then
 
@@ -1680,8 +1681,8 @@ contains
 
             !! MJ added: this block is for FSM as lsm.
             if (options%physics%landsurface == kLSM_FSM) then
-                current_precipitation = (domain%accumulated_precipitation%data_2d-RAINBL)+(domain%precipitation_bucket-rain_bucket)*kPRECIP_BUCKET_SIZE !! MJ: this is the total prep=rainfall+snowfall in kg m-2
-                current_snow = (domain%accumulated_snowfall%data_2d-SNOWBL)+(domain%snowfall_bucket-snow_bucket)*kPRECIP_BUCKET_SIZE !! MJ: snowfall in kg m-2
+                current_precipitation = (domain%accumulated_precipitation%data_2dd-RAINBL)+(domain%precipitation_bucket-rain_bucket)*kPRECIP_BUCKET_SIZE !! MJ: this is the total prep=rainfall+snowfall in kg m-2
+                current_snow = (domain%accumulated_snowfall%data_2dd-SNOWBL)+(domain%snowfall_bucket-snow_bucket)*kPRECIP_BUCKET_SIZE !! MJ: snowfall in kg m-2
                 current_rain = max(current_precipitation-current_snow,0.) !! MJ: rainfall in kg m-2
                 !!
                 domain%windspd_10m%data_2d(its:ite,jts:jte)=windspd(its:ite,jts:jte)
@@ -1717,9 +1718,9 @@ contains
                                              domain%humidity_2m%data_2d,      &
                                              domain%surface_pressure%data_2d)
                 endif
-                RAINBL = domain%accumulated_precipitation%data_2d
+                RAINBL = domain%accumulated_precipitation%data_2dd
                 rain_bucket = domain%precipitation_bucket
-                SNOWBL = domain%accumulated_snowfall%data_2d
+                SNOWBL = domain%accumulated_snowfall%data_2dd
                 snow_bucket = domain%snowfall_bucket
                 !!                                              
             endif
