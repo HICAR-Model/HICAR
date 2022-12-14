@@ -346,8 +346,8 @@ ASSERT=-DUSE_ASSERTIONS=$(USE_ASSERTIONS)
 ###################################################################
 # copy required libraries into a directory accessible on compute nodes and set LD_RUN_PATH e.g.
 # export LD_RUN_PATH=$LD_RUN_PATH:/path/to/netcdf/libraries/lib:/path/to/fftw/libraries/lib
-LFLAGS=$(LINK) $(PROF) $(CAF_FLAG) $(CAF_LINK) $(LIBNETCDF) $(LIBFFT) $(PETSC_LIB) $(LIBFSM) 
-FFLAGS=$(COMP) $(PROF) $(CAF_FLAG) $(PREPROC) -DVERSION=\"$(GIT_VERSION)\" $(INCNETCDF) $(INCFFT) $(PETSC_FC_INCLUDES)  $(MODOUTPUT) $(ASSERT) $(INFSM)
+LFLAGS=$(LINK) $(PROF) $(CAF_FLAG) $(CAF_LINK) $(LIBNETCDF) $(LIBFFT) $(PETSC_LIB) # $(LIBFSM) 
+FFLAGS=$(COMP) $(PROF) $(CAF_FLAG) $(PREPROC) -DVERSION=\"$(GIT_VERSION)\" $(INCNETCDF) $(INCFFT) $(PETSC_FC_INCLUDES)  $(MODOUTPUT) $(ASSERT) # $(INFSM)
 
 $(info $$NODENAME    = ${NODENAME})
 $(info $$FC          = ${F90})
@@ -440,7 +440,6 @@ OBJS=	\
 		$(BUILD)advect.o			\
 		$(BUILD)adv_mpdata.o        \
 		$(BUILD)lsm_driver.o		\
-		$(BUILD)lsm_FSMdrv.o		\
 		$(BUILD)lsm_noahdrv.o		\
 		$(BUILD)lsm_noahlsm.o		\
 		$(BUILD)lsm_noahmpdrv.o  	\
@@ -868,7 +867,7 @@ $(BUILD)lsm_driver.o: $(PHYS)lsm_driver.f90 $(BUILD)data_structures.o	\
 						$(BUILD)lsm_noahmpdrv.o $(BUILD)lsm_noahmplsm.o \
 						$(BUILD)water_simple.o $(BUILD)water_lake.o		\
 						$(BUILD)domain_h.o $(BUILD)options_h.o			\
-						$(BUILD)atm_utilities.o $(BUILD)ra_simple.o $(BUILD)lsm_FSMdrv.o	\
+						$(BUILD)atm_utilities.o $(BUILD)ra_simple.o	\
 						$(BUILD)opt_types.o	$(BUILD)icar_constants.o
 
 # $(BUILD)lsm_basic.o $(BUILD)lsm_simple.o
@@ -894,14 +893,6 @@ $(BUILD)lsm_noahmplsm.o: $(PHYS)lsm_noahmplsm.f90 $(BUILD)lsm_noahmp_gecros.o \
 $(BUILD)lsm_noahmp_gecros.o: $(PHYS)lsm_noahmp_gecros.f90
 
 $(BUILD)lsm_noahmp_glacier.o: $(PHYS)lsm_noahmp_glacier.f90
-
-# J added
-$(BUILD)lsm_FSMdrv.o: $(PHYS)lsm_FSMdrv.f90 $(BUILD)data_structures.o \
-						$(BUILD)lsm_noahdrv.o $(BUILD)lsm_noahlsm.o \
-						$(BUILD)lsm_noahmpdrv.o $(BUILD)lsm_noahmplsm.o \
-						$(BUILD)water_simple.o $(BUILD)icar_constants.o \
-						$(BUILD)domain_h.o $(BUILD)options_h.o			\
-						$(BUILD)atm_utilities.o $(BUILD)ra_simple.o
 
 ###################################################################
 #	Planetary Boundary Layer code
