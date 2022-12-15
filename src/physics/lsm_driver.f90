@@ -1053,7 +1053,8 @@ contains
         type(domain_t), intent(inout) :: domain
         type(options_t),intent(in)    :: options
         real, intent(in) :: dt
-        real ::lsm_dt
+        real :: lsm_dt
+        real, allocatable :: SW(:,:)
         integer :: nx,ny,i,j
 
         if (options%physics%landsurface == 0) return
@@ -1063,9 +1064,17 @@ contains
         endif
         nx=size(domain%water_vapor%data_3d,1)
         ny=size(domain%water_vapor%data_3d,3)
+
         if ((domain%model_time%seconds() - last_model_time) >= update_interval) then
             lsm_dt = domain%model_time%seconds() - last_model_time
             last_model_time = domain%model_time%seconds()
+
+            allocate(SW(nx,ny))
+            if (options%physics%radiation_downScaling==1  .and. options%physics%radiation>1) then
+                SW = domain%shortwave_total%data_2d
+            else
+                SW = domain%shortwave%data_2d
+            endif
 
             ! if (this_image()==1) write(*,*) "    lsm start: snow_water_equivalent max:", MAXVAL(domain%snow_water_equivalent%data_2d)
 
@@ -1137,7 +1146,7 @@ contains
                     ,emiss=EMISS                                                & !-- EMISS         surface emissivity (between 0 and 1)
                     ,rainbl=current_precipitation                               & ! RAINBL in mm (Accumulation between PBL calls)
                     ,dtbl=lsm_dt                                                & !-- dtbl          timestep (s) or ITIMESTEP?
-                    ,swdown=domain%shortwave%data_2d                            & !-- SWDOWN        downward short wave flux at ground surface (W/m^2)
+                    ,swdown=SW                                                  & !-- SWDOWN        downward short wave flux at ground surface (W/m^2)
                     ,albedo=ALBEDO                                              & ! albedo? fixed at 0.17?
                     ,xlat_urb2d=domain%latitude%data_2d                         & ! optional ?
                     ,z_lake3d=domain%z_lake3d%data_3d                           &
@@ -1263,7 +1272,7 @@ contains
                             domain%ground_heat_flux%data_2d,              &
                             QGH,                                          &
                             GSW,                                          &
-                            domain%shortwave%data_2d,                     &
+                            SW,                                           &
                             domain%longwave%data_2d,                      &
                             SMSTAV,                                       &
                             domain%soil_totalmoisture%data_2d,            &  ! this is not defined on lsm_init (BK 2021/03/20)
@@ -1420,7 +1429,7 @@ contains
                              domain%water_vapor%data_3d,               &
                              domain%u_mass%data_3d * options%lsm_options%wind_enhancement, &
                              domain%v_mass%data_3d * options%lsm_options%wind_enhancement, &
-                             domain%shortwave%data_2d,                 &
+                             SW,                                       &
                              domain%shortwave_direct%data_2d,          &  ! only used in urban modules, which are currently disabled
                              domain%shortwave_diffuse%data_2d,         &  ! only used in urban modules, which are currently disabled
                              domain%longwave%data_2d,                  &
@@ -1591,8 +1600,8 @@ contains
 
             endif
         endif
-        if (options%physics%landsurface>0 .or. options%physics%watersurface>0 .and. &
-            .not.(options%physics%boundarylayer==kPBL_DIAGNOSTIC .or. options%physics%boundarylayer==kPBL_YSU)) then
+        if ((options%physics%landsurface>0 .or. options%physics%watersurface>0) .and. &
+            .not.(options%physics%boundarylayer==kPBL_DIAGNOSTIC)) then
             call apply_fluxes(domain, dt)
         endif
 
