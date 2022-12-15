@@ -2943,7 +2943,8 @@ contains
 
         !clean output var list
         do i=1, size(options%io_options%vars_for_output)
-            if ((options%io_options%vars_for_output(i) > 0) .and. (options%vars_to_allocate(i) <= 0)) then
+            if ((options%io_options%vars_for_output(i)+options%vars_for_restart > 0) .and. (options%vars_to_allocate(i) <= 0)) then
+                if (this_image()==1) write(*,*) 'var for kVARS index: ',options%vars_to_allocate(i),' requested for output/restart, but was not allocated by one of the modules'
                 options%io_options%vars_for_output(i) = 0
             endif
         enddo
