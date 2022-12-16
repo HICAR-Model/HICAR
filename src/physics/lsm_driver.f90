@@ -222,7 +222,7 @@ contains
                          kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg,                                        &
                          kVARS%veg_type, kVARS%soil_type, kVARS%land_mask, kVARS%snowfall,                              &
                          kVARS%runoff_tstep, kVARS%snowdepth, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow, kVARS%albs, &
-                         kVARS%rainfall_tstep, kVARS%snowfall_tstep, kVARS%meltflux_out_tstep, kVARS%Sliq_out, kVARS%windspd_10m])
+                         kVARS%rainfall_tstep, kVARS%snowfall_tstep, kVARS%meltflux_out_tstep, kVARS%Sliq_out, kVARS%windspd_10m, kVARS%factor_p])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
 
@@ -447,33 +447,37 @@ contains
 
     subroutine surface_diagnostics_FSM(HFX, QFX, TSK, QSFC, CHS2, CQS2,T2, Q2, PSFC)
         ! taken almost directly / exactly from WRF's module_sf_sfcdiags.F
+        !-- HFX           net upward heat flux at the surface (W/m^2)
+        !-- QFX           net upward moisture flux at the surface (kg/m^2/s)
+        !-- TSK           surface temperature (K)
+        !-- qsfc          specific humidity at lower boundary (kg/kg)
+
         implicit none
         REAL, DIMENSION(ims:ime, jms:jme ), INTENT(IN)    ::  HFX, QFX, TSK, QSFC
         REAL, DIMENSION(ims:ime, jms:jme ), INTENT(INOUT) ::  Q2, T2
         REAL, DIMENSION(ims:ime, jms:jme ), INTENT(IN)    ::  PSFC, CHS2, CQS2
-        integer :: i,j, nx,ny
-        real :: RHO
+        integer :: i,j
+        real :: rho
         real :: CP_=1005.
 
-        !$omp parallel default(shared), private(nx,ny,i,j,rho)
-        nx=size(HFX,1)
-        ny=size(HFX,2)
+        !$omp parallel default(shared), private(i,j,rho)
         !$omp do
         do j=jts,jte
             do i=its,ite
                 RHO = PSFC(I,J)/(Rd * TSK(I,J))
-                if(CQS2(I,J).lt.1.E-3) then
-                   Q2(I,J) = QSFC(I,J)
-                else
+                !if(CQS2(I,J).lt.1.E-3) then
+                !   Q2(I,J) = QSFC(I,J)
+                !else
                    Q2(I,J) = QSFC(I,J) - QFX(I,J)/(RHO*CQS2(I,J))
-                endif
-                if(CHS2(I,J).lt.1.E-3) then
-                   T2(I,J) = TSK(I,J)
-                else
+                !endif
+                !if(CHS2(I,J).lt.1.E-3) then
+                !   T2(I,J) = TSK(I,J)
+                !else
                    T2(I,J) = TSK(I,J) - HFX(I,J)/(RHO*CP_*CHS2(I,J))
-                endif
+                !endif
+                if (Q2(i,j) < SMALL_QV) Q2(i,j) = SMALL_QV
                 ! TH2(I,J) = T2(I,J)*(1.E5/PSFC(I,J))**ROVCP
-                 !if ( isnan(HFX(I,J)) .or. abs(TSK(I,J)-T2(I,J))>30 ) write(*,*),"img-H222",i,j,this_image(), HFX(I,J), TSK(I,J), T2(I,J)
+                 if ( isnan(HFX(I,J)) .or. abs(TSK(I,J)-T2(I,J))>30 ) write(*,*),"img-H222",i,j,this_image(), HFX(I,J), TSK(I,J), T2(I,J), CHS2(I,J) 
                  !if (this_image()==1) write(*,*),"img-H222",i,j,this_image(), RHO, TSK(I,J), T2(I,J),PSFC(I,J)
             enddo
         enddo
@@ -1681,8 +1685,8 @@ contains
 
             !! MJ added: this block is for FSM as lsm.
             if (options%physics%landsurface == kLSM_FSM) then
-                current_precipitation = (domain%accumulated_precipitation%data_2dd-RAINBL)+(domain%precipitation_bucket-rain_bucket)*kPRECIP_BUCKET_SIZE !! MJ: this is the total prep=rainfall+snowfall in kg m-2
-                current_snow = (domain%accumulated_snowfall%data_2dd-SNOWBL)+(domain%snowfall_bucket-snow_bucket)*kPRECIP_BUCKET_SIZE !! MJ: snowfall in kg m-2
+                current_precipitation = (domain%accumulated_precipitation%data_2dd-RAINBL)!+(domain%precipitation_bucket-rain_bucket)*kPRECIP_BUCKET_SIZE !! MJ: this is the total prep=rainfall+snowfall in kg m-2
+                current_snow = (domain%accumulated_snowfall%data_2dd-SNOWBL)!+(domain%snowfall_bucket-snow_bucket)*kPRECIP_BUCKET_SIZE !! MJ: snowfall in kg m-2
                 current_rain = max(current_precipitation-current_snow,0.) !! MJ: rainfall in kg m-2
                 !!
                 domain%windspd_10m%data_2d(its:ite,jts:jte)=windspd(its:ite,jts:jte)
@@ -1694,6 +1698,7 @@ contains
                 if (.not. options%lsm_options%surface_diagnostics) then
                     domain%temperature_2m%data_2d = domain%temperature%data_3d(:,kms,:)
                     domain%humidity_2m%data_2d = domain%water_vapor%data_3d(:,kms,:)
+                    if(this_image()==1) write(*,*) "   no  surface_diagnostics"
                 endif
                 !!
                 if (options%lsm_options%surface_diagnostics) then 
@@ -1792,8 +1797,8 @@ contains
             endif
         endif
         
-        if (options%physics%landsurface>0 .or. options%physics%watersurface>0 .and. &
-            .not.(options%physics%boundarylayer==kPBL_DIAGNOSTIC .or. options%physics%boundarylayer==kPBL_YSU)) then
+        if ( (options%physics%landsurface>0 .or. options%physics%watersurface>0 ).and. &
+            .not.(options%physics%boundarylayer==kPBL_DIAGNOSTIC)) then
             call apply_fluxes(domain, dt)
         endif
 

@@ -174,7 +174,7 @@ ifeq ($(COMPILER), gnu)
 	# to enable OpenMP use this line... OpenMP seems to hang with more than 1 thread, probably an OpenCoarrays (v1.9.1) issue with not supporting threading
 	# COMP=-fopenmp -lgomp -O2 -c -ffree-line-length-none -ftree-vectorize -fimplicit-none -funroll-loops -march=native  -fno-protect-parens # -ffast-math #-flto #
 	# LINK=-fopenmp -lgomp
-	COMP= -fopenmp -lgomp -O2 -mfma -c -ffree-line-length-none -ftree-vectorize -fimplicit-none -funroll-loops -march=native  -fno-protect-parens # -ffast-math #-flto #
+	COMP= -fopenmp -lgomp -O2 -mfma -c -ffree-line-length-none -ftree-vectorize -fimplicit-none -funroll-loops -march=native  -fno-protect-parens #-fcheck=all -Wall  # -ffast-math #-flto #
 	LINK= -fopenmp -lgomp
 	PREPROC=-cpp
 	MODOUTPUT=-J $(BUILD)

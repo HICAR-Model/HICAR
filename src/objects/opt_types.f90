@@ -248,7 +248,7 @@ module options_types
                                         lat_ext, lon_ext, swe_ext, hsnow_ext, rho_snow_ext, tss_ext, &
                                         tsoil2D_ext, tsoil3D_ext, z_ext, time_ext
 
-        character(len=MAXVARLENGTH) :: svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var   !!MJ added
+        character(len=MAXVARLENGTH) :: svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var, factor_p_var   !!MJ added
                                         
 
         character(len=MAXVARLENGTH) :: vars_to_read(kMAX_STORAGE_VARS)

@@ -300,7 +300,8 @@ contains
         if (0<var_list( kVARS%slope_angle) )                call this%vars_to_out%add_var( trim( get_varname( kVARS%slope_angle                  )), this%slope_angle)        
         if (0<var_list( kVARS%aspect_angle) )               call this%vars_to_out%add_var( trim( get_varname( kVARS%aspect_angle                 )), this%aspect_angle)        
         if (0<var_list( kVARS%svf) )                        call this%vars_to_out%add_var( trim( get_varname( kVARS%svf                          )), this%svf)        
-        if (0<var_list( kVARS%hlm) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%hlm                           )), this%hlm)        
+        if (0<var_list( kVARS%factor_p) )                   call this%vars_to_out%add_var( trim( get_varname( kVARS%factor_p                     )), this%factor_p)        
+        if (0<var_list( kVARS%hlm) )                        call this%vars_to_out%add_var( trim( get_varname( kVARS%hlm                          )), this%hlm)        
         if (0<var_list( kVARS%hpbl) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%hpbl                         )), this%hpbl)
         if (0<var_list( kVARS%coeff_heat_exchange_3d) )     call this%vars_to_out%add_var( trim( get_varname( kVARS%coeff_heat_exchange_3d       )), this%coeff_heat_exchange_3d)
 
@@ -954,6 +955,7 @@ contains
         if (0<opt%vars_to_allocate( kVARS%slope_angle) )                call setup(this%slope_angle,        this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%aspect_angle) )               call setup(this%aspect_angle,       this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%svf) )                        call setup(this%svf,                this%grid2d) 
+        if (0<opt%vars_to_allocate( kVARS%factor_p) )                   call setup(this%factor_p,                this%grid2d) 
         if (0<opt%vars_to_allocate( kVARS%hlm) )                        call setup(this%hlm,                this%grid_hlm) 
     end subroutine
 
@@ -2744,6 +2746,14 @@ contains
                                temporary_data)
                 if (associated(this%aspect_angle%data_2d)) then
                     this%aspect_angle%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+                endif
+            endif
+            if (options%parameters%factor_p_var /= "") then
+                call io_read(options%parameters%init_conditions_file,   &
+                               options%parameters%factor_p_var,         &
+                               temporary_data)
+                if (associated(this%factor_p%data_2d)) then
+                    this%factor_p%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
                 endif
             endif
         endif
