@@ -2749,6 +2749,7 @@ contains
                 endif
             endif
             if (options%parameters%factor_p_var /= "") then
+                 !if (this_image()==1) write(*,*) "facto_p is read...domain"
                 call io_read(options%parameters%init_conditions_file,   &
                                options%parameters%factor_p_var,         &
                                temporary_data)
