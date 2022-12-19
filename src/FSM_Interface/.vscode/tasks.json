@@ -1,0 +1,15 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+
+        {
+            "label": "compile_FSM",
+            "type": "shell",
+            "command": "./compil_FSM.bat -g",
+            "options": {
+                "cwd": "code/"
+            }
+        }
+    ]
+
+}

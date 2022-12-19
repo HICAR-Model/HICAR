@@ -1,0 +1,32 @@
+&nam_grid
+  NNx = 1,
+  NNy = 688,
+  NNsmax = 3,
+  NNsoil = 4,
+/
+&nam_driving
+  zzT = 10,
+  zzU = 10,
+/
+&nam_modconf
+  NALBEDO = 2,
+  NCANMOD = 0,
+  NCONDCT = 1,
+  NDENSTY = 3,
+  NEXCHNG = 1,
+  NHYDROL = 2,
+  NSNFRAC = 3,
+  NRADSBG = 0,
+  NZOFFST = 0,
+  NOSHDTN = 1,
+  LHN_ON  = .FALSE.,
+  LFOR_HN = .TRUE.,
+/
+&nam_modtile
+  CTILE = 'open',
+  rtthresh = 0.1,
+/
+&nam_results
+   CLIST_DIAG_RESULTS = 'rotc', 'hsnt', 'swet', 'slqt', 'swtb', 'swtd', 'lwtr', 'romc', 'sbsc',
+   CLIST_STATE_RESULTS = 'tsfe', 'scfe',
+/

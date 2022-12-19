@@ -1,0 +1,62 @@
+! Write options and namelists to metadata file
+#if ZOFFST == 0
+#define ZOFFST_OPT 'measurement heights specified above ground'
+#elif ZOFFST == 1
+#define ZOFFST_OPT 'measurement heights specified above canopy top'
+#endif
+#if ALBEDO == 0
+#define ALBEDO_OPT 'snow albedo a function of temperature'
+#elif ALBEDO == 1
+#define ALBEDO_OPT 'snow albedo a function of age'
+#elif ALBEDO == 2
+#define ALBEDO_OPT 'snow albedo a function of age - JIM tuning'
+#endif
+#if CANMOD == 0
+#define CANMOD_OPT 'zero layer canopy model'
+#elif CANMOD == 1
+#define CANMOD_OPT 'one layer canopy model'
+#endif
+#if CONDCT == 0
+#define CONDCT_OPT 'constant snow thermal conductivity'
+#elif CONDCT == 1
+#define CONDCT_OPT 'snow thermal conductivity a function of density'
+#endif
+#if DENSTY == 0
+#define DENSTY_OPT 'constant snow density'
+#elif DENSTY == 1
+#define DENSTY_OPT 'snow density as function of age'
+#elif DENSTY == 2
+#define DENSTY_OPT 'snow density as function of overburden'
+#elif DENSTY == 3
+#define DENSTY_OPT 'snow density as function of overburden, LWC and grain size (Crocus B92)'
+#endif
+#if EXCHNG == 0
+#define EXCHNG_OPT 'constant surface exchange coefficient'
+#elif EXCHNG == 1
+#define EXCHNG_OPT 'surface exchange coefficient a function of Richardson number'
+#elif EXCHNG == 2
+#define EXCHNG_OPT 'turbulent exchange in forest canopies using log-exp composite wind profile'
+#endif
+#if HYDROL == 0
+#define HYDROL_OPT 'freely draining snow'
+#elif HYDROL == 1
+#define HYDROL_OPT 'irreducible water content retained in snow'
+#elif HYDROL == 2
+#define HYDROL_OPT 'density dependent bucket storage'
+#endif
+#if SNFRAC == 0
+#define SNFRAC_OPT 'Helbig et al. (2015) and Egli and Jonas (2009) and complicated HS max min history'
+#elif SNFRAC == 1
+#define SNFRAC_OPT 'Helbig et al. (2015)'
+#elif SNFRAC == 2
+#define SNFRAC_OPT 'Helbig et al. (2015) and seasonal HS max'
+#elif SNFRAC == 3
+#define SNFRAC_OPT 'point model'
+#elif SNFRAC == 4
+#define SNFRAC_OPT 'tanh model'
+#endif
+#if RADSBG == 0
+#define RADSBG_OPT 'without subgrid radiation parameterizations'
+#elif RADSBG == 1
+#define RADSBG_OPT 'with subgrid radiation parameterizations'
+#endif

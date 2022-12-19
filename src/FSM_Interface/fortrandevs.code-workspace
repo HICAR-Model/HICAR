@@ -1,0 +1,23 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"fortran.linter.extraArgs": [
+			"-J../.fmod", "-Wall"
+		],
+		"fortran.linter.includePaths": [
+			"../.fmod"
+		],	
+		"fortran-ls.variableHover": true,
+		"files.exclude": {
+			"**/.fmod": true
+		},
+		"fortran-ls.executablePath": "",
+		"fortran.provide.autocomplete": "Disabled",
+		"fortran.provide.symbols": "fortls",
+		"fortran.provide.hover": "Disabled",
+	}
+}
