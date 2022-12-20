@@ -164,8 +164,16 @@ contains
         LW=domain%longwave%data_2d(its:ite,jts:jte)
         Ps=domain%surface_pressure%data_2d(its:ite,jts:jte)
         Rf=current_rain
-        Sdir=domain%shortwave_direct%data_2d(its:ite,jts:jte)  !Sdir=domain%shortwave%data_2d(its:ite,jts:jte)
-        Sdif=domain%shortwave_diffuse%data_2d(its:ite,jts:jte) !Sdif=0.0
+        !!
+        if (options%physics%radiation_downScaling==1) then 
+            Sdir=domain%shortwave_direct%data_2d(its:ite,jts:jte)  !Sdir=domain%shortwave%data_2d(its:ite,jts:jte)
+            Sdif=domain%shortwave_diffuse%data_2d(its:ite,jts:jte) !Sdif=0.0
+        endif
+        if (options%physics%radiation_downScaling==0) then 
+            Sdir=domain%shortwave%data_2d(its:ite,jts:jte)
+            Sdif=0.0
+        endif
+        !!
         if (options%parameters%factor_p_var == "") then 
             !if (this_image()==1) write(*,*) "facto_p is not read...FSM"
             Sf=current_snow
