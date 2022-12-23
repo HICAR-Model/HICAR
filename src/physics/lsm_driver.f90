@@ -1698,7 +1698,6 @@ contains
                 if (.not. options%lsm_options%surface_diagnostics) then
                     domain%temperature_2m%data_2d = domain%temperature%data_3d(:,kms,:)
                     domain%humidity_2m%data_2d = domain%water_vapor%data_3d(:,kms,:)
-                    if(this_image()==1) write(*,*) "   no  surface_diagnostics"
                 endif
                 !!
                 if (options%lsm_options%surface_diagnostics) then 
