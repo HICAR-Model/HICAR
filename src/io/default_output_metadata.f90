@@ -938,6 +938,90 @@ contains
         end associate
 
         !>------------------------------------------------------------
+        !!  Mass-weighted effective density of ice1 category
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice1_rho))
+            var%name        = "ice1_rho"
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "mass-weighted_effective_density_of_ice1"), &
+                               attribute_t("units",         "(kg m^-3)"),                                   &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
+        !>------------------------------------------------------------
+        !!  Number-weighted aspect ratio of ice1 category
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice1_phi))
+            var%name        = "ice1_AR"
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "number-weighted_aspect_ratio_of_ice1_category"), &
+                               attribute_t("units",         "-"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
+        !>------------------------------------------------------------
+        !!  Mass-weighted effective density of ice2 category
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice2_rho))
+            var%name        = "ice2_rho"
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "mass-weighted_effective_density_of_ice2"), &
+                               attribute_t("units",         "(kg m^-3)"),                                   &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
+        !>------------------------------------------------------------
+        !!  Number-weighted aspect ratio of ice2 category
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice2_phi))
+            var%name        = "ice2_AR"
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "number-weighted_aspect_ratio_of_ice2_category"), &
+                               attribute_t("units",         "-"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
+        !>------------------------------------------------------------
+        !!  Mass-weighted effective density of ice3 category
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice3_rho))
+            var%name        = "ice3_rho"
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "mass-weighted_effective_density_of_ice3"), &
+                               attribute_t("units",         "(kg m^-3)"),                                   &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
+        !>------------------------------------------------------------
+        !!  Number-weighted aspect ratio of ice3 category
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice3_phi))
+            var%name        = "ice3_AR"
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "number-weighted_aspect_ratio_of_ice3_category"), &
+                               attribute_t("units",         "-"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
+        !>------------------------------------------------------------
         !!  Outgoing longwave radiation
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%out_longwave_rad))
