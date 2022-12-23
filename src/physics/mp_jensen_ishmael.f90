@@ -176,11 +176,14 @@ contains
        IMS,IME, JMS,JME, KMS,KME,                        &
        ITS,ITE, JTS,JTE, KTS,KTE,                        &
        RAINNC, RAINNCV, SNOWNC, SNOWNCV,                 &
-       diag_effc3d, diag_effi3d                          &
+       diag_effc3d, diag_effi3d,                         &
        !diag_dbz3d,             &
-       !diag_vmi3d_1, diag_di3d_1, diag_rhopo3d_1, diag_phii3d_1, &
-       !diag_vmi3d_2, diag_di3d_2, diag_rhopo3d_2, diag_phii3d_2, &
-       !diag_vmi3d_3, diag_di3d_3, diag_rhopo3d_3, diag_phii3d_3, &
+       !diag_vmi3d_1, diag_di3d_1, 
+       diag_rhopo3d_1, diag_phii3d_1, &
+       !diag_vmi3d_2, diag_di3d_2, 
+       diag_rhopo3d_2, diag_phii3d_2, &
+       !diag_vmi3d_3, diag_di3d_3, 
+       diag_rhopo3d_3, diag_phii3d_3 &
        !diag_itype_1,diag_itype_2,diag_itype_3                    &
        )
 
