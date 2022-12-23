@@ -210,7 +210,8 @@ contains
                        kVARS%cloud_ice,   kVARS%rain_in_air,           kVARS%ice_number_concentration, kVARS%ice1_a, &
                        kVARS%ice1_c, kVARS%ice2_mass, kVARS%ice2_number, kVARS%ice2_a, kVARS%ice2_c, &
                        kVARS%ice3_mass, kVARS%ice3_number, kVARS%ice3_a, kVARS%ice3_c, &
-                       kVARS%snowfall,    kVARS%precipitation,  kVARS%dz,   kVARS%re_cloud, kVARS%re_ice, kVARS%re_snow    ])
+                       kVARS%snowfall,    kVARS%precipitation,  kVARS%dz,   kVARS%re_cloud, kVARS%re_ice, kVARS%re_snow, &
+                       kVARS%ice1_rho, kVARS%ice1_phi, kVARS%ice2_rho, kVARS%ice2_phi, kVARS%ice3_rho, kVARS%ice3_phi  ])
 
         ! List the variables that are required to be advected for the simple microphysics
         call options%advect_vars( &
@@ -637,20 +638,20 @@ contains
                              SNOWNC = snowfall,&
                              SNOWNCV = last_snow,                         &
                              diag_effc3d=domain%re_cloud%data_3d,               &
-                             diag_effi3d=domain%re_ice%data_3d                  &
+                             diag_effi3d=domain%re_ice%data_3d,                 &
                              !diag_dbz3d=refl_10cm,               &
                              !diag_vmi3d_1=vmi3d,                 &
                              !diag_di3d_1=di3d,                   &
-                             !diag_rhopo3d_1=rhopo3d,             &
-                             !diag_phii3d_1=phii3d,               &
+                             diag_rhopo3d_1=domain%ice1_rho%data_3d,          &
+                             diag_phii3d_1=domain%ice1_phi%data_3d,           &
                              !diag_vmi3d_2=vmi3d_2,               &
                              !diag_di3d_2=di3d_2,                 &
-                             !diag_rhopo3d_2=rhopo3d_2,           &
-                             !diag_phii3d_2=phii3d_2,             &
+                             diag_rhopo3d_2=domain%ice2_rho%data_3d,          &
+                             diag_phii3d_2=domain%ice2_phi%data_3d,           &
                              !diag_vmi3d_3=vmi3d_3,               &
                              !diag_di3d_3=di3d_3,                 &
-                             !diag_rhopo3d_3=rhopo3d_3,           &
-                             !diag_phii3d_3=phii3d_3,             &
+                             diag_rhopo3d_3=domain%ice3_rho%data_3d,          &
+                             diag_phii3d_3=domain%ice3_phi%data_3d            &
                              !diag_itype_1=itype,                 &
                              !diag_itype_2=itype_2,               &
                              !diag_itype_3=itype_3                &

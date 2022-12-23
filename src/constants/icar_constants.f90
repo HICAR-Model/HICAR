@@ -250,6 +250,12 @@ module icar_constants
         integer :: re_cloud
         integer :: re_ice
         integer :: re_snow
+        integer :: ice1_rho
+        integer :: ice1_phi
+        integer :: ice2_rho
+        integer :: ice2_phi
+        integer :: ice3_rho
+        integer :: ice3_phi
         integer :: out_longwave_rad
         integer :: longwave_cloud_forcing
         integer :: shortwave_cloud_forcing
@@ -333,7 +339,7 @@ module icar_constants
                                                             231, 232, 233, 234, 235, 236, 237, 238, 239, 240,  &
                                                             241, 242, 243, 244, 245, 246, 247, 248, 249, 250,  &
                                                             251, 252, 253, 254, 255, 256, 257, 258, 259, 260,  &
-                                                            261, 262, 263, 264)
+                                                            261, 262, 263, 264, 265, 266, 267, 268, 269, 270)
 
     integer, parameter :: kINTEGER_BITS     = storage_size(kINTEGER_BITS)
     integer, parameter :: kMAX_STORAGE_VARS = storage_size(kVARS) / kINTEGER_BITS
