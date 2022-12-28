@@ -56,9 +56,8 @@ module module_mp_jensen_ishmael
   real, private, allocatable, dimension(:,:,:) :: coltab, coltabn
 
   !.. Added for double precision
-  integer, parameter :: LUT_KIND_R4 = selected_real_kind(6) !.. 4 byte real
-  real(kind=LUT_KIND_R4), private, allocatable, dimension(:,:,:,:,:) :: itab_o, itabr_o
-  real(kind=LUT_KIND_R4), private, allocatable, dimension(:) :: gamma_tab_o
+  real, private, allocatable, dimension(:,:,:,:,:) :: itab_o, itabr_o
+  real, private, allocatable, dimension(:) :: gamma_tab_o
   
 contains
   !--------------------------------------------------------------------------------------------------------------!
@@ -72,7 +71,7 @@ contains
 
     implicit none
     
-    integer :: i1, i2, i3, i4, icat, scratch_i
+    integer :: i1, i2, i3, i4, icat
     integer, parameter :: ncat=7,npair=35,ndn=60
     integer :: ipair(ncat,ncat)
     real, dimension(ncat,9) :: dstprms
@@ -257,8 +256,10 @@ contains
 
     real, dimension(ims:ime, kms:kme, jms:jme), intent(inout) ::     &
          th, qv, qc, qr, nr, qi1, ni1, ai1, ci1, qi2, ni2, ai2, ci2, &
-         qi3, ni3, ai3, ci3, diag_effc3d, diag_effi3d
-
+         qi3, ni3, ai3, ci3, diag_effc3d, diag_effi3d,               &
+         diag_rhopo3d_1, diag_phii3d_1,                              &
+         diag_rhopo3d_2, diag_phii3d_2,                              &
+         diag_rhopo3d_3, diag_phii3d_3                         
   !.. 2D variables
     real, dimension(ims:ime, jms:jme), intent(inout) ::              &
          rainnc, rainncv, snownc, snowncv
@@ -285,9 +286,9 @@ contains
          
     real, dimension(ims:ime, kms:kme, jms:jme) ::  &
                   diag_dbz3d,              &
-         diag_vmi3d_1, diag_di3d_1, diag_rhopo3d_1, diag_phii3d_1,   &
-         diag_vmi3d_2, diag_di3d_2, diag_rhopo3d_2, diag_phii3d_2,   &
-         diag_vmi3d_3, diag_di3d_3, diag_rhopo3d_3, diag_phii3d_3,   &
+         diag_vmi3d_1, diag_di3d_1,        &
+         diag_vmi3d_2, diag_di3d_2,        &
+         diag_vmi3d_3, diag_di3d_3,        &
          diag_itype_1, diag_itype_2, diag_itype_3                                    
 
 
@@ -4326,8 +4327,8 @@ contains
   !.. dependence on the collection efficiency
        eff(k)=min(0.2,10.**(0.035*tmax-0.7))*efdum
        
-       if(my.eq.6.and.qr(k,6).gt.0)eff(k)=1.
-       if(my.eq.7.and.qr(k,7).gt.0)eff(k)=1.
+       !if(my.eq.6.and.qr(k,6).gt.0)eff(k)=1.
+       !if(my.eq.7.and.qr(k,7).gt.0)eff(k)=1.
 
   !.. see note above on efdum
        if(mz.eq.5.and.abs(t(k,mx)+14.).le.2.)eff(k)=1.4*efdum
