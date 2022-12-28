@@ -27,6 +27,7 @@ module module_sf_FSMdrv
       Sdif,          &
       Sdir,          &
       Sf,            &
+      Sf24h,         &
       Ta,            &
       Ua
     use FSM_interface, only: &
@@ -182,6 +183,9 @@ contains
             !if (this_image()==1) write(*,*) "facto_p is read...FSM"
             Sf=current_snow*domain%factor_p%data_2d(its:ite,jts:jte)
         endif
+        !
+        Sf24h=domain%snowfall_tstep%data_2d(its:ite,jts:jte)
+        !
         Ta= domain%temperature%data_3d(its:ite,domain%grid%kms,jts:jte)!domain%temperature_2m%data_2d(its:ite,jts:jte)
         Qa= domain%water_vapor%data_3d(its:ite,domain%grid%kms,jts:jte)!domain%humidity_2m%data_2d(its:ite,jts:jte)
         Ua=windspd

@@ -22,6 +22,7 @@ module FSM_interface
       Sdif,              &! Diffuse shortwave radiation (W/m^2)
       Sdir,              &! Direct-beam shortwave radiation (W/m^2)
       Sf,                &! Snowfall rate (kg/m2/s)
+      Sf24h,             &! Snowfall 24hr (kg/m2)
       Ta,                &! Air temperature (K)
       Ua                  ! Wind speed (m/s)
 
@@ -75,6 +76,7 @@ module FSM_interface
       Sdif,              &
       Sdir,              &
       Sf,                &
+      Sf24h,             &
       Ta,                &
       Ua           
     public ::  	&
