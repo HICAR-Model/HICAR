@@ -330,7 +330,7 @@ contains
         real, dimension(:,:), intent(in)  :: temp_lat, temp_lon, domain_lat, domain_lon
         
         real, allocatable, dimension(:,:) ::  LL_d, UR_d
-        real LLlat, LLlon, URlat, URlon
+        real :: LLlat, LLlon, URlat, URlon, lat_corners(4), lon_corners(4)
         integer, dimension(2) :: temp_inds
         integer :: nx, ny, d_ims, d_ime, d_jms, d_jme
         
@@ -346,10 +346,21 @@ contains
         allocate(UR_d(nx,ny))
 
         ! get lower left and upper right lat/lon pairs from domain
-        LLlat = domain_lat(d_ims,d_jms)
-        LLlon = domain_lon(d_ims,d_jms)
-        URlat = domain_lat(d_ime,d_jme)
-        URlon = domain_lon(d_ime,d_jme)
+        lat_corners(1) = domain_lat(d_ims,d_jms)
+        lat_corners(2) = domain_lat(d_ime,d_jms)
+        lat_corners(3) = domain_lat(d_ims,d_jme)
+        lat_corners(4) = domain_lat(d_ime,d_jme)
+        
+        lon_corners(1) = domain_lon(d_ims,d_jms)
+        lon_corners(2) = domain_lon(d_ime,d_jms)
+        lon_corners(3) = domain_lon(d_ims,d_jme)
+        lon_corners(4) = domain_lon(d_ime,d_jme)
+        
+        LLlat = minval(lat_corners)
+        LLlon = minval(lon_corners)
+        URlat = maxval(lat_corners)
+        URlon = maxval(lon_corners)
+
 
         ! calculate distance from LL/UR lat/lon for boundary lat/lons
         LL_d = ((temp_lat-LLlat)**2+(temp_lon-LLlon)**2)
@@ -363,22 +374,19 @@ contains
 
         ! increase boundary image indices by 5 as buffer to allow for interpolation
         
-        this%its = max(this%its - 5,1)
-        this%ite = min(this%ite + 5,nx)
-        this%jts = max(this%jts - 5,1)
-        this%jte = min(this%jte + 5,ny)
+        this%its = max(this%its - 8,1)
+        this%ite = min(this%ite + 8,nx)
+        this%jts = max(this%jts - 8,1)
+        this%jte = min(this%jte + 8,ny)
 
-        if (this%ite < this%its) write(*,*) 'image: ',this_image(),'  its: ',this%its,'  ite: ',this%ite,'  jts: ',this%jts,'  jte: ',this%jte
-        if (this%ite < this%its) write(*,*) 'image: ',this_image(),'  d_ims: ',d_ims,'  d_ime: ',d_ime,'  d_jms: ',d_jms,'  d_jme: ',d_jme
-        if (this%ite < this%its) write(*,*) 'image: ',this_image(),'  LLlat: ',LLlat,'  LLlon: ',LLlon,'  URlat: ',URlat,'  URlon: ',URlon
-        if (this%ite < this%its) write(*,*) 'image: ',this_image(),'  min_loc: ',minloc(LL_d),'  max_loc: ',minloc(UR_d)
-        if (this%ite < this%its) call io_write('LL_d.nc',"dist",LL_d)
-
-        if (this%jte < this%jts) write(*,*) 'image: ',this_image(),'  its: ',this%its,'  ite: ',this%ite,'  jts: ',this%jts,'  jte: ',this%jte
-        if (this%jte < this%jts) write(*,*) 'image: ',this_image(),'  d_ims: ',d_ims,'  d_ime: ',d_ime,'  d_jms: ',d_jms,'  d_jme: ',d_jme
-        if (this%jte < this%jts) write(*,*) 'image: ',this_image(),'  LLlat: ',LLlat,'  LLlon: ',LLlon,'  URlat: ',URlat,'  URlon: ',URlon
-        if (this%jte < this%jts) write(*,*) 'image: ',this_image(),'  min_loc: ',minloc(LL_d),'  max_loc: ',minloc(UR_d)
-        if (this%jte < this%jts) call io_write('LL_d.nc',"dist",LL_d)
+        if (this%ite < this%its .or. this%jte < this%jts) write(*,*) 'image: ',this_image(),'  its: ',this%its,'  ite: ',this%ite,'  jts: ',this%jts,'  jte: ',this%jte
+        if (this%ite < this%its .or. this%jte < this%jts) write(*,*) 'image: ',this_image(),'  d_ims: ',d_ims,'  d_ime: ',d_ime,'  d_jms: ',d_jms,'  d_jme: ',d_jme
+        if (this%ite < this%its .or. this%jte < this%jts) write(*,*) 'image: ',this_image(),'  LLlat: ',LLlat,'  LLlon: ',LLlon,'  URlat: ',URlat,'  URlon: ',URlon
+        if (this%ite < this%its .or. this%jte < this%jts) write(*,*) 'image: ',this_image(),'  min_loc: ',minloc(LL_d),'  max_loc: ',minloc(UR_d)
+        if (this%ite < this%its .or. this%jte < this%jts) call io_write('domain_lat.nc',"domain_lat",domain_lat)
+        if (this%ite < this%its .or. this%jte < this%jts) call io_write('domain_lon.nc',"domain_lon",domain_lon)
+        if (this%ite < this%its .or. this%jte < this%jts) call io_write('boundary_lat.nc',"lat",temp_lat)
+        if (this%ite < this%its .or. this%jte < this%jts) call io_write('boundary_lon.nc',"lon",temp_lon)
 
     end subroutine set_boundary_image
 
