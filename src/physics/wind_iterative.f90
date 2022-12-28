@@ -187,7 +187,11 @@ contains
         
         if (adv_den) rho(domain%ims:domain%ime,:,domain%jms:domain%jme)=domain%density%data_3d(domain%ims:domain%ime,:,domain%jms:domain%jme)
         
-        if (i_s==domain%grid%ids) then
+        if (i_s==domain%grid%ids .and. i_e==domain%grid%ide) then
+            rho_u(i_start+1:i_end-1,:,j_s:j_e) = 0.5*(rho(i_start+1:i_end-1,:,j_s:j_e) + rho(i_start:i_end-2,:,j_s:j_e))
+            rho_u(i_end,:,j_s:j_e) = rho(i_end-1,:,j_s:j_e)
+            rho_u(i_start,:,j_s:j_e) = rho(i_start,:,j_s:j_e)
+        else if (i_s==domain%grid%ids) then
             rho_u(i_start+1:i_end,:,j_s:j_e) = 0.5*(rho(i_start+1:i_end,:,j_s:j_e) + rho(i_start:i_end-1,:,j_s:j_e))
             rho_u(i_start,:,j_s:j_e) = rho(i_start,:,j_s:j_e)
         else if (i_e==domain%grid%ide) then
@@ -197,7 +201,11 @@ contains
             rho_u(i_start:i_end,:,j_s:j_e) = 0.5*(rho(i_start:i_end,:,j_s:j_e) + rho(i_start-1:i_end-1,:,j_s:j_e))
         endif
         
-        if (j_s==domain%grid%jds) then
+        if (j_s==domain%grid%jds .and. j_e==domain%grid%jde) then
+            rho_v(i_s:i_e,:,j_start+1:j_end-1) = 0.5*(rho(i_s:i_e,:,j_start+1:j_end-1) + rho(i_s:i_e,:,j_start:j_end-2))
+            rho_v(i_s:i_e,:,j_start) = rho(i_s:i_e,:,j_start)
+            rho_v(i_s:i_e,:,j_end) = rho(i_s:i_e,:,j_end-1)
+        else if (j_s==domain%grid%jds) then
             rho_v(i_s:i_e,:,j_start+1:j_end) = 0.5*(rho(i_s:i_e,:,j_start+1:j_end) + rho(i_s:i_e,:,j_start:j_end-1))
             rho_v(i_s:i_e,:,j_start) = rho(i_s:i_e,:,j_start)
         else if (j_e==domain%grid%jde) then
