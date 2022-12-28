@@ -388,7 +388,7 @@ contains
        
 
         do k = kms,ubound(w,2)
-            z_mean =SUM(z(:,k,:))/SIZE(z(:,k,:))
+            z_mean =SUM(z(:,k,:)-z(:,kms,:))/SIZE(z(:,k,:))
             if (z_mean > SX_Z_MAX .and. Sx_k_max==0) Sx_k_max = max(2,k-1)
             if (z_mean > TPI_Z_MAX .and. TPI_k_max==0) TPI_k_max = max(2,k-1)
         enddo
