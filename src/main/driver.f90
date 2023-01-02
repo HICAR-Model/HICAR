@@ -107,6 +107,7 @@ program icar
         call init_model_state(options, domain, boundary, add_cond) ! added boundary structure for external files (additional conditions)
 
         if (options%parameters%restart) then
+            sync all !Matching IO sync call
             call EVENT_QUERY(read_ev,ev_cnt)
             sleep_cnt = 0
             do while(.not.(ev_cnt == 1))
@@ -142,6 +143,7 @@ program icar
         enddo
         
         if (options%parameters%restart) then
+            sync all !Make sure we don't overwrite the file previously read in before the compute task has used it
             call ioserver%read_restart_file(options, write_buffer)
             do i = 1,ioserver%n_children
                 EVENT POST (read_ev[ioserver%children(i)])
