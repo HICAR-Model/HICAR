@@ -1342,7 +1342,7 @@ contains
                 if(temp.gt.T0) then
 
   !.. Melting: ice shapes become more spherical
-                   qmlt(cc)=2.*PI*(kt*fh(cc)*(T0-temp)+rhoair(cc)*xxlv*dv*fv(cc)*(qs0-qv(k)))/   & 
+                   qmlt(cc)=2.*PI*(kt*fh(cc)*(T0-temp)+rhoair(k)*xxlv*dv*fv(cc)*(qs0-qv(k)))/   & 
                         xxlf*(ni(cc,k)*NU*max(ani(cc),cni(cc))) - &
                         (CPW/xxlf*(temp-T0)*(rimetotal(cc)/rhoair(k) + dQImltri(cc)))
                    
@@ -3955,11 +3955,11 @@ contains
        denfac(k) = sqrt(1./rhoa(k))
        dn(k,3) = ddum1
        en(k,3) = ndum1*rhoa(k)
-       r(k,3)  = qdum1
+       r(k,3)  = max(qdum1,0.)
        
        dn(k,4) = ddum2
        en(k,4) = ndum2*rhoa(k)
-       r(k,4) =  qdum2
+       r(k,4) =  max(qdum2,0.)
        
        qr(k,3) = 0.0 !.. internal energy... not needed so pass in zero                                        
        qq(k,3) = t(k,3)
@@ -3973,7 +3973,7 @@ contains
        
        dn(k,5) = ddum3
        en(k,5) = ndum3*rhoa(k)
-       r(k,5) =  qdum3
+       r(k,5) =  max(qdum3,0.)
 
        totaldc(k)=0.
     enddo
