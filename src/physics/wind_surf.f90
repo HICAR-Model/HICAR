@@ -85,9 +85,9 @@ contains
         
         
         if ( this_image() == 1 ) then
-            write (*,*) "Saving *_TPI.nc"
+            !write (*,*) "Saving *_TPI.nc"
             !Save file
-            call io_write("global_TPI_out.nc", "TPI", domain%global_TPI(:,:) ) 
+            !call io_write("global_TPI_out.nc", "TPI", domain%global_TPI(:,:) ) 
         endif
              
     end subroutine calc_TPI
@@ -309,11 +309,11 @@ contains
         end do
         
         if ( this_image() == 1 ) then
-            write (*,*) "Saving *_Sx.nc"
+            !write (*,*) "Saving *_Sx.nc"
             !Save file
-            call io_write(filename, "Sx", domain%Sx(:,:,:,:) ) 
-            call io_write("TPI_out.nc", "TPI", domain%global_TPI(:,:) ) 
-            call io_write("sheltering_TPI.nc", "Sx_shelter", sheltering_TPI(:,:,:,:) ) 
+            !call io_write(filename, "Sx", domain%Sx(:,:,:,:) ) 
+            !call io_write("TPI_out.nc", "TPI", domain%global_TPI(:,:) ) 
+            !call io_write("sheltering_TPI.nc", "Sx_shelter", sheltering_TPI(:,:,:,:) ) 
         endif
         
         deallocate(dist)
