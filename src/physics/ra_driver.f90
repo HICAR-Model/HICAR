@@ -288,7 +288,6 @@ contains
         F_QG=.false.
         f_qndrop=.false.
         F_QV=.false.
-        F_QR=.false.
         
         F_QI=associated(domain%cloud_ice_mass%data_3d )
         F_QC=associated(domain%cloud_water_mass%data_3d )
@@ -296,7 +295,6 @@ contains
         F_QS=associated(domain%snow_mass%data_3d )
         F_QV=associated(domain%water_vapor%data_3d )
         F_QG=associated(domain%graupel_mass%data_3d )
-        F_QR=associated(domain%rain_mass%data_3d )
         F_QNDROP=associated(domain%cloud_number%data_3d)
         F_QI2=associated(domain%ice2_mass%data_3d)
         F_QI3=associated(domain%ice3_mass%data_3d)
@@ -552,14 +550,12 @@ contains
             do j = jms,jme
                 solar_elevation  = calc_solar_elevation_corr(date=domain%model_time, lon=domain%longitude%data_2d,&
                                 j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac, solar_azimuth=solar_azimuth)
-                                                                
                 cos_project_angle(its:ite,j)= cos(domain%slope_angle%data_2d(its:ite,j)) * sin(solar_elevation(its:ite)) + &
                                           sin(domain%slope_angle%data_2d(its:ite,j))* cos(solar_elevation(its:ite)) *cos(solar_azimuth(its:ite)-domain%aspect_angle%data_2d(its:ite,j))
-                
+
                 solar_elevation_store(its:ite,j) = solar_elevation(its:ite)
-                
                 solar_azimuth_store(its:ite,j) = solar_azimuth(its:ite)
-                
+
                 domain%cosine_zenith_angle%data_2d(its:ite,j)=sin(solar_elevation(its:ite))
             enddo 
             
@@ -574,7 +570,7 @@ contains
             ratio_dif=0.            
             do j = jts,jte
                 do i = its,ite
-                    trans_atm = max(min(domain%shortwave%data_2d(i,j)/( 1367* (sin(solar_elevation_store(i,j)) + 1.e-16) ),1.),0.)   ! atmospheric transmissivity
+                    trans_atm = max(min(domain%shortwave%data_2d(i,j)/( 1367* (sin(solar_elevation_store(i,j))+ 1.e-16) ),1.),0.)   ! atmospheric transmissivity
                     if (trans_atm<=0.22) then
                         ratio_dif=1.-0.09*trans_atm  
                     elseif (0.22<trans_atm .and. trans_atm<=0.8) then
@@ -587,12 +583,12 @@ contains
                 enddo
             enddo        
             !!
-            zdx_max = ubound(domain%hlm%data_3d,2)
+            zdx_max = ubound(domain%hlm%data_3d,1)
             do j = jts,jte
                 do i = its,ite
                     ! determin maximum allowed direct swr
-                    trans_atm_dir = max(min(SW_dir(i,j)/(1367*sin(solar_elevation_store(i,j))),1.),0.)             ! atmospheric transmissivity for direct sw radiation
-                    max_dir_1     = 1367.*exp(log(1.-0.165)/max(sin(solar_elevation_store(i,j)),0.))            
+                    trans_atm_dir = max(min(SW_dir(i,j)/(1367*sin(solar_elevation_store(i,j))+ 1.e-16),1.),0.)  ! atmospheric transmissivity for direct sw radiation
+                    max_dir_1     = 1367.*exp(log(1.-0.165)/max(sin(solar_elevation_store(i,j)),1.e-16))            
                     max_dir_2     = 1367.*trans_atm_dir                          
                     max_dir       = min(max_dir_1,max_dir_2)                     ! applying both above criteria 1 and 2                    
                     
