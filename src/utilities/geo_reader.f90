@@ -543,78 +543,6 @@ contains
     end function
 
     !>------------------------------------------------------------
-    !! Determine if a point intersected a vertex
-    !!
-    !! y is the real point location
-    !! y0 defines one end of a line
-    !! y1 defines the other end of the line
-    !!
-    !! precision optionally defines the tolerance permitted to consider around the line
-    !!
-    !! sets top_vertex, bottom_vertex to True if the point intersected the top or bottom ends of the line (which might be the same)
-    !! Flips the inside/outside boolean if it intersected one or both verticies
-    !!
-    !!------------------------------------------------------------
-    subroutine check_vertex_hits(y, y0, y1, inside, top_vertex, bottom_vertex, precision, error)
-        implicit none
-        real,    intent(in)    :: y, y0, y1
-        logical, intent(inout) :: top_vertex, bottom_vertex, inside
-        real,    intent(in)    :: precision
-        real,    intent(out), optional :: error
-
-        if (present(error)) error = 0
-
-        ! if the segment just parallels the line, then don't reset top_vertex, bottom_vertex history
-        ! and don't flip inside/out
-        if (y0==y1) return
-
-        ! check if we hit the y0 vertex with our ray
-        if (abs(y-y0) < precision) then
-            if (present(error)) error = abs(y-y0)
-            ! if so, check if we are above or below the other vertex segment
-            if (y<=y1) then
-                ! we are below the other vertex
-                if (top_vertex) then
-                    ! if we already found the other vertex (from testing the previous segment)
-                    ! so reverse our inside outside to avoid double counting this vertex hit
-                    top_vertex=.False.
-                    inside = .not.inside
-                else
-                    ! otherwise, store the fact that we hit a bottom vertex for the next segment
-                    bottom_vertex=.True.
-                endif
-            else if (y>=y1) then
-                if (bottom_vertex) then
-                    bottom_vertex=.False.
-                    inside=.not.inside
-                else
-                    top_vertex=.True.
-                endif
-            endif
-        endif
-
-        if (abs(y-y1) < precision) then
-            if (present(error)) error = abs(y-y1)
-
-            if (y<=y0) then
-                if (top_vertex) then
-                    top_vertex=.False.
-                    inside = .not.inside
-                else
-                    bottom_vertex=.True.
-                endif
-            else if (y>=y0) then
-                if (bottom_vertex) then
-                    bottom_vertex=.False.
-                    inside=.not.inside
-                else
-                    top_vertex=.True.
-                endif
-            endif
-        endif
-    end subroutine check_vertex_hits
-
-    !>------------------------------------------------------------
     !! Determine if a point is inside a given polygon or not
     !!
     !!   Polygon is a list of (x,y) pairs. This fuction returns True or False.
@@ -624,34 +552,24 @@ contains
     !! Note additional discussion here: https://wrf.ecse.rpi.edu//Research/Short_Notes/pnpoly.html
     !!
     !!------------------------------------------------------------
-    function point_in_poly(x, y, poly, precision, error) result(inside)
+    function point_in_poly(x, y, poly, error) result(inside)
         implicit none
         real, intent(in) :: x, y
         real, intent(in) :: poly(:,:)
-        real, intent(in), optional :: precision
         real, intent(out), optional :: error
         logical :: inside
-        logical :: top_vertex, bottom_vertex
 
-        real :: internal_precision
-        logical :: point_on_line
         integer :: n, i
         real :: x0,y0,x1,y1
         double precision :: slope, x_line
         real :: err, err_temp, line_err_temp
 
-        internal_precision = 1e-5
-        if (present(precision)) internal_precision = precision
         n = size(poly,2)
         err = 9999
         if (present(error)) error = 0
 
         ! by default we assume we are not in the polygon
-        point_on_line = .False.
         inside = .False.
-        top_vertex = .False.
-        bottom_vertex = .False.
-
         ! check if point is a vertex
         do i=1,n
             ! check if the point is the next vertex
@@ -669,36 +587,13 @@ contains
             x1 = poly(1,mod(i,n)+1)
             y1 = poly(2,mod(i,n)+1)
             ! the first if statements test to see if we can abort early
-            if (y >= min(y0,y1)) then
-                if (y <= max(y0,y1)) then
-                    if (x <= max(x0,x1)) then
-
-                        if (point_is_on_line(x,y,x0,y0,x1,y1, internal_precision, error=line_err_temp)) then
-                            point_on_line = .True.
-                            err = min(err, line_err_temp)
-                            if (present(error)) error = err
-                        endif
-
-                        if (y0 /= y1) then
-                            ! note slope is reversed from "normal" because we are looking across x
-                            ! performed in double precision to match what is done in point_is_on_line (roughly)
-                            slope = (dble(x1)-x0)/(dble(y1)-y0)
-                            x_line = (y-dble(y0)) * slope + x0
-                        else
-                            x_line = -1e10 ! only inside if x0==x1
-                        endif
-
-                        ! if we cross one line then we are inside, but if we cross two we are outside, and so on
-                        if ((x0 == x1) .or. (dble(x) <= x_line)) then
-                            inside = .not. inside
-                            call check_vertex_hits(y,y0,y1,inside, top_vertex, bottom_vertex, internal_precision, error=err_temp)
-                            err = max(err, err_temp)
-                        else
-                            top_vertex = .False.
-                            bottom_vertex = .False.
-                        endif
-                    endif
-                endif
+            if ((y > y0 ).neqv.(y>y1)) then
+                ! note slope is reversed from "normal" because we are looking across x
+                ! performed in double precision to match what is done in point_is_on_line (roughly)
+                slope = (dble(x1)-x0)/(dble(y1)-y0)
+                x_line = (y-dble(y0)) * slope + x0
+                ! if we cross one line then we are inside, but if we cross two we are outside, and so on
+                if (dble(x) <= x_line) inside = .not. inside
             endif
 
             x0 = x1
@@ -706,13 +601,11 @@ contains
         enddo
 
         if (inside) err = 0
-        if (point_on_line) inside = .True.
         if (present(error)) error = err
 
         ! inside will be set to the correct value
     end function point_in_poly
-
-
+    
     function test_surrounding(lat,lon, lo, positions, nx, ny, n, error) result(surrounded)
         implicit none
         real,                    intent(in) :: lat, lon
@@ -747,12 +640,12 @@ contains
 
     end function test_surrounding
 
-    function test_triangle(lat,lon, lo, positions, nx, ny, error) result(surrounded)
+    function test_triangle(lat,lon, lo, positions, cen_lon, cen_lat, error) result(surrounded)
         implicit none
         real,                    intent(in) :: lat, lon
         type(interpolable_type),intent(in) :: lo
         type(fourpos),           intent(inout) :: positions
-        integer,                 intent(in) :: nx, ny
+        real,                    intent(in) :: cen_lon, cen_lat
         real,                    intent(out), optional :: error
         logical :: surrounded
         integer :: i
@@ -771,12 +664,8 @@ contains
         enddo
 
         ! set up the third point in the triangle as the average of all 4 surrounding points
-        polygon(:,3) = 0
-        do i=1,4
-            polygon(1,3) = polygon(1,3) + lo%lon( positions%x(i), positions%y(i))
-            polygon(2,3) = polygon(2,3) + lo%lat( positions%x(i), positions%y(i))
-        enddo
-        polygon(:,3) = polygon(:,3) / 4
+        polygon(1,3) = cen_lon
+        polygon(2,3) = cen_lat
 
         ! finally test that the provided lat/lon point falls within this polygon
         surrounded = point_in_poly(lon, lat, polygon, error=err)
@@ -799,10 +688,10 @@ contains
         integer :: i, j
         integer :: xdeltas(4), ydeltas(4), dx, dy
         integer :: lowerx, upperx, lowery, uppery
-        real :: best_err, current_err, tri1_err, tri2_err
+        real :: best_err, current_err, cen_lat, cen_lon
         logical :: tri_1, tri_2
         type(fourpos) :: search_point
-
+        
         best_err = 1e10
 
         xdeltas = [-1,-1,1,1]
@@ -827,57 +716,50 @@ contains
 
             search_point%x = [pos%x, pos%x+dx, pos%x+dx, pos%x  ]
             search_point%y = [pos%y, pos%y,   pos%y+dy, pos%y+dy]
-
             if (test_surrounding(lat, lon, lo, search_point, nx, ny, 4, error=current_err)) then
                 if (current_err < best_err) then
                     best_err = current_err
+                    cen_lat = 0
+                    cen_lon = 0
+                    do j=1,4
+                        cen_lat = cen_lat + lo%lat(search_point%x(j), search_point%y(j))
+                        cen_lon = cen_lon + lo%lon(search_point%x(j), search_point%y(j))
+                    enddo
+                    cen_lat = cen_lat / 4.0
+                    cen_lon = cen_lon / 4.0
+
                     ! if it is not in this triangle, it must be in the other.
+                    tri_1 = test_triangle(lat, lon, lo, search_point, cen_lon, cen_lat)
 
-                    tri_1 = test_triangle(lat, lon, lo, search_point, nx, ny, error=tri1_err)
+                    if (.not.tri_1) then
+                        search_point%x = [pos%x, pos%x,    pos%x+dx, pos%x+dx ]
+                        search_point%y = [pos%y, pos%y+dy, pos%y+dy,   pos%y  ]
 
-                    search_point%x = [pos%x, pos%x,   pos%x+dx, pos%x+dx ]
-                    search_point%y = [pos%y, pos%y+dy, pos%y,   pos%y+dy]
-
-                    tri_2 = test_triangle(lat, lon, lo, search_point, nx, ny, error=tri2_err)
-
-                    if (tri_1) then
-                        search_point%x = [pos%x, pos%x+dx, pos%x+dx, pos%x  ]
-                        search_point%y = [pos%y, pos%y,   pos%y+dy, pos%y+dy]
-
-                        if (tri_2) then
-                            if (tri2_err < tri1_err) then
-                                search_point%x = [pos%x, pos%x,   pos%x+dx, pos%x+dx ]
-                                search_point%y = [pos%y, pos%y+dy, pos%y,   pos%y+dy]
-                            endif
-                        endif
-                    elseif (.not.tri_2) then
+                        tri_2 = test_triangle(lat, lon, lo, search_point, cen_lon, cen_lat)
+                        
+                        if (.not.tri_2) then
                         ! in edge cases the x,y point is technically closest, but the lat, lon point won't fall in a triangle that contains it
                         ! so search the other possible triangles in this 4 grid cell box too.
-                        search_point%x = [pos%x,    pos%x+dx, pos%x+dx, pos%x]
-                        search_point%y = [pos%y+dy, pos%y+dy, pos%y,    pos%y]
+                            search_point%x = [pos%x,    pos%x+dx, pos%x+dx, pos%x]
+                            search_point%y = [pos%y+dy, pos%y+dy, pos%y,    pos%y]
 
-                        tri_1 = test_triangle(lat, lon, lo, search_point, nx, ny, error=tri1_err)
+                            tri_1 = test_triangle(lat, lon, lo, search_point, cen_lon, cen_lat)
 
-                        if (.not.tri_1) then
-                            search_point%x = [pos%x+dx, pos%x+dx, pos%x,    pos%x]
-                            search_point%y = [pos%y,    pos%y+dy, pos%y+dy, pos%y]
-
-                            tri_2 = test_triangle(lat, lon, lo, search_point, nx, ny, error=tri2_err)
+                            if (.not.tri_1) then
+                                search_point%x = [pos%x+dx, pos%x+dx, pos%x,    pos%x]
+                                search_point%y = [pos%y,    pos%y+dy, pos%y+dy, pos%y]
+                            endif
                         endif
-
                     endif
                     find_surrounding = search_point
 
 
-                    if (.not.test_triangle(lat, lon, lo, search_point, nx, ny)) then
+                    if (.not.test_triangle(lat, lon, lo, search_point, cen_lon, cen_lat)) then
                         write(*,*) "Warning point in box, but not triangle"
                         write(*,*) search_point%x
                         write(*,*) search_point%y
+                        write(*,*) dx, dy
                         write(*,*) lat, lon
-                        do j=1,4
-                            write(*,*) lo%lat(search_point%x(j), search_point%y(j)), &
-                                       lo%lon(search_point%x(j), search_point%y(j))
-                        enddo
                     endif
 
                 endif
