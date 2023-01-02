@@ -192,7 +192,7 @@ contains
         ! List the variables that are required to be allocated for the simple microphysics
         call options%restart_vars( &
                        [kVARS%pressure,     kVARS%potential_temperature,    kVARS%water_vapor,   &
-                        kVARS%cloud_water,  kVARS%rain_in_air,                                   &
+                        kVARS%cloud_water,  kVARS%rain_in_air,              kVARS%snow_in_air,   &
                         kVARS%precipitation,kVARS%snowfall,                 kVARS%graupel,       &
                         kVARS%dz, kVARS%rain_in_air ] )
 
