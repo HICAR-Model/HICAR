@@ -356,17 +356,18 @@ contains
     end subroutine unique_sort_ind
     
     
-    
-    subroutine apply_Sx(Sx, TPI, u, v, w, Ri, dzdx, dzdy, z)
+
+    subroutine apply_Sx(Sx, TPI, u, v, w, Ri, dzdx, dzdy, glob_z)
         implicit none
-        real, intent(in)                       :: Sx(:,:,:,:), TPI(:,:), Ri(:,:,:), dzdx(:,:,:), dzdy(:,:,:), z(:,:,:)
+        real, intent(in)                       :: Sx(:,:,:,:), TPI(:,:), Ri(:,:,:), dzdx(:,:,:), dzdy(:,:,:), glob_z(:,:,:)
         real, intent(inout),  dimension(:,:,:) :: u, v, w
         
         real, allocatable, dimension(:,:)   :: winddir, x_norm, y_norm, thresh_ang
         real, allocatable, dimension(:,:,:) :: Sx_U_corr, Sx_V_corr, Sx_curr, Sx_corr, TPI_corr
 
-        integer ::  i, j, k, ims, ime, jms, jme, kms, Sx_k_max, TPI_k_max
+        integer ::  i, j, k, ims, ime, jms, jme, kms
         real    ::  Ri_num, WS, max_spd, z_mean, SX_Z_MAX, TPI_Z_MAX, SX_SCALE_ANG, TPI_SCALE
+        integer, save :: TPI_k_max, Sx_k_max = 0
                 
         SX_SCALE_ANG = 30.0 !This means that for a (SX_SCALE_ANG/2)-degree difference between threshold and Sx, 
                             !reversal starts. Can be thought of as minimum terrain slope necesarry for flow reversal
@@ -374,8 +375,6 @@ contains
         SX_Z_MAX = 1500.0
         TPI_Z_MAX = 200.0
         
-        TPI_k_max = 0
-        Sx_k_max = 0
         ims = lbound(w,1)
         ime = ubound(w,1)
         kms = lbound(w,2)
@@ -386,12 +385,13 @@ contains
         allocate(y_norm(ims:ime,jms:jme))
         allocate(thresh_ang(ims:ime,jms:jme))
        
-
-        do k = kms,ubound(w,2)
-            z_mean =SUM(z(:,k,:)-z(:,kms,:))/SIZE(z(:,k,:))
-            if (z_mean > SX_Z_MAX .and. Sx_k_max==0) Sx_k_max = max(2,k-1)
-            if (z_mean > TPI_Z_MAX .and. TPI_k_max==0) TPI_k_max = max(2,k-1)
-        enddo
+        if (Sx_k_max==0 .or. TPI_k_max==0) then
+            do k = kms,ubound(w,2)
+                z_mean =SUM(glob_z(:,k,:)-glob_z(:,kms,:))/SIZE(glob_z(:,k,:))
+                if (z_mean > SX_Z_MAX .and. Sx_k_max==0) Sx_k_max = max(2,k-1)
+                if (z_mean > TPI_Z_MAX .and. TPI_k_max==0) TPI_k_max = max(2,k-1)
+            enddo
+        endif
 
         Sx_k_max = max(Sx_k_max,TPI_k_max) !Ensure that Sx_k_max is larger than TPI_k_max, since we use this max to index correction vars
 
