@@ -376,7 +376,7 @@ contains
             ! endif
 
             if (options%wind%Sx) then
-                call apply_Sx(domain%Sx,domain%TPI,domain%u%data_3d, domain%v%data_3d, domain%w%data_3d,domain%Ri,domain%dzdx,domain%dzdy,domain%z%data_3d)
+                call apply_Sx(domain%Sx,domain%TPI,domain%u%data_3d, domain%v%data_3d, domain%w%data_3d,domain%Ri,domain%dzdx,domain%dzdy,domain%global_z_interface)
             endif 
 
             ! linear winds
@@ -470,7 +470,7 @@ contains
             call domain%v%exchange_y(do_metadata=.True.)
             
             if (options%wind%Sx) then
-                call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d,domain%Ri,domain%dzdx,domain%dzdy,domain%z%data_3d)
+                call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d,domain%Ri,domain%dzdx,domain%dzdy,domain%global_z_interface)
             endif 
 
             ! linear winds
