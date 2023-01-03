@@ -205,7 +205,7 @@ contains
         real :: gridkm
         integer :: i, k
         real, allocatable:: t_1d(:), p_1d(:), Dz_1d(:), qv_1d(:), qc_1d(:), qi_1d(:), qs_1d(:), cf_1d(:)
-        real, allocatable :: qc(:,:,:),qi(:,:,:), qs(:,:,:), qg(:,:,:), qr(:,:,:), cldfra(:,:,:)
+        real, allocatable :: qc(:,:,:),qi(:,:,:), qs(:,:,:), qg(:,:,:), cldfra(:,:,:)
         real, allocatable :: xland(:,:)
 
         logical :: f_qr, f_qc, f_qi, F_QI2, F_QI3, f_qs, f_qg, f_qv, f_qndrop
@@ -214,7 +214,7 @@ contains
         
         !! MJ added
         real :: trans_atm, trans_atm_dir, max_dir_1, max_dir_2, max_dir, elev_th, ratio_dif
-        integer :: zdx, zdx_max
+        integer :: zdx
 
 
         ims = domain%grid%ims
@@ -250,7 +250,6 @@ contains
         allocate(qi(ims:ime,kms:kme,jms:jme))
         allocate(qs(ims:ime,kms:kme,jms:jme))
         allocate(qg(ims:ime,kms:kme,jms:jme))
-        allocate(qr(ims:ime,kms:kme,jms:jme))
         allocate(cldfra(ims:ime,kms:kme,jms:jme))
         allocate(xland(ims:ime,jms:jme))
 
@@ -275,7 +274,6 @@ contains
         qi = 0
         qs = 0
         qg = 0
-        qr = 0
         
         cldfra=0
 
@@ -288,7 +286,7 @@ contains
         F_QG=.false.
         f_qndrop=.false.
         F_QV=.false.
-        
+
         F_QI=associated(domain%cloud_ice_mass%data_3d )
         F_QC=associated(domain%cloud_water_mass%data_3d )
         F_QR=associated(domain%rain_mass%data_3d )
@@ -305,7 +303,6 @@ contains
         if (F_QI2) qi(:,:,:) = qi + domain%ice2_mass%data_3d
         if (F_QI3) qi(:,:,:) = qi + domain%ice3_mass%data_3d
         if (F_QS) qs(:,:,:) = domain%snow_mass%data_3d
-        if (F_QR) qr(:,:,:) = domain%rain_mass%data_3d
 
         mp_options=0
 
@@ -315,7 +312,7 @@ contains
                            qv = domain%water_vapor%data_3d,                      &
                            qc = qc,                 &
                            qs = qs + qi + qg,                                    &
-                           qr = qr,                        &
+                           qr = domain%rain_mass%data_3d,                        &
                            p =  domain%pressure%data_3d,                         &
                            swdown =  domain%shortwave%data_2d,                   &
                            lwdown =  domain%longwave%data_2d,                    &
@@ -432,7 +429,7 @@ contains
                     snow=domain%snow_water_equivalent%data_2d,            &
                     qv3d=domain%water_vapor%data_3d,                      &
                     qc3d=qc,                                              &
-                    qr3d=qr,                                              &
+                    qr3d=domain%rain_mass%data_3d,                        &
                     qi3d=qi,                                              &
                     qs3d=qs,                                              &
                     qg3d=qg,                                              &
@@ -503,7 +500,7 @@ contains
                             snow=domain%snow_water_equivalent%data_2d,            &
                             qv3d=domain%water_vapor%data_3d,                      &
                             qc3d=qc,                                              &
-                            qr3d=qr,                                              &
+                            qr3d=domain%rain_mass%data_3d,                        &
                             qi3d=qi,                                              &
                             qs3d=qs,                                              &
                             qg3d=qg,                                              &
@@ -550,12 +547,14 @@ contains
             do j = jms,jme
                 solar_elevation  = calc_solar_elevation_corr(date=domain%model_time, lon=domain%longitude%data_2d,&
                                 j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac, solar_azimuth=solar_azimuth)
+                                                                
                 cos_project_angle(its:ite,j)= cos(domain%slope_angle%data_2d(its:ite,j)) * sin(solar_elevation(its:ite)) + &
                                           sin(domain%slope_angle%data_2d(its:ite,j))* cos(solar_elevation(its:ite)) *cos(solar_azimuth(its:ite)-domain%aspect_angle%data_2d(its:ite,j))
-
+                
                 solar_elevation_store(its:ite,j) = solar_elevation(its:ite)
+                
                 solar_azimuth_store(its:ite,j) = solar_azimuth(its:ite)
-
+                
                 domain%cosine_zenith_angle%data_2d(its:ite,j)=sin(solar_elevation(its:ite))
             enddo 
             
@@ -570,7 +569,7 @@ contains
             ratio_dif=0.            
             do j = jts,jte
                 do i = its,ite
-                    trans_atm = max(min(domain%shortwave%data_2d(i,j)/( 1367* (sin(solar_elevation_store(i,j))+ 1.e-16) ),1.),0.)   ! atmospheric transmissivity
+                    trans_atm = max(min(domain%shortwave%data_2d(i,j)/( 1367* (sin(solar_elevation_store(i,j)) + 1.e-16) ),1.),0.)   ! atmospheric transmissivity
                     if (trans_atm<=0.22) then
                         ratio_dif=1.-0.09*trans_atm  
                     elseif (0.22<trans_atm .and. trans_atm<=0.8) then
@@ -583,19 +582,17 @@ contains
                 enddo
             enddo        
             !!
-            zdx_max = ubound(domain%hlm%data_3d,1)
             do j = jts,jte
                 do i = its,ite
                     ! determin maximum allowed direct swr
-                    trans_atm_dir = max(min(SW_dir(i,j)/(1367*sin(solar_elevation_store(i,j))+ 1.e-16),1.),0.)  ! atmospheric transmissivity for direct sw radiation
-                    max_dir_1     = 1367.*exp(log(1.-0.165)/max(sin(solar_elevation_store(i,j)),1.e-16))            
+                    trans_atm_dir = max(min(SW_dir(i,j)/(1367*sin(solar_elevation_store(i,j))),1.),0.)             ! atmospheric transmissivity for direct sw radiation
+                    max_dir_1     = 1367.*exp(log(1.-0.165)/max(sin(solar_elevation_store(i,j)),0.))            
                     max_dir_2     = 1367.*trans_atm_dir                          
                     max_dir       = min(max_dir_1,max_dir_2)                     ! applying both above criteria 1 and 2                    
                     
                     !!
                     zdx=floor(solar_azimuth_store(i,j)*(180./pi)/4.0) !! MJ added= we have 90 by 4 deg for hlm ...zidx is the right index based on solar azimuthal angle
 
-                    zdx = max(min(zdx,zdx_max),1)
                     elev_th=(90.-domain%hlm%data_3d(i,zdx,j))*pi/180. !! MJ added: it is the solar elevation threshold above which we see the sun from the pixel  
                     if (solar_elevation_store(i,j)>=elev_th) then
                         domain%shortwave_direct_above%data_2d(i,j)=min(SW_dir(i,j),max_dir)
