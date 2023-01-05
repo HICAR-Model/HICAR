@@ -50,10 +50,10 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build DESTINATION ${CMAKE_Fortran_
 #target_link_libraries(test_FSM_interface FSM_interface ${PROJECT_LINK_LIBS})
 
 # this is for gnu
-SET(CMAKE_Fortran_FLAGS "-fcoarray=lib -mfma -ffree-line-length-none -ftree-vectorize -fimplicit-none -funroll-loops -march=native  -fno-protect-parens ")
+#SET(CMAKE_Fortran_FLAGS "-fcoarray=lib -mfma -ffree-line-length-none -ftree-vectorize -fimplicit-none -funroll-loops -march=native  -fno-protect-parens ")
 
 # this is for cray
-#SET(CMAKE_Fortran_FLAGS "-h omp vector2 -O3 -c -hfp2 -eI")
+SET(CMAKE_Fortran_FLAGS "-h omp vector2 -O3 -c -hfp2 -eI")
 
 ADD_CUSTOM_TARGET( distclean make clean
 				   COMMAND ${CMAKE_COMMAND} -E remove_directory CMakeFiles
