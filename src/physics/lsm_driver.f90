@@ -1701,6 +1701,25 @@ contains
                 endif
                 !!
                 if (options%lsm_options%surface_diagnostics) then 
+                    !! first we neeed to have sensible and latent heat flux for water pixels
+                    call water_simple(options,                              &
+                                      domain%sst%data_2d,                   &
+                                      domain%surface_pressure%data_2d,      &
+                                      windspd,                              &
+                                      domain%ustar,                         &
+                                      domain%water_vapor%data_3d,           &
+                                      domain%temperature%data_3d,           &
+                                      domain%sensible_heat%data_2d,         &
+                                      domain%latent_heat%data_2d,           &
+                                      z_atm, domain%roughness_z0%data_2d,   &
+                                      domain%land_mask,                     &
+                                      QSFC,                                 &
+                                      QFX,                                  &
+                                      domain%skin_temperature%data_2d,      &
+                                      domain%veg_type,                      &
+                                      its, ite, kts, kte, jts, jte)
+                                      !   ,domain%terrain%data_2d               & ! terrain height [m] if ht(i,j)>=lake_min_elev -> lake (in case no lake category is provided, but lake model is selected, we need to not run the simple water as well - left comment in for future reference)                
+                
                     QSFC = sat_mr(domain%skin_temperature%data_2d,domain%surface_pressure%data_2d)
                     QFX(its:ite,jts:jte)=Esrf_
                     CHS2(its:ite,jts:jte)=KH_
@@ -1721,6 +1740,8 @@ contains
                                              domain%temperature_2m%data_2d,   &
                                              domain%humidity_2m%data_2d,      &
                                              domain%surface_pressure%data_2d)
+                                             
+                                             
                 endif
                 RAINBL = domain%accumulated_precipitation%data_2dd
                 rain_bucket = domain%precipitation_bucket
@@ -1730,7 +1751,7 @@ contains
             endif
             !!
             !
-            if (options%physics%watersurface==kWATER_SIMPLE .and. options%physics%landsurface==kLSM_FSM) then !! MJ uses the water model here since FSM considers all pixels and it needs to be overwritten for water pixels
+            if (options%physics%watersurface==kWATER_SIMPLE .and. options%physics%landsurface==kLSM_FSM .and. .not. options%lsm_options%surface_diagnostics) then !! MJ uses the water model here since FSM considers all pixels and it needs to be overwritten for water pixels
                 call water_simple(options,                              &
                                   domain%sst%data_2d,                   &
                                   domain%surface_pressure%data_2d,      &
