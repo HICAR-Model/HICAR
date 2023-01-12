@@ -77,7 +77,7 @@ real :: &
 integer :: & 
   n                   ! Iteration counter
 
-call RADIATION(alb,SWsrf,SWveg,Sdirt,Sdift,asrf_out,SWsci,LWt)
+call RADIATIONNN(alb,SWsrf,SWveg,Sdirt,Sdift,asrf_out,SWsci,LWt)
 
 call THERMAL(csoil,Ds1,gs1,ks1,ksnow,ksoil,Ts1,Tveg0)
 

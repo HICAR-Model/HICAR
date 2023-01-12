@@ -1,7 +1,7 @@
 !-----------------------------------------------------------------------
 ! Surface and canopy net shortwave radiation
 !-----------------------------------------------------------------------
-subroutine RADIATION(alb,SWsrf,SWveg,Sdirt,Sdift,asrf_out,SWsci,LWt)
+subroutine RADIATIONNN(alb,SWsrf,SWveg,Sdirt,Sdift,asrf_out,SWsci,LWt)
 
 use MODCONF, only: CANMOD, RADSBG, ALBEDO, SNFRAC, OSHDTN
 
@@ -250,4 +250,4 @@ do i = 1, Nx
 end do
 end do
 
-end subroutine RADIATION
+end subroutine RADIATIONNN

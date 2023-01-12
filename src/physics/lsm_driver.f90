@@ -477,7 +477,7 @@ contains
                 !endif
                 if (Q2(i,j) < SMALL_QV) Q2(i,j) = SMALL_QV
                 ! TH2(I,J) = T2(I,J)*(1.E5/PSFC(I,J))**ROVCP
-                 if ( isnan(HFX(I,J)) .or. abs(TSK(I,J)-T2(I,J))>30 ) write(*,*),"img-H222",i,j,this_image(), HFX(I,J), TSK(I,J), T2(I,J), CHS2(I,J) 
+                 if ( isnan(HFX(I,J)) .or. abs(TSK(I,J)-T2(I,J))>30 ) write(*,*) "img-H222",i,j,this_image(), HFX(I,J), TSK(I,J), T2(I,J), CHS2(I,J) 
                  !if (this_image()==1) write(*,*),"img-H222",i,j,this_image(), RHO, TSK(I,J), T2(I,J),PSFC(I,J)
             enddo
         enddo
