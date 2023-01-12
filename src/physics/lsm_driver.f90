@@ -1701,6 +1701,9 @@ contains
                 endif
                 !!
                 if (options%lsm_options%surface_diagnostics) then 
+                    QFX(its:ite,jts:jte)=Esrf_
+                    CHS2(its:ite,jts:jte)=KH_
+                    CQS2(its:ite,jts:jte)=KH_                    
                     !! first we neeed to have sensible and latent heat flux for water pixels
                     call water_simple(options,                              &
                                       domain%sst%data_2d,                   &
@@ -1721,9 +1724,14 @@ contains
                                       !   ,domain%terrain%data_2d               & ! terrain height [m] if ht(i,j)>=lake_min_elev -> lake (in case no lake category is provided, but lake model is selected, we need to not run the simple water as well - left comment in for future reference)                
                 
                     QSFC = sat_mr(domain%skin_temperature%data_2d,domain%surface_pressure%data_2d)
-                    QFX(its:ite,jts:jte)=Esrf_
-                    CHS2(its:ite,jts:jte)=KH_
-                    CQS2(its:ite,jts:jte)=KH_
+                    do j=jts,jte
+                        do i=its,ite
+                            if (domain%land_mask(i,j)==kLC_WATER) then
+                                CHS2(i,j)=CHS(i,j)
+                                CQS2(i,j)=CHS(i,j)                    
+                            endif
+                        enddo
+                    enddo    
                     ! accumulate soil moisture over the entire column
                     domain%soil_totalmoisture%data_2d = domain%soil_water_content%data_3d(:,1,:) * DZS(1) * 1000
                     do i = 2,num_soil_layers
