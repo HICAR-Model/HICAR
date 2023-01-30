@@ -3700,7 +3700,7 @@ contains
                 
                 !If we are dealing with anything but pressure and temperature (basically mass/number species), consider height above ground
                 !for interpolation. If the user has not selected AGL interpolation in the namelist, this will result in standard z-interpolation
-                agl_interp = .not.(var_is_pressure .and. var_is_potential_temp)
+                agl_interp = .not.(var_is_pressure .or. var_is_potential_temp)
 
                 ! if just updating, use the dqdt variable otherwise use the 3D variable
                 if (update_only) then
