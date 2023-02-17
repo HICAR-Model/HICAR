@@ -26,7 +26,9 @@ submodule(domain_interface) domain_implementation
         module procedure setup_var, setup_exch
     end interface
     
+    real, allocatable :: mod_temp_3d(:,:,:), surf_temp_1(:,:), surf_temp_2(:,:)
     real, parameter::deg2rad=0.017453293 !2*pi/360
+    
     ! primary public routines : init, get_initial_conditions, halo_send, halo_retrieve, or halo_exchange
 contains
 
@@ -66,7 +68,6 @@ contains
         integer :: var_list(kMAX_STORAGE_VARS)
 
         if (options%vars_to_advect(kVARS%water_vapor)>0) call this%adv_vars%add_var('qv', this%water_vapor%meta_data)
-        
         if (options%vars_to_advect(kVARS%potential_temperature)>0) call this%adv_vars%add_var('theta', this%potential_temperature%meta_data) 
         if (options%vars_to_advect(kVARS%cloud_water)>0) call this%adv_vars%add_var('qc', this%cloud_water_mass%meta_data)                  
         if (options%vars_to_advect(kVARS%rain_in_air)>0) call this%adv_vars%add_var('qr', this%rain_mass%meta_data)                    
@@ -319,6 +320,7 @@ contains
                             this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
             allocate(this%west_in(this%adv_vars%n_vars,1:this%grid%halo_size,&
                             this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
+                            
         endif
     end subroutine set_var_lists
 
@@ -382,10 +384,10 @@ contains
         implicit none
         class(domain_t),  intent(inout)   :: this
         type(options_t), intent(in)      :: options
-        integer :: z
-        real, allocatable :: temp_1(:,:), temp_2(:,:), temporary_data(:,:,:), qsum(:,:,:)
+        integer :: i, j, k
         logical :: use_delta_terrain
-
+        real :: qsum
+        
         associate(ims => this%ims, ime => this%ime,                             &
                   jms => this%jms, jme => this%jme,                             &
                   kms => this%kms, kme => this%kme,                             &
@@ -412,47 +414,55 @@ contains
                   v_mass                => this%v_mass%data_3d,                 &
                   potential_temperature => this%potential_temperature%data_3d )
 
-        allocate(temporary_data(ims:ime, kms:kme, jms:jme))
-
         exner = exner_function(pressure)
 
-        temperature = potential_temperature * exner
-        temperature_i(:,kms+1:kme, :) = (temperature(:,kms:kme-1, :) + temperature(:,kms+1:kme, :)) / 2
-        temperature_i(:, kms, :) = temperature(:, kms, :) + (temperature(:, kms, :) - temperature(:, kms+1, :)) / 2
-
+        !Calculation of density
         if (associated(this%density%data_3d)) then
-            allocate( qsum( ims:ime, kms:kme, jms:jme))
-            qsum = qv
-            if(associated(this%cloud_water_mass%data_3d)) then
-                qsum = qsum + this%cloud_water_mass%data_3d
-            endif
-            if(associated(this%cloud_ice_mass%data_3d)) then
-                qsum = qsum + this%cloud_ice_mass%data_3d
-            endif
-            if(associated(this%rain_mass%data_3d)) then
-                qsum = qsum + this%rain_mass%data_3d
-            endif
-            if(associated(this%snow_mass%data_3d)) then
-                qsum = qsum + this%snow_mass%data_3d
-            endif
-            if(associated(this%graupel_mass%data_3d)) then
-                qsum = qsum + this%graupel_mass%data_3d
-            endif
-            density =  pressure / &
-                        (Rd * temperature*(1+qsum)) ! kg/m^3
+            do j = jms,jme
+                do k = kms,kme
+                    do i = ims,ime
+                        qsum = qv(i,k,j)
+                        if(associated(this%cloud_water_mass%data_3d)) qsum = qsum + this%cloud_water_mass%data_3d(i,k,j)
+                        if(associated(this%cloud_ice_mass%data_3d)) qsum = qsum + this%cloud_ice_mass%data_3d(i,k,j)
+                        if(associated(this%ice2_mass%data_3d)) qsum = qsum + this%ice2_mass%data_3d(i,k,j)
+                        if(associated(this%ice3_mass%data_3d)) qsum = qsum + this%ice3_mass%data_3d(i,k,j)
+                        if(associated(this%rain_mass%data_3d)) qsum = qsum + this%rain_mass%data_3d(i,k,j)
+                        if(associated(this%snow_mass%data_3d)) qsum = qsum + this%snow_mass%data_3d(i,k,j)
+                        if(associated(this%graupel_mass%data_3d)) qsum = qsum + this%graupel_mass%data_3d(i,k,j)
+                        
+                        temperature(i,k,j) = potential_temperature(i,k,j) * exner(i,k,j)
+                        density(i,k,j) =  pressure(i,k,j) / (Rd * temperature(i,k,j)*(1+qv(i,k,j))) ! kg/m^3
+                    enddo
+                enddo
+            enddo
         endif
-        if (associated(this%u_mass%data_3d)) then
-            u_mass = (u(ims+1:ime+1,:,:) + u(ims:ime,:,:)) / 2
-        endif
-        if (associated(this%v_mass%data_3d)) then
-            v_mass = (v(:,:,jms+1:jme+1) + v(:,:,jms:jme)) / 2
-        endif
+        
+        temperature_i(ims:ime,kms,jms:jme) = temperature(ims:ime,kms,jms:jme) + (temperature(ims:ime,kms,jms:jme) - temperature(ims:ime,kms+1,jms:jme)) * 0.5
+        pressure_i(ims:ime,kms,jms:jme) = pressure(ims:ime,kms,jms:jme) + (pressure(ims:ime,kms,jms:jme) - pressure(ims:ime,kms+1,jms:jme)) * 0.5
 
-        pressure_i(:,kms+1:kme, :) = (pressure(:,kms:kme-1, :) + pressure(:,kms+1:kme, :)) / 2
-        pressure_i(:, kms, :) = pressure(:, kms, :) + (pressure(:, kms, :) - pressure(:, kms+1, :)) / 2
+        do j = jms,jme
+            do k = kms+1,kme
+                do i = ims,ime
+                    pressure_i(i,k,j) = (pressure(i,k-1,j) + pressure(i,k,j)) * 0.5
+                    temperature_i(i,k,j) = (temperature(i,k-1,j) + temperature(i,k,j)) * 0.5
+                enddo
+            enddo
+        enddo
+        
+        if (associated(this%u_mass%data_3d)) then
+            do j = jms,jme
+                do k = kms,kme
+                    do i = ims,ime
+                        u_mass(i,k,j) = (u(i+1,k,j) + u(i,k,j)) * 0.5
+                        v_mass(i,k,j) = (v(i,k,j+1) + v(i,k,j)) * 0.5
+                    enddo
+                enddo
+            enddo
+        endif
+                
         
         if (associated(this%surface_pressure%data_2d)) then
-            psfc = pressure_i(:, kms, :)
+            psfc = pressure_i(ims:ime, kms, jms:jme)
         endif
         if (associated(this%ivt%data_2d)) then
             call compute_ivt(this%ivt%data_2d, qv, u_mass, v_mass, pressure_i)
@@ -461,42 +471,41 @@ contains
             call compute_iq(this%iwv%data_2d, qv, pressure_i)
         endif
         if (associated(this%iwl%data_2d)) then
-            temporary_data = 0
-            if (associated(this%cloud_water_mass%data_3d)) temporary_data = temporary_data + cloud_water
-            if (associated(this%rain_mass%data_3d)) temporary_data = temporary_data + rain_water
-            call compute_iq(this%iwl%data_2d, temporary_data, pressure_i)
+            mod_temp_3d = 0
+            if (associated(this%cloud_water_mass%data_3d)) mod_temp_3d = mod_temp_3d + cloud_water
+            if (associated(this%rain_mass%data_3d)) mod_temp_3d = mod_temp_3d + rain_water
+            call compute_iq(this%iwl%data_2d, mod_temp_3d, pressure_i)
         endif
         if (associated(this%iwi%data_2d)) then
-            temporary_data = 0
-            if (associated(this%cloud_ice_mass%data_3d)) temporary_data = temporary_data + cloud_ice
-            if (associated(this%snow_mass%data_3d)) temporary_data = temporary_data + snow_ice
-            if (associated(this%graupel_mass%data_3d)) temporary_data = temporary_data + graupel_ice
-            call compute_iq(this%iwi%data_2d, temporary_data, pressure_i)
+            mod_temp_3d = 0
+            if (associated(this%cloud_ice_mass%data_3d)) mod_temp_3d = mod_temp_3d + cloud_ice
+            if (associated(this%snow_mass%data_3d)) mod_temp_3d = mod_temp_3d + snow_ice
+            if (associated(this%graupel_mass%data_3d)) mod_temp_3d = mod_temp_3d + graupel_ice
+            call compute_iq(this%iwi%data_2d, mod_temp_3d, pressure_i)
         endif
         
-        allocate( temp_1( its:ite, jts:jte))
-        allocate( temp_2( its:ite, jts:jte))
 
         ! temporary constant
         if (associated(this%roughness_z0%data_2d)) then
             ! use log-law of the wall to convert from first model level to surface
-            temp_1 = karman / log((this%z%data_3d(its:ite,kms,jts:jte) - this%terrain%data_2d(its:ite,jts:jte)) / this%roughness_z0%data_2d(its:ite,jts:jte))
+            surf_temp_1 = karman / log((this%z%data_3d(its:ite,kms,jts:jte) - this%terrain%data_2d(its:ite,jts:jte)) / this%roughness_z0%data_2d(its:ite,jts:jte))
             ! use log-law of the wall to convert from surface to 10m height
-            temp_2 = log(10.0 / this%roughness_z0%data_2d(its:ite,jts:jte)) / karman
+            surf_temp_2 = log(10.0 / this%roughness_z0%data_2d(its:ite,jts:jte)) / karman
         endif
 
         if (associated(this%u_10m%data_2d)) then
-            this%ustar        (its:ite,jts:jte) = u_mass      (its:ite,kms,jts:jte) * temp_1
-            this%u_10m%data_2d(its:ite,jts:jte) = this%ustar(its:ite,jts:jte)     * temp_2
-            this%ustar        (its:ite,jts:jte) = v_mass      (its:ite,kms,jts:jte) * temp_1
-            this%v_10m%data_2d(its:ite,jts:jte) = this%ustar(its:ite,jts:jte)     * temp_2
+            this%ustar        (its:ite,jts:jte) = u_mass      (its:ite,kms,jts:jte) * surf_temp_1
+            this%u_10m%data_2d(its:ite,jts:jte) = this%ustar(its:ite,jts:jte)     * surf_temp_2
+            this%ustar        (its:ite,jts:jte) = v_mass      (its:ite,kms,jts:jte) * surf_temp_1
+            this%v_10m%data_2d(its:ite,jts:jte) = this%ustar(its:ite,jts:jte)     * surf_temp_2
         endif
 
         if (allocated(this%ustar)) then
             ! now calculate master ustar based on U and V combined in quadrature
-            this%ustar(its:ite,jts:jte) = sqrt(u_mass(its:ite,kms,jts:jte)**2 + v_mass(its:ite,kms,jts:jte)**2) * temp_1
+            this%ustar(its:ite,jts:jte) = sqrt(u_mass(its:ite,kms,jts:jte)**2 + v_mass(its:ite,kms,jts:jte)**2) * surf_temp_1
         endif
-
+        
+        
         end associate
 
     end subroutine diagnostic_update
@@ -659,7 +668,6 @@ contains
         call this%halo_retrieve_batch()
     end subroutine
 
-
     !> -------------------------------
     !! Allocate and or initialize all domain variables if they have been requested
     !!
@@ -677,6 +685,10 @@ contains
         kme = this%grid%kme
         jms = this%grid%jms
         jme = this%grid%jme
+
+        allocate( mod_temp_3d( ims:ime, kms:kme, jms:jme))
+        allocate( surf_temp_1( this%grid%its:this%grid%ite, this%grid%jts:this%grid%jte))
+        allocate( surf_temp_2( this%grid%its:this%grid%ite, this%grid%jts:this%grid%jte))
 
         if (this_image()==1) print *,"  Initializing variables"
 
@@ -2940,8 +2952,7 @@ contains
                       kVARS%latitude,               kVARS%longitude,                &
                       kVARS%u_latitude,             kVARS%u_longitude,              &
                       kVARS%v_latitude,             kVARS%v_longitude,              &
-                      kVARS%temperature_interface,  kVars%density, kVARS%ivt,       &
-                      kVARS%iwv,    kVARS%iwl,      kVARS%iwi                      ])
+                      kVARS%temperature_interface,  kVars%density])
 
         if (trim(options%parameters%rain_var) /= "") call options%alloc_vars([kVARS%external_precipitation])
 
@@ -3467,16 +3478,22 @@ contains
     !! apply forcing multiplies that /second value and multiplies it by the current time step before adding it
     !!
     !! -------------------------------
-    module subroutine apply_forcing(this, forcing, dt)
+    module subroutine apply_forcing(this, forcing, options, dt)
         implicit none
         class(domain_t),    intent(inout) :: this
         class(boundary_t),  intent(in)    :: forcing
-        type(time_delta_t), intent(in)    :: dt
+        type(options_t), intent(in)       :: options
+        real, intent(in)                  :: dt
         integer :: ims, ime, jms, jme
         ! temporary to hold the variable to be interpolated to
         type(variable_t) :: var_to_update
         type(variable_t) :: forcing_hi
-
+        integer :: i, k, j
+        real    :: dt_h
+        
+        !calculate dt in units of hours
+        dt_h = dt/3600.0
+        
         ! make sure the dictionary is reset to point to the first variable
         call this%variables_to_force%reset_iterator()
 
@@ -3490,32 +3507,59 @@ contains
             if (var_to_update%two_d) then
                 ! apply forcing throughout the domain for 2D diagnosed variables (e.g. SST, SW)
                 if (.not.(var_to_update%force_boundaries)) then
-                    var_to_update%data_2d = var_to_update%data_2d + (var_to_update%dqdt_2d * dt%seconds())
-                else
+                    do j = this%jms,this%jme
+                        do i = this%ims,this%ime
+                            var_to_update%data_2d(i,j) = var_to_update%data_2d(i,j) + (var_to_update%dqdt_2d(i,j) * dt)
+                        enddo
+                    enddo
+                else if (any(this%relax_filter_2d > 0.0)) then
                     !Update forcing data to current time step
-                    forcing_hi%data_2d = forcing_hi%data_2d + (forcing_hi%dqdt_2d * dt%seconds())
-                    where(this%relax_filter_2d == 1.0)
-                        var_to_update%data_2d = forcing_hi%data_2d
-                    else where(this%relax_filter_2d < 1.0)
-                        var_to_update%data_2d = var_to_update%data_2d + (this%relax_filter_2d * dt%seconds()/3600.0) * &
-                            (forcing_hi%data_2d - var_to_update%data_2d)
-                    end where
+                    do j = this%jms,this%jme
+                        do i = this%ims,this%ime
+                            if (this%relax_filter_2d(i,j) > 0.0) then
+                                forcing_hi%data_2d(i,j) = forcing_hi%data_2d(i,j) + (forcing_hi%dqdt_2d(i,j) * dt)
+                                if (this%relax_filter_2d(i,j) == 1.0) then
+                                    var_to_update%data_2d(i,j) = forcing_hi%data_2d(i,j)
+                                else
+                                    var_to_update%data_2d(i,j) = var_to_update%data_2d(i,j) + &
+                                                    (this%relax_filter_2d(i,j) * dt_h) * &
+                                                    (forcing_hi%data_2d(i,j) - var_to_update%data_2d(i,j))
+                                endif
+                            endif
+                        enddo
+                    enddo
                 endif 
 
             else if (var_to_update%three_d) then
                 ! only apply forcing data on the boundaries for advected scalars (e.g. temperature, humidity)
                 ! applying forcing to the edges has already been handeled when updating dqdt using the relaxation filter
                 if (.not.(var_to_update%force_boundaries)) then
-                    var_to_update%data_3d = var_to_update%data_3d + (var_to_update%dqdt_3d * dt%seconds())
-                else
+                    do j = this%jms,this%jme
+                        do k = this%kms,this%kme
+                            do i = this%ims,this%ime
+                                var_to_update%data_3d(i,k,j) = var_to_update%data_3d(i,k,j) + &
+                                                              (var_to_update%dqdt_3d(i,k,j) * dt)
+                            enddo
+                        enddo
+                    enddo
+                else if (any(this%relax_filter_3d > 0.0)) then
                     !Update forcing data to current time step
-                    forcing_hi%data_3d = forcing_hi%data_3d + (forcing_hi%dqdt_3d * dt%seconds())
-                    where(this%relax_filter_3d == 1.0)
-                        var_to_update%data_3d = forcing_hi%data_3d
-                    else where(this%relax_filter_3d < 1.0)
-                        var_to_update%data_3d = var_to_update%data_3d + (this%relax_filter_3d * dt%seconds()/3600.0) * &
-                            (forcing_hi%data_3d - var_to_update%data_3d)
-                    end where
+                    do j = this%jms,this%jme
+                        do k = this%kms,this%kme
+                            do i = this%ims,this%ime
+                                if (this%relax_filter_3d(i,k,j) > 0.0) then
+                                    forcing_hi%data_3d(i,k,j) = forcing_hi%data_3d(i,k,j) + (forcing_hi%dqdt_3d(i,k,j) * dt)
+                                    if (this%relax_filter_3d(i,k,j) == 1.0) then
+                                        var_to_update%data_3d(i,k,j) = forcing_hi%data_3d(i,k,j)
+                                    else
+                                        var_to_update%data_3d(i,k,j) = var_to_update%data_3d(i,k,j) + &
+                                                        (this%relax_filter_3d(i,k,j) * dt_h) * &
+                                                        (forcing_hi%data_3d(i,k,j) - var_to_update%data_3d(i,k,j))
+                                    endif
+                                endif
+                            enddo
+                        enddo
+                    enddo
                 endif
             endif
 
@@ -3523,15 +3567,21 @@ contains
 
         ! w has to be handled separately because it is the only variable that can be updated using the delta fields but is not
         ! actually read from disk. Note that if we move to balancing winds every timestep, then it doesn't matter.
-        var_to_update = this%w%meta_data
-        var_to_update%data_3d = var_to_update%data_3d + (var_to_update%dqdt_3d * dt%seconds())
-
+        if (.not.(options%parameters%advect_density)) then
+            do j = this%jms,this%jme
+                do k = this%kms,this%kme
+                    do i = this%ims,this%ime
+                        this%w%meta_data%data_3d(i,k,j) = this%w%meta_data%data_3d(i,k,j) + (this%w%meta_data%dqdt_3d(i,k,j) * dt)
+                    enddo
+                enddo
+            enddo
+        endif
         if (associated(this%external_precipitation%data_2d)) then
             if (associated(this%accumulated_precipitation%data_2d)) then
-                this%accumulated_precipitation%data_2d = this%accumulated_precipitation%data_2d + (this%external_precipitation%data_2d * dt%seconds())
+                this%accumulated_precipitation%data_2d = this%accumulated_precipitation%data_2d + (this%external_precipitation%data_2d * dt)
             endif
             if (associated(this%accumulated_precipitation%data_2dd)) then
-                this%accumulated_precipitation%data_2dd = this%accumulated_precipitation%data_2dd + (this%external_precipitation%data_2d * dt%seconds())
+                this%accumulated_precipitation%data_2dd = this%accumulated_precipitation%data_2dd + (this%external_precipitation%data_2d * dt)
             endif
         endif
 
