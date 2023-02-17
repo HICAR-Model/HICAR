@@ -583,44 +583,29 @@ contains
         if (ime==ide) alpha(ime,:,:) = alpha(ime-1,:,:)
     end subroutine calc_alpha
     
-    subroutine calc_w_real(u,v,w_grid,w_real,dzdx,dzdy,jaco_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
+    subroutine calc_w_real(u,v,w_grid,w_real,dzdx,dzdy,jaco_w,ims,ime,kms,kme,jms,jme,its,ite,jts,jte)
 
         implicit none
-        real, intent(in), dimension(ims:ime,kms:kme,jms:jme)   :: w_grid,jaco_w
-        real, intent(in), dimension(ims:ime+1,kms:kme,jms:jme) :: u,dzdx
-        real, intent(in), dimension(ims:ime,kms:kme,jms:jme+1) :: v,dzdy
-        real, intent(inout)                                    :: w_real(ims:ime,kms:kme,jms:jme)
+        real, intent(in), dimension(ims:ime,kms:kme,jms:jme)    :: w_grid, jaco_w
+        real, intent(in), dimension(ims:ime+1,kms:kme,jms:jme)  :: u, dzdx
+        real, intent(in), dimension(ims:ime,kms:kme,jms:jme+1)  :: v, dzdy
+        real, intent(inout), dimension(ims:ime,kms:kme,jms:jme) :: w_real
+        integer, intent(in) :: ims, ime, kms, kme, jms, jme, its, ite, jts, jte
         
-        real, allocatable :: lastw(:,:)
-        real, allocatable :: currw(:,:)
-        real, allocatable :: uw(:,:)
-        real, allocatable :: vw(:,:)
-        integer :: z, ims, ime, kms, kme, jms, jme, its, ite, jts, jte
-
-        if (.not.allocated(lastw)) then
-            allocate( lastw( its:ite  , jts:jte  ))
-            allocate( currw( its:ite  , jts:jte  ))
-            allocate(    uw( its:ite+1, jts:jte  ))
-            allocate(    vw( its:ite  , jts:jte+1))
-        endif
+        real, dimension(its:ite,jts:jte)   :: lastw
+        real, dimension(its:ite,jts:jte)   :: currw
+        real, dimension(its:ite+1,jts:jte) :: uw
+        real, dimension(its:ite,jts:jte+1) :: vw
+        integer :: z
         
         !calculate the real vertical motions (including U*dzdx + V*dzdy)
         lastw = 0
         do z = kms, kme
             
-            ! ! if(options%parameters%use_terrain_difference) then
-            !                 ! compute the U * dz/dx component of vertical motion
-            !     uw    = u(its:ime,   z, jts:jts) * domain%delta_dzdx(:,z,jts:jts)
-            !     ! compute the V * dz/dy component of vertical motion
-            !     vw    = v(its:its, z, jts:jme  ) * domain%delta_dzdy(its:its,z,:)
-            ! else    
-                ! compute the U * dz/dx component of vertical motion
-                uw    = u(its:ite+1,   z, jts:jte) * dzdx(its:ite+1,z,jts:jte)
-                ! compute the V * dz/dy component of vertical motion
-                vw    = v(its:ite, z,   jts:jte+1) * dzdy(its:ite,z,jts:jte+1)
-            ! endif    
-            ! ! convert the W grid relative motion to m/s
-            ! currw = w(its:its, z, jts:jts) * dz_interface(its:its, z, jts:jts) / domain%dx
+            ! compute the U * dz/dx component of vertical motion
+            uw    = u(its:ite+1,   z, jts:jte) * dzdx(its:ite+1,z,jts:jte)
+            ! compute the V * dz/dy component of vertical motion
+            vw    = v(its:ite, z,   jts:jte+1) * dzdy(its:ite,z,jts:jte+1)
 
             ! the W grid relative motion
             currw = w_grid(its:ite, z, jts:jte) * jaco_w(its:ite, z, jts:jte)
