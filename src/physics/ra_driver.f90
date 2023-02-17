@@ -33,13 +33,29 @@ module radiation
     use icar_constants, only : kVARS, cp, Rd, gravity, solar_constant
     use mod_atm_utilities, only : cal_cldfra3
     implicit none
+    
     integer :: update_interval
     real*8  :: last_model_time
+
+    integer :: ims, ime, jms, jme, kms, kme
+    integer :: its, ite, jts, jte, kts, kte
+    integer :: ids, ide, jds, jde, kds, kde
+
+    real, allocatable :: t_1d(:), p_1d(:), Dz_1d(:), qv_1d(:), qc_1d(:), qi_1d(:), qs_1d(:), cf_1d(:)
+    real, allocatable :: qc(:,:,:), qi(:,:,:), qs(:,:,:), qg(:,:,:), qr(:,:,:), cldfra(:,:,:)
+    real, allocatable :: xland(:,:)
+
+    logical :: f_qr, f_qc, f_qi, F_QI2, F_QI3, f_qs, f_qg, f_qv, f_qndrop
+
 
     !! MJ added to aggregate radiation over output interval
     real, allocatable:: sum_SWdif(:,:), sum_SWdir(:,:), sum_SW(:,:), sum_LW(:,:) 
     real*8 :: counter
     real*8  :: Delta_t !! MJ added to detect the time for outputting 
+    real, allocatable :: day_frac(:), solar_elevation(:)
+    real, allocatable :: solar_azimuth(:), cos_project_angle(:,:), solar_elevation_store(:,:), solar_azimuth_store(:,:), SW_dif(:,:), SW_dir(:,:) !! MJ added
+    real, allocatable :: solar_elevation_test(:), solar_elevation_store_test(:,:)!! MJ added
+    real, allocatable:: albedo(:,:),gsw(:,:)
 
     
 contains
@@ -48,11 +64,88 @@ contains
         type(domain_t), intent(inout) :: domain
         type(options_t),intent(in) :: options
         
+        ims = domain%grid%ims
+        ime = domain%grid%ime
+        jms = domain%grid%jms
+        jme = domain%grid%jme
+        kms = domain%grid%kms
+        kme = domain%grid%kme
+        its = domain%grid%its
+        ite = domain%grid%ite
+        jts = domain%grid%jts
+        jte = domain%grid%jte
+        kts = domain%grid%kts
+        kte = domain%grid%kte
+
+        ids = domain%grid%ids
+        ide = domain%grid%ide
+        jds = domain%grid%jds
+        jde = domain%grid%jde
+        kds = domain%grid%kds
+        kde = domain%grid%kde
+        
         !! MJ added to aggregate radiation over output interval
-        allocate(sum_SW(domain%grid%ims:domain%grid%ime,domain%grid%jms:domain%grid%jme)); sum_SW=0.
-        allocate(sum_SWdif(domain%grid%ims:domain%grid%ime,domain%grid%jms:domain%grid%jme)); sum_SWdif=0.
-        allocate(sum_SWdir(domain%grid%ims:domain%grid%ime,domain%grid%jms:domain%grid%jme)); sum_SWdir=0.
-        allocate(sum_LW(domain%grid%ims:domain%grid%ime,domain%grid%jms:domain%grid%jme)); sum_LW=0.
+        allocate(sum_SW(ims:ime,jms:jme)); sum_SW=0.
+        allocate(sum_SWdif(ims:ime,jms:jme)); sum_SWdif=0.
+        allocate(sum_SWdir(ims:ime,jms:jme)); sum_SWdir=0.
+        allocate(sum_LW(ims:ime,jms:jme)); sum_LW=0.
+
+        allocate(t_1d(kms:kme))
+        allocate(p_1d(kms:kme))
+        allocate(Dz_1d(kms:kme))
+        allocate(qv_1d(kms:kme))
+        allocate(qc_1d(kms:kme))
+        allocate(qi_1d(kms:kme))
+        allocate(qs_1d(kms:kme))
+        allocate(cf_1d(kms:kme))
+
+        allocate(qc(ims:ime,kms:kme,jms:jme))
+        allocate(qi(ims:ime,kms:kme,jms:jme))
+        allocate(qs(ims:ime,kms:kme,jms:jme))
+        allocate(qg(ims:ime,kms:kme,jms:jme))
+        allocate(qr(ims:ime,kms:kme,jms:jme))
+        allocate(cldfra(ims:ime,kms:kme,jms:jme))
+        allocate(xland(ims:ime,jms:jme))
+
+        allocate(day_frac(ims:ime))
+        allocate(solar_elevation(ims:ime))
+        allocate(albedo(ims:ime,jms:jme))
+        allocate(gsw(ims:ime,jms:jme))
+
+        allocate(solar_azimuth(ims:ime)) !! MJ added
+        allocate(solar_elevation_test(ims:ime)) !! MJ added
+        allocate(cos_project_angle(ims:ime,jms:jme)) !! MJ added
+        allocate(solar_elevation_store(ims:ime,jms:jme)) !! MJ added
+        allocate(solar_elevation_store_test(ims:ime,jms:jme)) !! MJ added
+        allocate(solar_azimuth_store(ims:ime,jms:jme)) !! MJ added
+        allocate(SW_dif(ims:ime,jms:jme)) !! MJ added
+        allocate(SW_dir(ims:ime,jms:jme)) !! MJ added
+        
+        qc = 0
+        qi = 0
+        qs = 0
+        qg = 0
+        qr = 0
+
+        F_QI=.false.
+        F_QI2 = .false.
+        F_QI3 = .false.
+        F_QC=.false.
+        F_QR=.false.
+        F_QS=.false.
+        F_QG=.false.
+        f_qndrop=.false.
+        F_QV=.false.
+        
+        F_QI=associated(domain%cloud_ice_mass%data_3d )
+        F_QC=associated(domain%cloud_water_mass%data_3d )
+        F_QR=associated(domain%rain_mass%data_3d )
+        F_QS=associated(domain%snow_mass%data_3d )
+        F_QV=associated(domain%water_vapor%data_3d )
+        F_QG=associated(domain%graupel_mass%data_3d )
+        F_QNDROP=associated(domain%cloud_number%data_3d)
+        F_QI2=associated(domain%ice2_mass%data_3d)
+        F_QI3=associated(domain%ice3_mass%data_3d)
 
 
         if (this_image()==1) write(*,*) "Initializing Radiation"
@@ -99,6 +192,8 @@ contains
         endif
         update_interval=options%rad_options%update_interval_rrtmg ! 30 min, 1800 s   600 ! 10 min (600 s)
         last_model_time=-999
+
+
 
     end subroutine radiation_init
 
@@ -190,114 +285,16 @@ contains
         real,           intent(in)    :: dt
         integer,        intent(in), optional :: halo, subset
 
-        integer :: ims, ime, jms, jme, kms, kme
-        integer :: its, ite, jts, jte, kts, kte
-        integer :: ids, ide, jds, jde, kds, kde
-
         real, dimension(:,:,:,:), pointer :: tauaer_sw=>null(), ssaaer_sw=>null(), asyaer_sw=>null()
-        real, allocatable :: day_frac(:), solar_elevation(:)
-        real, allocatable :: solar_azimuth(:), cos_project_angle(:,:), solar_elevation_store(:,:), solar_azimuth_store(:,:), SW_dif(:,:), SW_dir(:,:) !! MJ added
-        real, allocatable :: solar_elevation_test(:), solar_elevation_store_test(:,:)!! MJ added
-        real, allocatable:: albedo(:,:),gsw(:,:)
-        integer :: j
-        real ::ra_dt
-
-        real :: gridkm
-        integer :: i, k
-        real, allocatable:: t_1d(:), p_1d(:), Dz_1d(:), qv_1d(:), qc_1d(:), qi_1d(:), qs_1d(:), cf_1d(:)
-        real, allocatable :: qc(:,:,:),qi(:,:,:), qs(:,:,:), qg(:,:,:), qr(:,:,:), cldfra(:,:,:)
-        real, allocatable :: xland(:,:)
-
-        logical :: f_qr, f_qc, f_qi, F_QI2, F_QI3, f_qs, f_qg, f_qv, f_qndrop
-        integer :: mp_options
         
+        real :: gridkm, ra_dt
+        integer :: i, j, k
+        integer :: mp_options = 0
         
         !! MJ added
         real :: trans_atm, trans_atm_dir, max_dir_1, max_dir_2, max_dir, elev_th, ratio_dif
         integer :: zdx, zdx_max
 
-
-        ims = domain%grid%ims
-        ime = domain%grid%ime
-        jms = domain%grid%jms
-        jme = domain%grid%jme
-        kms = domain%grid%kms
-        kme = domain%grid%kme
-        its = domain%grid%its
-        ite = domain%grid%ite
-        jts = domain%grid%jts
-        jte = domain%grid%jte
-        kts = domain%grid%kts
-        kte = domain%grid%kte
-
-        ids = domain%grid%ids
-        ide = domain%grid%ide
-        jds = domain%grid%jds
-        jde = domain%grid%jde
-        kds = domain%grid%kds
-        kde = domain%grid%kde
-
-        allocate(t_1d(kms:kme))
-        allocate(p_1d(kms:kme))
-        allocate(Dz_1d(kms:kme))
-        allocate(qv_1d(kms:kme))
-        allocate(qc_1d(kms:kme))
-        allocate(qi_1d(kms:kme))
-        allocate(qs_1d(kms:kme))
-        allocate(cf_1d(kms:kme))
-
-        allocate(qc(ims:ime,kms:kme,jms:jme))
-        allocate(qi(ims:ime,kms:kme,jms:jme))
-        allocate(qs(ims:ime,kms:kme,jms:jme))
-        allocate(qg(ims:ime,kms:kme,jms:jme))
-        allocate(qr(ims:ime,kms:kme,jms:jme))
-        allocate(cldfra(ims:ime,kms:kme,jms:jme))
-        allocate(xland(ims:ime,jms:jme))
-
-        allocate(day_frac(ims:ime))
-        allocate(solar_elevation(ims:ime))
-        allocate(albedo(ims:ime,jms:jme))
-        allocate(gsw(ims:ime,jms:jme))
-
-        allocate(solar_azimuth(ims:ime)) !! MJ added
-        allocate(solar_elevation_test(ims:ime)) !! MJ added
-        allocate(cos_project_angle(ims:ime,jms:jme)) !! MJ added
-        allocate(solar_elevation_store(ims:ime,jms:jme)) !! MJ added
-        allocate(solar_elevation_store_test(ims:ime,jms:jme)) !! MJ added
-        allocate(solar_azimuth_store(ims:ime,jms:jme)) !! MJ added
-        allocate(SW_dif(ims:ime,jms:jme)) !! MJ added
-        allocate(SW_dir(ims:ime,jms:jme)) !! MJ added
-
-
-        ! Note, need to link NoahMP to update albedo
-        
-        qc = 0
-        qi = 0
-        qs = 0
-        qg = 0
-        qr = 0
-        
-        cldfra=0
-
-        F_QI=.false.
-        F_QI2 = .false.
-        F_QI3 = .false.
-        F_QC=.false.
-        F_QR=.false.
-        F_QS=.false.
-        F_QG=.false.
-        f_qndrop=.false.
-        F_QV=.false.
-        
-        F_QI=associated(domain%cloud_ice_mass%data_3d )
-        F_QC=associated(domain%cloud_water_mass%data_3d )
-        F_QR=associated(domain%rain_mass%data_3d )
-        F_QS=associated(domain%snow_mass%data_3d )
-        F_QV=associated(domain%water_vapor%data_3d )
-        F_QG=associated(domain%graupel_mass%data_3d )
-        F_QNDROP=associated(domain%cloud_number%data_3d)
-        F_QI2=associated(domain%ice2_mass%data_3d)
-        F_QI3=associated(domain%ice3_mass%data_3d)
 
         if (F_QG) qg(:,:,:) = domain%graupel_mass%data_3d
         if (F_QC) qc(:,:,:) = domain%cloud_water_mass%data_3d
@@ -307,7 +304,7 @@ contains
         if (F_QS) qs(:,:,:) = domain%snow_mass%data_3d
         if (F_QR) qr(:,:,:) = domain%rain_mass%data_3d
 
-        mp_options=0
+        cldfra=0
 
         if (options%physics%radiation==kRA_SIMPLE) then
             call ra_simple(theta = domain%potential_temperature%data_3d,         &
@@ -330,26 +327,25 @@ contains
         endif
 
         if (options%physics%radiation==kRA_RRTMG) then
-
-            if (options%lsm_options%monthly_albedo) then
-                ALBEDO = domain%albedo%data_3d(:, domain%model_time%month, :)
-            else
-                ALBEDO = domain%albedo%data_3d(:, 1, :)
-            endif
-
-            do j = jms,jme
-               !! MJ commented as it does not work in Erupe
-               ! solar_elevation  = calc_solar_elevation(date=domain%model_time, lon=domain%longitude%data_2d, &
-               !                j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac)
-                solar_elevation  = calc_solar_elevation_corr(date=domain%model_time, lon=domain%longitude%data_2d, &
-                                j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac, solar_azimuth=solar_azimuth)
-                domain%cosine_zenith_angle%data_2d(its:ite,j)=sin(solar_elevation(its:ite))
-            enddo
-
             if (last_model_time==-999) then
                 last_model_time = domain%model_time%seconds()-update_interval
             endif
             if ((domain%model_time%seconds() - last_model_time) >= update_interval) then
+                if (options%lsm_options%monthly_albedo) then
+                    ALBEDO = domain%albedo%data_3d(:, domain%model_time%month, :)
+                else
+                    ALBEDO = domain%albedo%data_3d(:, 1, :)
+                endif
+
+                do j = jms,jme
+                   !! MJ commented as it does not work in Erupe
+                   ! solar_elevation  = calc_solar_elevation(date=domain%model_time, lon=domain%longitude%data_2d, &
+                   !                j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac)
+                    solar_elevation  = calc_solar_elevation_corr(date=domain%model_time, lon=domain%longitude%data_2d, &
+                                    j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac, solar_azimuth=solar_azimuth)
+                    domain%cosine_zenith_angle%data_2d(its:ite,j)=sin(solar_elevation(its:ite))
+                enddo
+            
                 ra_dt = domain%model_time%seconds() - last_model_time
                 last_model_time = domain%model_time%seconds()
                 domain%tend%th_swrad = 0
@@ -388,92 +384,95 @@ contains
                         ENDDO
                     END IF
                 END IF
-
-                call RRTMG_SWRAD(rthratensw=domain%tend%th_swrad,         &
-!                swupt, swuptc, swuptcln, swdnt, swdntc, swdntcln, &
-!                swupb, swupbc, swupbcln, swdnb, swdnbc, swdnbcln, &
-!                      swupflx, swupflxc, swdnflx, swdnflxc,      &
-                    swdnb = domain%shortwave%data_2d,                     &
-                    swcf = domain%shortwave_cloud_forcing%data_2d,        &
-                    gsw = gsw,                                            &
-                    xtime = 0., gmt = 0.,                                 &  ! not used
-                    xlat = domain%latitude%data_2d,                       &  ! not used
-                    xlong = domain%longitude%data_2d,                     &  ! not used
-                    radt = 0., degrad = 0., declin = 0.,                  &  ! not used
-                    coszr = domain%cosine_zenith_angle%data_2d,           &
-                    julday = 0,                                           &  ! not used
-                    solcon = solar_constant,                              &
-                    albedo = albedo,                                      &
-                    t3d = domain%temperature%data_3d,                     &
-                    t8w = domain%temperature_interface%data_3d,           &
-                    tsk = domain%skin_temperature%data_2d,                &
-                    p3d = domain%pressure%data_3d,                        &
-                    p8w = domain%pressure_interface%data_3d,              &
-                    pi3d = domain%exner%data_3d,                          &
-                    rho3d = domain%density%data_3d,                       &
-                    dz8w = domain%dz_interface%data_3d,                   &
-                    cldfra3d=cldfra,                                      &
-                    !, lradius, iradius,                                  &
-                    is_cammgmp_used = .False.,                            &
-                    r = Rd,                                               &
-                    g = gravity,                                          &
-                    re_cloud = domain%re_cloud%data_3d,                   &
-                    re_ice   = domain%re_ice%data_3d,                     &
-                    re_snow  = domain%re_snow%data_3d,                    &
-                    has_reqc=1,                                           & ! use with icloud > 0
-                    has_reqi=1,                                           & ! use with icloud > 0
-                    has_reqs=1,                                           & ! use with icloud > 0 ! G. Thompson
-                    icloud = options%rad_options%icloud,                  & ! set to nonzero if effective radius is available from microphysics
-                    warm_rain = .False.,                                  & ! when a dding WSM3scheme, add option for .True.
-                    cldovrlp=1,                                           & ! J. Henderson AER: cldovrlp namelist value
-                    !f_ice_phy, f_rain_phy,                               &
-                    xland=real(domain%land_mask),                         &
-                    xice=real(domain%land_mask)*0,                        & ! should add a variable for sea ice fraction
-                    snow=domain%snow_water_equivalent%data_2d,            &
-                    qv3d=domain%water_vapor%data_3d,                      &
-                    qc3d=qc,                                              &
-                    qr3d=qr,                                              &
-                    qi3d=qi,                                              &
-                    qs3d=qs,                                              &
-                    qg3d=qg,                                              &
-                    !o3input, o33d,                                       &
-                    aer_opt=0,                                            &
-                    !aerod,                                               &
-                    no_src = 1,                                           &
-!                   alswvisdir, alswvisdif,                               &  !Zhenxin ssib alb comp (06/20/2011)
-!                   alswnirdir, alswnirdif,                               &  !Zhenxin ssib alb comp (06/20/2011)
-!                   swvisdir, swvisdif,                                   &  !Zhenxin ssib swr comp (06/20/2011)
-!                   swnirdir, swnirdif,                                   &  !Zhenxin ssib swi comp (06/20/2011)
-                    sf_surface_physics=1,                                 &  !Zhenxin
-                    f_qv=f_qv, f_qc=f_qc, f_qr=f_qr,                      &
-                    f_qi=f_qi, f_qs=f_qs, f_qg=f_qg,                      &
-                    !tauaer300,tauaer400,tauaer600,tauaer999,             & ! czhao
-                    !gaer300,gaer400,gaer600,gaer999,                     & ! czhao
-                    !waer300,waer400,waer600,waer999,                     & ! czhao
-!                   aer_ra_feedback,                                      &
-!jdfcz              progn,prescribe,                                      &
-                    calc_clean_atm_diag=0,                                &
-!                    qndrop3d=domain%cloud_number%data_3d,                 &
-                    f_qndrop=f_qndrop,                                    & !czhao
-                    mp_physics=0,                                         & !wang 2014/12
-                    ids=ids, ide=ide, jds=jds, jde=jde, kds=kds, kde=kde, &
-                    ims=ims, ime=ime, jms=jms, jme=jme, kms=kms, kme=kme, &
-                    its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte-1, &
-                    !swupflx, swupflxc,                                   &
-                    !swdnflx, swdnflxc,                                   &
-                    tauaer3d_sw=tauaer_sw,                                & ! jararias 2013/11
-                    ssaaer3d_sw=ssaaer_sw,                                & ! jararias 2013/11
-                    asyaer3d_sw=asyaer_sw,                                &
-!                   swddir = domain%skin_temperature%data_2d,             &
-!                   swddni = domain%skin_temperature%data_2d,             &
-!                   swddif = domain%skin_temperature%data_2d,             & ! jararias 2013/08
-!                   swdownc = domain%skin_temperature%data_2d,            &
-!                   swddnic = domain%skin_temperature%data_2d,            &
-!                   swddirc = domain%skin_temperature%data_2d,            &   ! PAJ
-                    xcoszen = domain%cosine_zenith_angle%data_2d,         &  ! NEED TO CALCULATE THIS.
-                    yr=domain%model_time%year,                            &
-                    julian=domain%model_time%day_of_year(),               &
-                    mp_options=mp_options                               )
+                if (any( solar_elevation > 0.0 )) then
+                    call RRTMG_SWRAD(rthratensw=domain%tend%th_swrad,         &
+    !                swupt, swuptc, swuptcln, swdnt, swdntc, swdntcln, &
+    !                swupb, swupbc, swupbcln, swdnb, swdnbc, swdnbcln, &
+    !                      swupflx, swupflxc, swdnflx, swdnflxc,      &
+                        swdnb = domain%shortwave%data_2d,                     &
+                        swcf = domain%shortwave_cloud_forcing%data_2d,        &
+                        gsw = gsw,                                            &
+                        xtime = 0., gmt = 0.,                                 &  ! not used
+                        xlat = domain%latitude%data_2d,                       &  ! not used
+                        xlong = domain%longitude%data_2d,                     &  ! not used
+                        radt = 0., degrad = 0., declin = 0.,                  &  ! not used
+                        coszr = domain%cosine_zenith_angle%data_2d,           &
+                        julday = 0,                                           &  ! not used
+                        solcon = solar_constant,                              &
+                        albedo = albedo,                                      &
+                        t3d = domain%temperature%data_3d,                     &
+                        t8w = domain%temperature_interface%data_3d,           &
+                        tsk = domain%skin_temperature%data_2d,                &
+                        p3d = domain%pressure%data_3d,                        &
+                        p8w = domain%pressure_interface%data_3d,              &
+                        pi3d = domain%exner%data_3d,                          &
+                        rho3d = domain%density%data_3d,                       &
+                        dz8w = domain%dz_interface%data_3d,                   &
+                        cldfra3d=cldfra,                                      &
+                        !, lradius, iradius,                                  &
+                        is_cammgmp_used = .False.,                            &
+                        r = Rd,                                               &
+                        g = gravity,                                          &
+                        re_cloud = domain%re_cloud%data_3d,                   &
+                        re_ice   = domain%re_ice%data_3d,                     &
+                        re_snow  = domain%re_snow%data_3d,                    &
+                        has_reqc=1,                                           & ! use with icloud > 0
+                        has_reqi=1,                                           & ! use with icloud > 0
+                        has_reqs=1,                                           & ! use with icloud > 0 ! G. Thompson
+                        icloud = options%rad_options%icloud,                  & ! set to nonzero if effective radius is available from microphysics
+                        warm_rain = .False.,                                  & ! when a dding WSM3scheme, add option for .True.
+                        cldovrlp=1,                                           & ! J. Henderson AER: cldovrlp namelist value
+                        !f_ice_phy, f_rain_phy,                               &
+                        xland=real(domain%land_mask),                         &
+                        xice=real(domain%land_mask)*0,                        & ! should add a variable for sea ice fraction
+                        snow=domain%snow_water_equivalent%data_2d,            &
+                        qv3d=domain%water_vapor%data_3d,                      &
+                        qc3d=qc,                                              &
+                        qr3d=qr,                                              &
+                        qi3d=qi,                                              &
+                        qs3d=qs,                                              &
+                        qg3d=qg,                                              &
+                        !o3input, o33d,                                       &
+                        aer_opt=0,                                            &
+                        !aerod,                                               &
+                        no_src = 1,                                           &
+    !                   alswvisdir, alswvisdif,                               &  !Zhenxin ssib alb comp (06/20/2011)
+    !                   alswnirdir, alswnirdif,                               &  !Zhenxin ssib alb comp (06/20/2011)
+    !                   swvisdir, swvisdif,                                   &  !Zhenxin ssib swr comp (06/20/2011)
+    !                   swnirdir, swnirdif,                                   &  !Zhenxin ssib swi comp (06/20/2011)
+                        sf_surface_physics=1,                                 &  !Zhenxin
+                        f_qv=f_qv, f_qc=f_qc, f_qr=f_qr,                      &
+                        f_qi=f_qi, f_qs=f_qs, f_qg=f_qg,                      &
+                        !tauaer300,tauaer400,tauaer600,tauaer999,             & ! czhao
+                        !gaer300,gaer400,gaer600,gaer999,                     & ! czhao
+                        !waer300,waer400,waer600,waer999,                     & ! czhao
+    !                   aer_ra_feedback,                                      &
+    !jdfcz              progn,prescribe,                                      &
+                        calc_clean_atm_diag=0,                                &
+    !                    qndrop3d=domain%cloud_number%data_3d,                 &
+                        f_qndrop=f_qndrop,                                    & !czhao
+                        mp_physics=0,                                         & !wang 2014/12
+                        ids=ids, ide=ide, jds=jds, jde=jde, kds=kds, kde=kde, &
+                        ims=ims, ime=ime, jms=jms, jme=jme, kms=kms, kme=kme, &
+                        its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte-1, &
+                        !swupflx, swupflxc,                                   &
+                        !swdnflx, swdnflxc,                                   &
+                        tauaer3d_sw=tauaer_sw,                                & ! jararias 2013/11
+                        ssaaer3d_sw=ssaaer_sw,                                & ! jararias 2013/11
+                        asyaer3d_sw=asyaer_sw,                                &
+    !                   swddir = domain%skin_temperature%data_2d,             &
+    !                   swddni = domain%skin_temperature%data_2d,             &
+    !                   swddif = domain%skin_temperature%data_2d,             & ! jararias 2013/08
+    !                   swdownc = domain%skin_temperature%data_2d,            &
+    !                   swddnic = domain%skin_temperature%data_2d,            &
+    !                   swddirc = domain%skin_temperature%data_2d,            &   ! PAJ
+                        xcoszen = domain%cosine_zenith_angle%data_2d,         &  ! NEED TO CALCULATE THIS.
+                        yr=domain%model_time%year,                            &
+                        julian=domain%model_time%day_of_year(),               &
+                        mp_options=mp_options                               )
+                        
+                    domain%tend_swrad%data_3d = domain%tend%th_swrad
+                endif
                 call RRTMG_LWRAD(rthratenlw=domain%tend%th_lwrad,                 &
 !                           lwupt, lwuptc, lwuptcln, lwdnt, lwdntc, lwdntcln,     &        !if lwupt defined, all MUST be defined
 !                           lwupb, lwupbc, lwupbcln, lwdnb, lwdnbc, lwdnbcln,     &
@@ -536,7 +535,6 @@ contains
 !                           lwupflx, lwupflxc, lwdnflx, lwdnflxc,                  &
                             read_ghg=options%rad_options%read_ghg                  &
                             )
-                domain%tend_swrad%data_3d = domain%tend%th_swrad
             endif
             domain%potential_temperature%data_3d = domain%potential_temperature%data_3d+domain%tend%th_lwrad*dt+domain%tend%th_swrad*dt
             domain%temperature%data_3d = domain%potential_temperature%data_3d*domain%exner%data_3d
