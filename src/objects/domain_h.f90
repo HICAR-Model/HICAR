@@ -10,6 +10,7 @@ module domain_interface
   use time_object,              only : Time_type
   use time_delta_object,        only : time_delta_t
   use data_structures,          only : interpolable_type, tendencies_type
+
   implicit none
 
   private
@@ -529,11 +530,12 @@ module domain_interface
         type(time_delta_t), intent(in)    :: dt
     end subroutine
 
-    module subroutine apply_forcing(this, forcing, dt)
+    module subroutine apply_forcing(this, forcing, options, dt)
         implicit none
         class(domain_t),    intent(inout) :: this
         class(boundary_t),  intent(in)    :: forcing
-        type(time_delta_t), intent(in)    :: dt
+        type(options_t), intent(in)       :: options
+        real, intent(in)                  :: dt
     end subroutine
 
     module subroutine calculate_delta_terrain(this, forcing, options)

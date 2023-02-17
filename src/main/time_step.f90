@@ -316,7 +316,7 @@ contains
             endif
 
             ! ! apply/update boundary conditions including internal wind and pressure changes.
-            call domain%apply_forcing(forcing,dt)
+            call domain%apply_forcing(forcing,real(dt%seconds()))
             
             call domain%diagnostic_update(options)
 

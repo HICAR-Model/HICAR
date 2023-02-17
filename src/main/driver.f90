@@ -239,7 +239,7 @@ program icar
                 call step(domain, boundary, step_end(next_input, next_output), phys_dt, options, mp_timer, adv_timer, exch_timer)
                 call physics_timer%stop()
             elseif (options%wind%wind_only) then
-                call domain%apply_forcing(boundary, options%io_options%output_dt)
+                call domain%apply_forcing(boundary, real(options%io_options%output_dt%seconds()))
                 domain%model_time = next_output
             endif
 
