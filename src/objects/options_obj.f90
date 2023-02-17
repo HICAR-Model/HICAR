@@ -1049,7 +1049,7 @@ contains
         end_date            = ""
         time_varying_z      = .False.
         longitude_system    = kMAINTAIN_LON
-        batched_exch        = .False.
+        batched_exch        = .True.
         
         ! flag set to read specific parameterization options
         use_mp_options=.False.

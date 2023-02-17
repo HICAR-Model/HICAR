@@ -250,8 +250,10 @@ contains
       nx = size(this%data_3d,1)
       
       if (metadata) then
+          !DIR$ PGAS DEFER_SYNC
           this%halo_south_in(1+halo_size:nx-halo_size,this%kts:this%kte,1:(halo_size+this%ye))[north_neighbor] = this%meta_data%dqdt_3d(this%its:this%ite,this%kts:this%kte,(n-halo_size*2+1-this%ye):(n-halo_size))
       else
+          !DIR$ PGAS DEFER_SYNC
           this%halo_south_in(1+halo_size:nx-halo_size,this%kts:this%kte,1:(halo_size+this%ye))[north_neighbor] = this%data_3d(this%its:this%ite,this%kts:this%kte,(n-halo_size*2+1-this%ye):(n-halo_size))
       endif
   end subroutine
@@ -269,8 +271,10 @@ contains
       nx = size(this%data_3d,1)
       
       if (metadata) then
+          !DIR$ PGAS DEFER_SYNC
           this%halo_north_in(1+halo_size:nx-halo_size,this%kts:this%kte,1:halo_size)[south_neighbor] = this%meta_data%dqdt_3d(this%its:this%ite,this%kts:this%kte,(start+halo_size+this%ye):(start+halo_size*2-1+this%ye))
       else
+          !DIR$ PGAS DEFER_SYNC
           this%halo_north_in(1+halo_size:nx-halo_size,this%kts:this%kte,1:halo_size)[south_neighbor] = this%data_3d(this%its:this%ite,this%kts:this%kte,(start+halo_size+this%ye):(start+halo_size*2-1+this%ye))
       endif
   end subroutine
@@ -328,8 +332,10 @@ contains
       ny = size(this%data_3d,3)
       
       if (metadata) then
+          !DIR$ PGAS DEFER_SYNC
           this%halo_west_in(1:(halo_size+this%xe),this%kts:this%kte,1+halo_size:ny-halo_size)[east_neighbor] = this%meta_data%dqdt_3d((n-halo_size*2+1-this%xe):(n-halo_size),this%kts:this%kte,this%jts:this%jte)
       else
+          !DIR$ PGAS DEFER_SYNC
           this%halo_west_in(1:(halo_size+this%xe),this%kts:this%kte,1+halo_size:ny-halo_size)[east_neighbor] = this%data_3d((n-halo_size*2+1-this%xe):(n-halo_size),this%kts:this%kte,this%jts:this%jte)
       endif
   end subroutine
@@ -347,8 +353,10 @@ contains
       ny = size(this%data_3d,3)
       
       if (metadata) then
+          !DIR$ PGAS DEFER_SYNC
           this%halo_east_in(1:halo_size,this%kts:this%kte,1+halo_size:ny-halo_size)[west_neighbor] = this%meta_data%dqdt_3d((start+halo_size+this%xe):(start+halo_size*2-1+this%xe),this%kts:this%kte,this%jts:this%jte)
       else
+          !DIR$ PGAS DEFER_SYNC
           this%halo_east_in(1:halo_size,this%kts:this%kte,1+halo_size:ny-halo_size)[west_neighbor] = this%data_3d((start+halo_size+this%xe):(start+halo_size*2-1+this%xe),this%kts:this%kte,this%jts:this%jte)
       endif
   end subroutine

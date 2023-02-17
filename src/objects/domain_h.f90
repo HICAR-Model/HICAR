@@ -10,6 +10,7 @@ module domain_interface
   use time_object,              only : Time_type
   use time_delta_object,        only : time_delta_t
   use data_structures,          only : interpolable_type, tendencies_type
+  use timer_interface,          only : timer_t
 
   implicit none
 
@@ -375,6 +376,11 @@ module domain_interface
     real, allocatable :: west_in(:,:,:,:)[:]
     real, allocatable :: east_in(:,:,:,:)[:]
 
+    real, allocatable :: north_buffer(:,:,:,:)
+    real, allocatable :: south_buffer(:,:,:,:)
+    real, allocatable :: east_buffer(:,:,:,:)
+    real, allocatable :: west_buffer(:,:,:,:)
+
     ! MPI communicator object for doing parallel communications among domain objects
     integer, public :: IO_comms
 
@@ -490,15 +496,17 @@ module domain_interface
         class(domain_t), intent(inout) :: this
     end subroutine
 
-    module subroutine halo_retrieve(this)
+    module subroutine halo_retrieve(this, wait_timer)
         implicit none
         class(domain_t), intent(inout) :: this
+        type(timer_t),   intent(inout) :: wait_timer
     end subroutine
 
     ! Exchange subdomain boundary information
-    module subroutine halo_exchange(this)
+    module subroutine halo_exchange(this, send_timer, ret_timer, wait_timer)
         implicit none
         class(domain_t), intent(inout) :: this
+        type(timer_t),   intent(inout) :: send_timer, ret_timer, wait_timer
     end subroutine
 
     module subroutine halo_send_batch(this)
@@ -506,15 +514,17 @@ module domain_interface
         class(domain_t), intent(inout) :: this
     end subroutine
 
-    module subroutine halo_retrieve_batch(this)
+    module subroutine halo_retrieve_batch(this, wait_timer)
         implicit none
         class(domain_t), intent(inout) :: this
+        type(timer_t),   intent(inout) :: wait_timer
     end subroutine
 
     ! Exchange subdomain boundary information as a batched exchange
-    module subroutine halo_exchange_batch(this)
+    module subroutine halo_exchange_batch(this, send_timer, ret_timer, wait_timer)
         implicit none
         class(domain_t), intent(inout) :: this
+        type(timer_t),   intent(inout) :: send_timer, ret_timer, wait_timer
     end subroutine
 
     ! Make sure no hydrometeors are getting below 0

@@ -321,6 +321,15 @@ contains
             allocate(this%west_in(this%adv_vars%n_vars,1:this%grid%halo_size,&
                             this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
                             
+            if (.not.(this%north_boundary)) allocate(this%north_buffer(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
+                            this%kms:this%kme,1:this%grid%halo_size))
+            if (.not.(this%south_boundary)) allocate(this%south_buffer(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
+                            this%kms:this%kme,1:this%grid%halo_size))
+            if (.not.(this%east_boundary)) allocate(this%east_buffer(this%adv_vars%n_vars,1:this%grid%halo_size,&
+                            this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2)))
+            if (.not.(this%west_boundary)) allocate(this%west_buffer(this%adv_vars%n_vars,1:this%grid%halo_size,&
+                            this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2)))
+
         endif
     end subroutine set_var_lists
 
@@ -547,9 +556,14 @@ contains
     !! Get the halos from all exchangable objects from their neighbors
     !!
     !! -------------------------------
-    module subroutine halo_retrieve(this)
+    module subroutine halo_retrieve(this, wait_timer)
       class(domain_t), intent(inout) :: this
+      type(timer_t),   intent(inout) :: wait_timer
+      
+      call wait_timer%start()
       if (associated(this%potential_temperature%data_3d)) call this%potential_temperature%retrieve()! the first retrieve call will sync all
+      call wait_timer%stop()
+      
       if (associated(this%water_vapor%data_3d))           call this%water_vapor%retrieve(no_sync=.True.)
       if (associated(this%cloud_water_mass%data_3d))      call this%cloud_water_mass%retrieve(no_sync=.True.)
       if (associated(this%cloud_number%data_3d))          call this%cloud_number%retrieve(no_sync=.True.)
@@ -578,11 +592,18 @@ contains
     !! Send and get the halos from all exchangable objects to/from their neighbors
     !!
     !! -------------------------------
-    module subroutine halo_exchange(this)
+    module subroutine halo_exchange(this, send_timer, ret_timer, wait_timer)
       class(domain_t), intent(inout) :: this
+      type(timer_t),   intent(inout) :: send_timer, ret_timer, wait_timer
+      
+      call send_timer%start()
       call this%halo_send()
+      call send_timer%stop()
 
-      call this%halo_retrieve()
+      call ret_timer%start()
+      call this%halo_retrieve(wait_timer)
+      call ret_timer%stop()
+
     end subroutine
     
     module subroutine halo_send_batch(this)
@@ -595,46 +616,52 @@ contains
         real, allocatable :: temp_west(:,:,:,:)
         integer :: n
 
-        allocate(temp_north(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
-                            this%kms:this%kme,1:this%grid%halo_size))
-        allocate(temp_south(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
-                            this%kms:this%kme,1:this%grid%halo_size))
-        allocate(temp_east(this%adv_vars%n_vars,1:this%grid%halo_size,&
-                            this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2)))
-        allocate(temp_west(this%adv_vars%n_vars,1:this%grid%halo_size,&
-                            this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2)))
-
         call this%adv_vars%reset_iterator()
         n = 1
         ! Now iterate through the dictionary as long as there are more elements present
         do while (this%adv_vars%has_more_elements())
             ! get the next variable
             var_to_advect = this%adv_vars%next()
-            if (.not.(this%north_boundary)) temp_north(n,1:(this%ite-this%its+1),:,:) = &
+            if (.not.(this%north_boundary)) this%north_buffer(n,1:(this%ite-this%its+1),:,:) = &
                     var_to_advect%data_3d(this%its:this%ite,:,(this%jte-this%grid%halo_size+1):this%jte)
-            if (.not.(this%south_boundary)) temp_south(n,1:(this%ite-this%its+1),:,:) = &
+            if (.not.(this%south_boundary)) this%south_buffer(n,1:(this%ite-this%its+1),:,:) = &
                     var_to_advect%data_3d(this%its:this%ite,:,this%jts:(this%jts+this%grid%halo_size-1))
-            if (.not.(this%east_boundary)) temp_east(n,:,:,1:(this%jte-this%jts+1)) = &
+            if (.not.(this%east_boundary)) this%east_buffer(n,:,:,1:(this%jte-this%jts+1)) = &
                     var_to_advect%data_3d((this%ite-this%grid%halo_size+1):this%ite,:,this%jts:this%jte)
-            if (.not.(this%west_boundary)) temp_west(n,:,:,1:(this%jte-this%jts+1)) = &
+            if (.not.(this%west_boundary)) this%west_buffer(n,:,:,1:(this%jte-this%jts+1)) = &
                     var_to_advect%data_3d(this%its:(this%its+this%grid%halo_size)-1,:,this%jts:this%jte)
             
             n = n+1
         enddo
 
-        if (.not.(this%south_boundary)) this%north_in(:,:,:,:)[this%south_neighbor] = temp_south(:,:,:,:)
-        if (.not.(this%north_boundary)) this%south_in(:,:,:,:)[this%north_neighbor] = temp_north(:,:,:,:)
-        if (.not.(this%west_boundary)) this%east_in(:,:,:,:)[this%west_neighbor] = temp_west(:,:,:,:)
-        if (.not.(this%east_boundary)) this%west_in(:,:,:,:)[this%east_neighbor] = temp_east(:,:,:,:)
+        if (.not.(this%north_boundary)) then
+            !DIR$ PGAS DEFER_SYNC
+            this%south_in(:,:,:,:)[this%north_neighbor] = this%north_buffer(:,:,:,:)
+        endif
+        if (.not.(this%south_boundary)) then
+            !DIR$ PGAS DEFER_SYNC
+            this%north_in(:,:,:,:)[this%south_neighbor] = this%south_buffer(:,:,:,:)
+        endif
+        if (.not.(this%east_boundary)) then
+            !DIR$ PGAS DEFER_SYNC
+            this%west_in(:,:,:,:)[this%east_neighbor] = this%east_buffer(:,:,:,:)
+        endif
+        if (.not.(this%west_boundary)) then
+            !DIR$ PGAS DEFER_SYNC
+            this%east_in(:,:,:,:)[this%west_neighbor] = this%west_buffer(:,:,:,:)
+        endif
 
     end subroutine halo_send_batch
 
-    module subroutine halo_retrieve_batch(this)
+    module subroutine halo_retrieve_batch(this, wait_timer)
         class(domain_t), intent(inout) :: this
+        type(timer_t),   intent(inout) :: wait_timer
         type(variable_t) :: var_to_advect
         integer :: n
 
+        call wait_timer%start()
         sync images( this%neighbors )
+        call wait_timer%stop()
 
         call this%adv_vars%reset_iterator()
         n = 1
@@ -660,13 +687,19 @@ contains
     !! Send and get the halos from all exchangable objects to/from their neighbors
     !!
     !! -------------------------------
-    module subroutine halo_exchange_batch(this)
+    module subroutine halo_exchange_batch(this, send_timer, ret_timer, wait_timer)
         class(domain_t), intent(inout) :: this
-
-        call this%halo_send_batch()
+        type(timer_t),   intent(inout) :: send_timer, ret_timer, wait_timer
         
-        call this%halo_retrieve_batch()
+        call send_timer%start()
+        call this%halo_send_batch()
+        call send_timer%stop()
+
+        call ret_timer%start()
+        call this%halo_retrieve_batch(wait_timer)
+        call ret_timer%stop()
     end subroutine
+
 
     !> -------------------------------
     !! Allocate and or initialize all domain variables if they have been requested
