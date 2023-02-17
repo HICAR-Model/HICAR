@@ -211,7 +211,7 @@ endif
 
 # Cray fortran
 ifeq ($(COMPILER), cray)
-	COMP= -h omp vector2 -O3 -c -hfp2 -eI
+	COMP= -h omp vector3 -O3 -c -hfp2 -eI
 	LINK= -fopenmp
 	PREPROC= -eZ
 	MODOUTPUT= -J $(BUILD) -em
