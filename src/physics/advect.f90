@@ -22,7 +22,7 @@ module adv_std
     ! real,dimension(:,:,:),allocatable :: U_4cu_u, V_4cu_u, W_4cu_u
     ! real,dimension(:,:,:),allocatable :: U_4cu_v, V_4cu_v, W_4cu_v
 
-    public :: adv_std_init, adv_std_var_request, adv_std_advect3d, adv_std_compute_wind
+    public :: adv_std_init, adv_std_var_request, adv_std_advect3d, adv_fluxcorr_advect3d, adv_std_compute_wind
 
 contains
 
@@ -68,9 +68,9 @@ contains
         !if (allocated(lastqv_m)) deallocate(lastqv_m)
 
         ! allocate the module level arrays
-        allocate(U_m     (ims+1:ime,kms:kme,jms:jme  ))
-        allocate(V_m     (ims:ime,  kms:kme,jms+1:jme))
-        allocate(W_m     (ims:ime,  kms:kme,jms:jme  ))
+        allocate(U_m     (i_s:i_e+1,kms:kme,j_s:j_e  ))
+        allocate(V_m     (i_s:i_e,  kms:kme,j_s:j_e+1))
+        allocate(W_m     (i_s:i_e,  kms:kme,j_s:j_e  ))
         allocate(rho     (ims:ime,  kms:kme,jms:jme  ))
         !allocate(lastqv_m(ims:ime,  kms:kme,jms:jme  ))
 
@@ -131,193 +131,467 @@ contains
 !
 !     end subroutine flux2
 
-    subroutine flux3(q,u,v,w,flux_x,flux_z,flux_y)
+    subroutine flux3(q,flux_x,flux_z,flux_y,t_factor)
         implicit none
-        real, dimension(ims:ime,  kms:kme,jms:jme),    intent(in)          :: q
-        real, dimension(i_s:i_e,  kms:kme,j_s:j_e), intent(in)     :: w
-        real, dimension(i_s:i_e+1,kms:kme,j_s:j_e),  intent(in)    :: u
-        real, dimension(i_s:i_e,  kms:kme,j_s:j_e+1),intent(in)    :: v
-        
-        real, dimension(i_s:i_e+1,kms:kme,j_s:j_e),intent(inout)      :: flux_x
-        real, dimension(i_s:i_e,  kms:kme,j_s:j_e+1),intent(inout)    :: flux_y
-        real, dimension(i_s:i_e,  kms:kme+1,j_s:j_e),intent(inout)    :: flux_z
-        
-        
+        real, dimension(ims:ime,  kms:kme,jms:jme),   intent(in)       :: q
+        real, dimension(i_s:i_e+1,kms:kme,j_s:j_e),   intent(inout)    :: flux_x
+        real, dimension(i_s:i_e,  kms:kme,j_s:j_e+1), intent(inout)    :: flux_y
+        real, dimension(i_s:i_e,  kms:kme+1,j_s:j_e), intent(inout)    :: flux_z
+        real, intent(in) :: t_factor
+        integer :: i, j, k
+        real :: tmp, coef, u, q0, q1, q2, qn1, qn2, qn3
+                      
+                      
         if (horder==1) then
-            flux_x= ((u + ABS(u)) * q(i_s-1:i_e,:,j_s:j_e) + (u - ABS(u)) * q(i_s:i_e+1,:,j_s:j_e))  / 2
-            flux_y= ((v + ABS(v)) * q(i_s:i_e,:,j_s-1:j_e) + (v - ABS(v)) * q(i_s:i_e,:,j_s:j_e+1))  / 2
+            do j = j_s,j_e
+                do k = kms,kme
+                    do i = i_s,i_e+1
+                        flux_x(i,k,j)= ((U_m(i,k,j) + ABS(U_m(i,k,j))) * q(i-1,k,j) + (U_m(i,k,j) - ABS(U_m(i,k,j))) * q(i,k,j))  * 0.5 * t_factor
+                    enddo
+                enddo
+            enddo
+            do j = j_s,j_e+1
+                do k = kms,kme
+                    do i = i_s,i_e
+                        flux_y(i,k,j)= ((V_m(i,k,j) + ABS(V_m(i,k,j))) * q(i,k,j-1) + (V_m(i,k,j) - ABS(V_m(i,k,j))) * q(i,k,j))  * 0.5 * t_factor
+                    enddo
+                enddo
+            enddo
         else if (horder==3) then
-            !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
-            flux_x = 7*(q(i_s:i_e+1,:,j_s:j_e)+q(i_s-1:i_e,:,j_s:j_e)) - &
-                                (q(i_s+1:i_e+2,:,j_s:j_e)+q(i_s-2:i_e-1,:,j_s:j_e))
-            flux_x = (u*flux_x)/12
-            !Application of 3rd order diffusive terms
-            flux_x = flux_x - (abs(u)/12) * (3*(q(i_s:i_e+1,:,j_s:j_e)-q(i_s-1:i_e,:,j_s:j_e)) - &
-                                (q(i_s+1:i_e+2,:,j_s:j_e)-q(i_s-2:i_e-1,:,j_s:j_e)))
-                            
-            !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
-            flux_y = 7*(q(i_s:i_e,:,j_s:j_e+1)+q(i_s:i_e,:,j_s-1:j_e)) - &
-                                (q(i_s:i_e,:,j_s+1:j_e+2)+q(i_s:i_e,:,j_s-2:j_e-1))
-            flux_y = (v*flux_y)/12
-            !Application of 3rd order diffusive terms
-            flux_y = flux_y - (abs(v)/12) * (3*(q(i_s:i_e,:,j_s:j_e+1)-q(i_s:i_e,:,j_s-1:j_e)) - &
-                            (q(i_s:i_e,:,j_s+1:j_e+2)-q(i_s:i_e,:,j_s-2:j_e-1)))
-
+            coef = (1./12)*t_factor
+            !DIR$ UNROLL 5
+            do j = j_s,j_e
+                do k = kms,kme
+                    do i = i_s,i_e+1
+                        u = U_m(i,k,j)
+                        q0  = q(i,k,j);   q1  = q(i+1,k,j)
+                        qn1 = q(i-1,k,j); qn2 = q(i-2,k,j)
+                        !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
+                        tmp = 7*(q0+qn1) - (q1+qn2)
+                        tmp = u*tmp
+                        !Application of 3rd order diffusive terms
+                        tmp = tmp - (abs(u)) * (3*(q0-qn1) - (q1-qn2))
+                        flux_x(i,k,j) = tmp*coef                
+                    enddo
+                enddo
+            enddo
+            !DIR$ UNROLL 5
+            do j = j_s,j_e+1
+                do k = kms,kme
+                    do i = i_s,i_e
+                        u = V_m(i,k,j)
+                        q0  = q(i,k,j);   q1  = q(i,k,j+1)
+                        qn1 = q(i,k,j-1); qn2 = q(i,k,j-2)
+                        !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
+                        tmp = 7*(q0+qn1) - (q1+qn2)
+                        tmp = u*tmp
+                        !Application of 3rd order diffusive terms
+                        tmp = tmp - (abs(u)) * (3*(q0-qn1) - (q1-qn2))
+                        flux_y(i,k,j) = tmp*coef                
+                    enddo
+                enddo
+            enddo
         else if (horder==5) then
-            !Calculation of 6th order fluxes for later application of 5th order diffusive terms
-            flux_x = 37*(q(i_s:i_e+1,:,j_s:j_e)+q(i_s-1:i_e,:,j_s:j_e)) - &
-                            8*(q(i_s+1:i_e+2,:,j_s:j_e)+q(i_s-2:i_e-1,:,j_s:j_e)) + &
-                            (q(i_s+2:i_e+3,:,j_s:j_e)+q(i_s-3:i_e-2,:,j_s:j_e))
-            flux_x = (u*flux_x)/60
-            !Application of 5th order diffusive terms
-            flux_x = flux_x - (abs(u)/60) * (10*(q(i_s:i_e+1,:,j_s:j_e)-q(i_s-1:i_e,:,j_s:j_e)) - &
-                            5*(q(i_s+1:i_e+2,:,j_s:j_e)-q(i_s-2:i_e-1,:,j_s:j_e)) + &
-                            (q(i_s+2:i_e+3,:,j_s:j_e)-q(i_s-3:i_e-2,:,j_s:j_e)))
-                
-            !Calculation of 6th order fluxes for later application of 5th order diffusive terms
-            flux_y = 37*(q(i_s:i_e,:,j_s:j_e+1)+q(i_s:i_e,:,j_s-1:j_e)) - &
-                            8*(q(i_s:i_e,:,j_s+1:j_e+2)+q(i_s:i_e,:,j_s-2:j_e-1)) + &
-                            (q(i_s:i_e,:,j_s+2:j_e+3)+q(i_s:i_e,:,j_s-3:j_e-2))
-            flux_y = (v*flux_y)/60
-            !Application of 5th order diffusive terms
-            flux_y = flux_y - (abs(v)/60) * (10*(q(i_s:i_e,:,j_s:j_e+1)-q(i_s:i_e,:,j_s-1:j_e)) - &
-                            5*(q(i_s:i_e,:,j_s+1:j_e+2)-q(i_s:i_e,:,j_s-2:j_e-1)) + &
-                            (q(i_s:i_e,:,j_s+2:j_e+3)-q(i_s:i_e,:,j_s-3:j_e-2)))
+            coef = (1./60)*t_factor
+            !DIR$ UNROLL 5
+            do j = j_s,j_e
+                do k = kms,kme
+                    do i = i_s,i_e+1
+                        u = U_m(i,k,j)
+                        q0  = q(i,k,j);   q1  = q(i+1,k,j); q2  = q(i+2,k,j)
+                        qn1 = q(i-1,k,j); qn2 = q(i-2,k,j); qn3 = q(i-3,k,j)
+
+                        !Calculation of 6th order fluxes for later application of 5th order diffusive terms
+                        tmp = 37*(q0+qn1) - 8*(q1+qn2) + (q2+qn3)
+                        tmp = u*tmp
+                        !Application of 5th order diffusive terms
+                        tmp = tmp - abs(u) * (10*(q0-qn1) - 5*(q1-qn2) + (q2-qn3))
+                        flux_x(i,k,j) = tmp*coef
+                    enddo
+                enddo
+            enddo
+            !DIR$ UNROLL 5
+            do j = j_s,j_e+1
+                do k = kms,kme
+                    do i = i_s,i_e
+                        u = V_m(i,k,j)
+                        q0  = q(i,k,j);   q1  = q(i,k,j+1); q2  = q(i,k,j+2)
+                        qn1 = q(i,k,j-1); qn2 = q(i,k,j-2); qn3 = q(i,k,j-3)
+                        !Calculation of 6th order fluxes for later application of 5th order diffusive terms
+                        tmp = 37*(q0+qn1) - 8*(q1+qn2) + (q2+qn3)
+                        tmp = u*tmp
+                        !Application of 5th order diffusive terms
+                        tmp = tmp - abs(u) * (10*(q0-qn1) -  5*(q1-qn2) + (q2-qn3))
+                        flux_y(i,k,j) = tmp*coef
+                    enddo
+                enddo
+            enddo
         endif
         
         if (vorder==1) then
-            flux_z(:,kms+1:kme,:) = ((w(:,kms:kme-1,:) + ABS(w(:,kms:kme-1,:))) * q(i_s:i_e,kms:kme-1,j_s:j_e) + &
-                                     (w(:,kms:kme-1,:) - ABS(w(:,kms:kme-1,:))) * q(i_s:i_e,kms+1:kme,j_s:j_e))  / 2
+            do j = j_s,j_e
+                do k = kms+1,kme
+                    do i = i_s,i_e
+                        flux_z(i,k,j) = ((W_m(i,k-1,j) + ABS(W_m(i,k-1,j))) * q(i,k-1,j) + &
+                                     (W_m(i,k-1,j) - ABS(W_m(i,k-1,j))) * q(i,k,j))  * 0.5  * t_factor
+                    enddo
+                enddo
+            enddo
         else if (vorder==3) then
-            !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
-            flux_z(:,kms+2:kme-1,:) = 7*(q(i_s:i_e,kms+2:kme-1,j_s:j_e)+q(i_s:i_e,kms+1:kme-2,j_s:j_e)) - &
-                                    (q(i_s:i_e,kms+3:kme,j_s:j_e)+q(i_s:i_e,kms:kme-3,j_s:j_e))
-            flux_z(:,kms+2:kme-1,:) = (w(:,kms+1:kme-2,:)*flux_z(:,kms+2:kme-1,:))/12
-            !Application of 3rd order diffusive terms
-            flux_z(:,kms+2:kme-1,:) = flux_z(:,kms+2:kme-1,:) - (abs(w(:,kms+1:kme-2,:))/12) * &
-                        (3 * (q(i_s:i_e,kms+2:kme-1,j_s:j_e) - q(i_s:i_e,kms+1:kme-2,j_s:j_e)) - &
-                            (q(i_s:i_e,kms+3:kme,j_s:j_e)   - q(i_s:i_e,kms:kme-3,j_s:j_e)))
-                            
-            !Do simple upwind for the cells who's stencil does not allow higher-order
-            flux_z(:,kms+1,:) = ((w(:,kms,:) + ABS(w(:,kms,:))) * q(i_s:i_e,kms,j_s:j_e) + &
-                                 (w(:,kms,:) - ABS(w(:,kms,:))) * q(i_s:i_e,kms+1,j_s:j_e))  / 2
-            flux_z(:,kme,:) = ((w(:,kme-1,:) + ABS(w(:,kme-1,:))) * q(i_s:i_e,kme-1,j_s:j_e) + &
-                               (w(:,kme-1,:) - ABS(w(:,kme-1,:))) * q(i_s:i_e,kme,j_s:j_e))  / 2
-
+            coef = (1./12)*t_factor
+            do j = j_s,j_e
+                do k = kms+2,kme-1
+                    do i = i_s,i_e
+                        u = W_m(i,k-1,j)
+                        q0  = q(i,k,j);   q1  = q(i,k+1,j)
+                        qn1 = q(i,k-1,j); qn2 = q(i,k-2,j)
+                        !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
+                        tmp = 7*(q0+qn1) - (q1+qn2)
+                        tmp = u*tmp
+                        !Application of 3rd order diffusive terms
+                        tmp = tmp - abs(u) * (3 * (q0 - qn1) - (q1 - qn2))
+                        flux_z(i,k,j) = tmp*coef               
+                    enddo
+                enddo
+            enddo
+            do j = j_s,j_e
+                do i = i_s,i_e
+                    u = W_m(i,kms,j)
+                    !Do simple upwind for the cells who's stencil does not allow higher-order
+                    flux_z(i,kms+1,j) = ((u + ABS(u)) * q(i,kms,j) + (u - ABS(u)) * q(i,kms+1,j))  * 0.5  * t_factor
+                    u = W_m(i,kme-1,j)
+                    flux_z(i,kme,j) = ((u + ABS(u)) * q(i,kme-1,j) + (u - ABS(u)) * q(i,kme,j))  * 0.5  * t_factor
+                enddo
+            enddo
         else if (vorder==5) then
-            !Calculation of 6th order fluxes for later application of 5th order diffusive terms
-            flux_z(:,kms+3:kme-2,:) = 37*(q(i_s:i_e,kms+3:kme-2,j_s:j_e)+q(i_s:i_e,kms+2:kme-3,j_s:j_e)) - &
-                                       8*(q(i_s:i_e,kms+4:kme-1,j_s:j_e)+q(i_s:i_e,kms+1:kme-4,j_s:j_e)) + &
-                                         (q(i_s:i_e,kms+5:kme,j_s:j_e)+  q(i_s:i_e,kms:kme-5,j_s:j_e))
-            flux_z(:,kms+3:kme-2,:) = (w(:,kms+2:kme-3,:)*flux_z(:,kms+3:kme-2,:))/60
-            !Application of 5th order diffusive terms
-            flux_z(:,kms+3:kme-2,:) = flux_z(:,kms+3:kme-2,:) - (abs(w(:,kms+2:kme-3,:))/60) * &
-                        (10 * (q(i_s:i_e,kms+3:kme-2,j_s:j_e) - q(i_s:i_e,kms+2:kme-3,j_s:j_e)) - &
-                            5*(q(i_s:i_e,kms+4:kme-1,j_s:j_e) - q(i_s:i_e,kms+1:kme-4,j_s:j_e)) + &
-                              (q(i_s:i_e,kms+5:kme,j_s:j_e)   - q(i_s:i_e,kms:kme-5,j_s:j_e)))
-                              
-            flux_z(:,kms+2,:) = 7*(q(i_s:i_e,kms+2,j_s:j_e)+q(i_s:i_e,kms+1,j_s:j_e)) - &
-                                    (q(i_s:i_e,kms+3,j_s:j_e)+q(i_s:i_e,kms,j_s:j_e))
-            flux_z(:,kms+2,:) = (w(:,kms+1,:)*flux_z(:,kms+2,:))/12
-            !Application of 3rd order diffusive terms
-            flux_z(:,kms+2,:) = flux_z(:,kms+2,:) - (abs(w(:,kms+1,:))/12) * &
-                        (3 * (q(i_s:i_e,kms+2,j_s:j_e) - q(i_s:i_e,kms+1,j_s:j_e)) - &
-                            (q(i_s:i_e,kms+3,j_s:j_e)   - q(i_s:i_e,kms,j_s:j_e)))
+            coef = (1./60)*t_factor
+            do j = j_s,j_e
+                do k = kms+3,kme-2
+                    do i = i_s,i_e
+                        u = W_m(i,k-1,j)
+                        q0  = q(i,k,j);   q1  = q(i,k+1,j);  q2 = q(i,k+2,j)
+                        qn1 = q(i,k-1,j); qn2 = q(i,k-2,j); qn3 = q(i,k-3,j)
+                        !Calculation of 6th order fluxes for later application of 5th order diffusive terms
+                        tmp = 37*(q0+qn1) - 8*(q1+qn2) + (q2+qn3)
+                        tmp = u*tmp
+                        !Application of 5th order diffusive terms
+                        tmp = tmp - abs(u) * (10*(q0-qn1) -  5*(q1-qn2) + (q2-qn3))
+                        flux_z(i,k,j) = tmp*coef
+                    enddo
+                enddo
+            enddo
+            coef = (1./12)*t_factor
+            do j = j_s,j_e
+                do i = i_s,i_e
+                    u = W_m(i,kms+1,j)
+                    q0  = q(i,kms+2,j);   q1  = q(i,kms+3,j)
+                    qn1 = q(i,kms-1,j);   qn2 = q(i,kms,j)
+                    
+                    tmp = 7*(q0+qn1) - (q1+qn2)
+                    tmp = u*tmp
+                    !Application of 3rd order diffusive terms
+                    tmp = tmp - abs(u) * (3 * (q0 - qn1) - (q1 - qn2))
+                    flux_z(i,kms+2,j) = tmp*coef               
+                    
+                    u = W_m(i,kme-2,j)
+                    q0  = q(i,kme-1,j);   q1  = q(i,kme,j)
+                    qn1 = q(i,kme-2,j);   qn2 = q(i,kme-3,j)
 
-            flux_z(:,kme-1,:) = 7*(q(i_s:i_e,kme-1,j_s:j_e)+q(i_s:i_e,kme-2,j_s:j_e)) - &
-                                    (q(i_s:i_e,kme,j_s:j_e)+q(i_s:i_e,kme-3,j_s:j_e))
-            flux_z(:,kme-1,:) = (w(:,kme-2,:)*flux_z(:,kme-1,:))/12
-            !Application of 3rd order diffusive terms
-            flux_z(:,kme-1,:) = flux_z(:,kme-1,:) - (abs(w(:,kme-2,:))/12) * &
-                        (3 * (q(i_s:i_e,kme-1,j_s:j_e) - q(i_s:i_e,kme-2,j_s:j_e)) - &
-                            (q(i_s:i_e,kme,j_s:j_e)   - q(i_s:i_e,kme-3,j_s:j_e)))
-                            
+                    tmp = 7*(q0+qn1) - (q1+qn2)
+                    tmp = u*tmp
+                    !Application of 3rd order diffusive terms
+                    tmp = tmp - abs(u) * (3 * (q0 - qn1) - (q1 - qn2))
+                    flux_z(i,kme-1,j) = tmp*coef               
 
-            !Do simple upwind for the cells who's stencil does not allow higher-order
-            flux_z(:,kms+1,:) = ((w(:,kms,:) + ABS(w(:,kms,:))) * q(i_s:i_e,kms,j_s:j_e) + &
-                                 (w(:,kms,:) - ABS(w(:,kms,:))) * q(i_s:i_e,kms+1,j_s:j_e))  / 2
-            flux_z(:,kme,:) = ((w(:,kme-1,:) + ABS(w(:,kme-1,:))) * q(i_s:i_e,kme-1,j_s:j_e) + &
-                               (w(:,kme-1,:) - ABS(w(:,kme-1,:))) * q(i_s:i_e,kme,j_s:j_e))  / 2
-
+                    u = W_m(i,kms,j)
+                    !Do simple upwind for the cells who's stencil does not allow higher-order
+                    flux_z(i,kms+1,j) = ((u + ABS(u)) * q(i,kms,j) + &
+                                         (u - ABS(u)) * q(i,kms+1,j))  * 0.5 * t_factor
+                    u = W_m(i,kme-1,j)
+                    flux_z(i,kme,j) = ((u + ABS(u)) * q(i,kme-1,j) + &
+                                       (u - ABS(u)) * q(i,kme,j))  * 0.5 * t_factor
+                enddo
+            enddo
         endif
-        
                                                           
-
         !Handle top and bottom boundaries for z here
-        flux_z(:,kms,:) = 0
-        flux_z(:,kme+1,:) = q(i_s:i_e,kme,j_s:j_e) * w(:,kme,:)
-
-                                         
+        do j = j_s,j_e
+            do i = i_s,i_e
+                flux_z(i,kms,j) = 0
+                flux_z(i,kme+1,j) = q(i,kme,j) * W_m(i,kme,j) * t_factor
+            enddo
+        enddo
     end subroutine flux3
 
-    subroutine adv_std_advect3d(qfluxes,qold,dz,jaco,t_factor_in,flux_corr)
+    subroutine flux3_w_up(q,flux_x,flux_z,flux_y,flux_x_up,flux_z_up,flux_y_up)
+        implicit none
+        real, dimension(ims:ime,  kms:kme,jms:jme),   intent(in)       :: q
+        real, dimension(i_s:i_e+1,kms:kme,j_s:j_e),   intent(inout)    :: flux_x, flux_x_up
+        real, dimension(i_s:i_e,  kms:kme,j_s:j_e+1), intent(inout)    :: flux_y, flux_y_up
+        real, dimension(i_s:i_e,  kms:kme+1,j_s:j_e), intent(inout)    :: flux_z, flux_z_up
+        integer :: i, j, k
+        real :: tmp, coef, u, q0, q1, q2, qn1, qn2, qn3
+                      
+        if (horder==3) then
+            coef = (1./12)
+            !DIR$ UNROLL 5
+            do j = j_s,j_e
+                do k = kms,kme
+                    do i = i_s,i_e+1
+                        u = U_m(i,k,j)
+                        q0  = q(i,k,j);   q1  = q(i+1,k,j)
+                        qn1 = q(i-1,k,j); qn2 = q(i-2,k,j)
+                        !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
+                        tmp = 7*(q0+qn1) - (q1+qn2)
+                        tmp = u*tmp
+                        !Application of 3rd order diffusive terms
+                        tmp = tmp - (abs(u)) * (3*(q0-qn1) - (q1-qn2))
+                        !Calculation of Upwind fluxes
+                        flux_x_up(i,k,j) = ((u + ABS(u)) * qn1 + (u - ABS(u)) * q0)  * 0.5 * 0.5 ! additional "0.5" since we only want half of the upwind step
+                        !Application of Upwind fluxes to higher order fluxes -- needed for flux correction step
+                        flux_x(i,k,j) = tmp*coef
+                    enddo
+                enddo
+            enddo
+            !DIR$ UNROLL 5
+            do j = j_s,j_e+1
+                do k = kms,kme
+                    do i = i_s,i_e
+                        u = V_m(i,k,j)
+                        q0  = q(i,k,j);   q1  = q(i,k,j+1)
+                        qn1 = q(i,k,j-1); qn2 = q(i,k,j-2)
+                        !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
+                        tmp = 7*(q0+qn1) - (q1+qn2)
+                        tmp = u*tmp
+                        !Application of 3rd order diffusive terms
+                        tmp = tmp - (abs(u)) * (3*(q0-qn1) - (q1-qn2))
+                        !Calculation of Upwind fluxes
+                        flux_y_up(i,k,j) = ((u + ABS(u)) * qn1 + (u - ABS(u)) * q0)  * 0.5 * 0.5 ! additional "0.5" since we only want half of the upwind step
+                        !Application of Upwind fluxes to higher order fluxes -- needed for flux correction step
+                        flux_y(i,k,j) = tmp*coef         
+                    enddo
+                enddo
+            enddo
+        else if (horder==5) then
+            coef = (1./60)
+            !DIR$ UNROLL 5
+            do j = j_s,j_e
+                do k = kms,kme
+                    do i = i_s,i_e+1
+                        u = U_m(i,k,j)
+                        q0  = q(i,k,j);   q1  = q(i+1,k,j); q2  = q(i+2,k,j)
+                        qn1 = q(i-1,k,j); qn2 = q(i-2,k,j); qn3 = q(i-3,k,j)
 
+                        !Calculation of 6th order fluxes for later application of 5th order diffusive terms
+                        tmp = 37*(q0+qn1) - 8*(q1+qn2) + (q2+qn3)
+                        tmp = u*tmp
+                        !Application of 5th order diffusive terms
+                        tmp = tmp - abs(u) * (10*(q0-qn1) - 5*(q1-qn2) + (q2-qn3))
+                        !Calculation of Upwind fluxes
+                        flux_x_up(i,k,j) = ((u + ABS(u)) * qn1 + (u - ABS(u)) * q0)  * 0.5 * 0.5 ! additional "0.5" since we only want half of the upwind step
+                        !Application of Upwind fluxes to higher order fluxes -- needed for flux correction step
+                        flux_x(i,k,j) = tmp*coef
+                    enddo
+                enddo
+            enddo
+            !DIR$ UNROLL 5
+            do j = j_s,j_e+1
+                do k = kms,kme
+                    do i = i_s,i_e
+                        u = V_m(i,k,j)
+                        q0  = q(i,k,j);   q1  = q(i,k,j+1); q2  = q(i,k,j+2)
+                        qn1 = q(i,k,j-1); qn2 = q(i,k,j-2); qn3 = q(i,k,j-3)
+                        !Calculation of 6th order fluxes for later application of 5th order diffusive terms
+                        tmp = 37*(q0+qn1) - 8*(q1+qn2) + (q2+qn3)
+                        tmp = u*tmp
+                        !Application of 5th order diffusive terms
+                        tmp = tmp - abs(u) * (10*(q0-qn1) -  5*(q1-qn2) + (q2-qn3))
+                        !Calculation of Upwind fluxes
+                        flux_y_up(i,k,j) = ((u + ABS(u)) * qn1 + (u - ABS(u)) * q0)  * 0.5 * 0.5 ! additional "0.5" since we only want half of the upwind step
+                        !Application of Upwind fluxes to higher order fluxes -- needed for flux correction step
+                        flux_y(i,k,j) = tmp*coef
+                    enddo
+                enddo
+            enddo
+        endif
+        
+        if (vorder==3) then
+            coef = (1./12)
+            do j = j_s,j_e
+                do k = kms+2,kme-1
+                    do i = i_s,i_e
+                        u = W_m(i,k-1,j)
+                        q0  = q(i,k,j);   q1  = q(i,k+1,j)
+                        qn1 = q(i,k-1,j); qn2 = q(i,k-2,j)
+                        !Calculation of 4th order fluxes for later application of 3rd order diffusive terms
+                        tmp = 7*(q0+qn1) - (q1+qn2)
+                        tmp = u*tmp
+                        !Application of 3rd order diffusive terms
+                        tmp = tmp - abs(u) * (3 * (q0 - qn1) - (q1 - qn2))
+                        !Calculation of Upwind fluxes
+                        flux_z_up(i,k,j) = ((u + ABS(u)) * qn1 + (u - ABS(u)) * q0)  * 0.5 * 0.5 ! additional "0.5" since we only want half of the upwind step
+                        !Application of Upwind fluxes to higher order fluxes -- needed for flux correction step
+                        flux_z(i,k,j) = tmp*coef         
+                    enddo
+                enddo
+            enddo
+            do j = j_s,j_e
+                do i = i_s,i_e
+                    u = W_m(i,kms,j)
+                    !Do simple upwind for the cells who's stencil does not allow higher-order
+                    flux_z(i,kms+1,j) = ((u + ABS(u)) * q(i,kms,j) + (u - ABS(u)) * q(i,kms+1,j))  * 0.5  
+                    flux_z_up(i,kms+1,j) = flux_z(i,kms+1,j) * 0.5 ! additional "0.5" since we only want half of the upwind step
+                    
+                    u = W_m(i,kme-1,j)
+                    flux_z(i,kme,j) = ((u + ABS(u)) * q(i,kme-1,j) + (u - ABS(u)) * q(i,kme,j))  * 0.5  
+                    flux_z_up(i,kme,j) = flux_z(i,kme,j) * 0.5 ! additional "0.5" since we only want half of the upwind step
+                enddo
+            enddo
+        else if (vorder==5) then
+            coef = (1./60)
+            do j = j_s,j_e
+                do k = kms+3,kme-2
+                    do i = i_s,i_e
+                        u = W_m(i,k-1,j)
+                        q0  = q(i,k,j);   q1  = q(i,k+1,j);  q2 = q(i,k+2,j)
+                        qn1 = q(i,k-1,j); qn2 = q(i,k-2,j); qn3 = q(i,k-3,j)
+                        !Calculation of 6th order fluxes for later application of 5th order diffusive terms
+                        tmp = 37*(q0+qn1) - 8*(q1+qn2) + (q2+qn3)
+                        tmp = u*tmp
+                        !Application of 5th order diffusive terms
+                        tmp = tmp - abs(u) * (10*(q0-qn1) -  5*(q1-qn2) + (q2-qn3))
+                        !Calculation of Upwind fluxes
+                        flux_z_up(i,k,j) = ((u + ABS(u)) * qn1 + (u - ABS(u)) * q0)  * 0.5 * 0.5 ! additional "0.5" since we only want half of the upwind step
+                        !Application of Upwind fluxes to higher order fluxes -- needed for flux correction step
+                        flux_z(i,k,j) = tmp*coef
+                    enddo
+                enddo
+            enddo
+            coef = (1./12)
+            do j = j_s,j_e
+                do i = i_s,i_e
+                    u = W_m(i,kms+1,j)
+                    q0  = q(i,kms+2,j);   q1  = q(i,kms+3,j)
+                    qn1 = q(i,kms-1,j);   qn2 = q(i,kms,j)
+                    
+                    tmp = 7*(q0+qn1) - (q1+qn2)
+                    tmp = u*tmp
+                    !Application of 3rd order diffusive terms
+                    tmp = tmp - abs(u) * (3 * (q0 - qn1) - (q1 - qn2))
+                    flux_z(i,kms+2,j) = tmp*coef               
+                    flux_z_up(i,kms+2,j) = ((u + ABS(u)) * qn1 + (u - ABS(u)) * q0)  * 0.5 * 0.5 ! additional "0.5" since we only want half of the upwind step
+
+                    u = W_m(i,kme-2,j)
+                    q0  = q(i,kme-1,j);   q1  = q(i,kme,j)
+                    qn1 = q(i,kme-2,j);   qn2 = q(i,kme-3,j)
+
+                    tmp = 7*(q0+qn1) - (q1+qn2)
+                    tmp = u*tmp
+                    !Application of 3rd order diffusive terms
+                    tmp = tmp - abs(u) * (3 * (q0 - qn1) - (q1 - qn2))
+                    flux_z(i,kme-1,j) = tmp*coef               
+                    flux_z_up(i,kme-1,j) = ((u + ABS(u)) * qn1 + (u - ABS(u)) * q0)  * 0.5 * 0.5 ! additional "0.5" since we only want half of the upwind step
+
+                    u = W_m(i,kms,j)
+                    !Do simple upwind for the cells who's stencil does not allow higher-order
+                    flux_z(i,kms+1,j) = ((u + ABS(u)) * q(i,kms,j) + &
+                                         (u - ABS(u)) * q(i,kms+1,j))  * 0.5
+                    flux_z_up(i,kms+1,j) = flux_z(i,kms+1,j) * 0.5 ! additional "0.5" since we only want half of the upwind step
+
+                    u = W_m(i,kme-1,j)
+                    flux_z(i,kme,j) = ((u + ABS(u)) * q(i,kme-1,j) + &
+                                       (u - ABS(u)) * q(i,kme,j))  * 0.5
+                    flux_z_up(i,kme,j) = flux_z(i,kme,j) * 0.5 ! additional "0.5" since we only want half of the upwind step
+                enddo
+            enddo
+        endif
+                                                          
+        !Handle top and bottom boundaries for z here
+        do j = j_s,j_e
+            do i = i_s,i_e
+                flux_z(i,kms,j) = 0
+                flux_z_up(i,kms,j) = 0
+                flux_z(i,kme+1,j) = q(i,kme,j) * W_m(i,kme,j)
+                flux_z_up(i,kme+1,j) = flux_z(i,kme+1,j) * 0.5 ! additional "0.5" since we only want half of the upwind step
+            enddo
+        enddo
+    end subroutine flux3_w_up
+
+
+    subroutine adv_std_advect3d(qfluxes,qold,dz,jaco,t_factor_in)
+        ! !DIR$ INLINEALWAYS adv_std_advect3d
         implicit none
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(inout)   :: qfluxes
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: qold
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: dz
         real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: jaco
         real, optional,                              intent(in)      :: t_factor_in
-        integer, optional,                           intent(in)      :: flux_corr
         ! interal parameters
         real, dimension(i_s:i_e+1,kms:kme,j_s:j_e)   :: flux_x
         real, dimension(i_s:i_e,  kms:kme,j_s:j_e+1) :: flux_y
         real, dimension(i_s:i_e,  kms:kme+1,j_s:j_e) :: flux_z
         real    :: t_factor
+        integer :: i, k, j
         
-        ! !$omp parallel shared(qin,q,u,v,w) firstprivate(nx,ny,nz) private(i,f1,f3,f4,f5)
-        ! !$omp do schedule(static)
-        !do i=jms,jme
-        !    q(:,:,i)=qin(:,:,i)
-        !enddo
-                
-        ! !$omp end do
-        ! !$omp barrier
-        ! !$omp do schedule(static)
-            ! by manually inlining the flux2 call we should remove extra array copies that the compiler doesn't remove.
-            ! equivalent flux2 calls are left in for reference (commented) to restore recall that f1,f3,f4... arrays should be 3D : n x m x 1
-            
+        
         !Initialize t_factor, which is used during RK time stepping to scale the time step
         t_factor = 1.0
         if (present(t_factor_in)) t_factor = t_factor_in
         
-
-        call flux3(qfluxes,U_m(i_s:i_e+1,:,j_s:j_e)*t_factor,&
-                            V_m(i_s:i_e,:,j_s:j_e+1)*t_factor,&
-                            W_m(i_s:i_e,:,j_s:j_e)*t_factor,flux_x,flux_z,flux_y)
+        call flux3(qfluxes,flux_x,flux_z,flux_y,t_factor)
         
-        if (present(flux_corr)) then
-            if (flux_corr == kFLUXCOR_MONO) then
-                !Calculate flux corrections as done by WRF (Wang et al., 2009)
-                call WRF_flux_corr(qold,U_m(i_s:i_e+1,:,j_s:j_e),&
-                                        V_m(i_s:i_e,:,j_s:j_e+1),&
-                                        W_m(i_s:i_e,:,j_s:j_e),flux_x,flux_z,flux_y, &
-                                jaco(i_s:i_e,:,j_s:j_e),dz(i_s:i_e,:,j_s:j_e),rho(i_s:i_e,:,j_s:j_e))
-            endif
-        endif
-        qfluxes = qold
-
-        ! perform horizontal advection, from difference terms
-        qfluxes(its:ite,:,jts:jte)  = qfluxes(its:ite,:,jts:jte)  - &
-                                   ((flux_x(its+1:ite+1,:,jts:jte) - flux_x(its:ite,:,jts:jte)) + &
-                                   (flux_y(its:ite,:,jts+1:jte+1) - flux_y(its:ite,:,jts:jte))) &
-                                   / (jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))                      
-               ! then vertical (order doesn't matter because fluxes f1-6 are calculated before applying them)
-               ! add fluxes to middle layers
-        qfluxes(its:ite,:,jts:jte) = qfluxes(its:ite,:,jts:jte)  &
-                                   - (flux_z(its:ite,kms+1:kme+1,jts:jte) - flux_z(its:ite,kms:kme,jts:jte)) &
-                                   / (dz(its:ite,:,jts:jte)*jaco(its:ite,:,jts:jte)*rho(its:ite,:,jts:jte))
-
-        ! !$omp end do
-        ! !$omp end parallel
-        
-        !qfluxes(its:ite,:,jts:jte)  = qfluxes(its:ite,:,jts:jte)  + &
-        !                           20*((qold(its+1:ite+1,:,jts:jte) - 2*qold(its:ite,:,jts:jte) + qold(its-1:ite-1,:,jts:jte)) + &
-        !                           (qold(its:ite,:,jts+1:jte+1) - 2*qold(its:ite,:,jts:jte) + qold(its:ite,:,jts-1:jte-1))) &
-        !                           / (4*dx)                      
-
+        do j = jts,jte
+            do k = kms,kme
+                do i = its,ite
+                    ! perform advection, from difference terms
+                    qfluxes(i,k,j)  = qold(i,k,j)  - &
+                                  ((flux_x(i+1,k,j) - flux_x(i,k,j))  + &
+                                   (flux_y(i,k,j+1) - flux_y(i,k,j))  + &
+                                   (flux_z(i,k+1,j) - flux_z(i,k,j))  / &
+                                   dz(i,k,j))                         / &
+                                   (jaco(i,k,j)*rho(i,k,j))
+                enddo
+            enddo
+        enddo
         
     end subroutine adv_std_advect3d
+    
+    
+    subroutine adv_fluxcorr_advect3d(qfluxes,qold,dz,jaco)
+        ! !DIR$ INLINEALWAYS adv_std_advect3d
+        implicit none
+        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(inout)   :: qfluxes
+        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: qold
+        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: dz
+        real, dimension(ims:ime,  kms:kme,jms:jme),  intent(in)      :: jaco
+        ! interal parameters
+        real, dimension(i_s:i_e+1,kms:kme,j_s:j_e)   :: flux_x, flux_x_up
+        real, dimension(i_s:i_e,  kms:kme,j_s:j_e+1) :: flux_y, flux_y_up
+        real, dimension(i_s:i_e,  kms:kme+1,j_s:j_e) :: flux_z, flux_z_up
+
+        integer :: i, k, j
+        
+                
+        call flux3_w_up(qfluxes,flux_x,flux_z,flux_y,flux_x_up,flux_z_up,flux_y_up)
+
+        call WRF_flux_corr(qold,U_m,V_m,W_m,flux_x,flux_z,flux_y,flux_x_up,flux_z_up,flux_y_up,jaco,dz,rho)
+        
+        do j = jts,jte
+            do k = kms,kme
+                do i = its,ite
+                    ! perform advection, from difference terms
+                    qfluxes(i,k,j)  = qold(i,k,j)  - &
+                                  ((flux_x(i+1,k,j) - flux_x(i,k,j))  + &
+                                   (flux_y(i,k,j+1) - flux_y(i,k,j))  + &
+                                   (flux_z(i,k+1,j) - flux_z(i,k,j))  / &
+                                   dz(i,k,j))                         / &
+                                   (jaco(i,k,j)*rho(i,k,j))
+                enddo
+            enddo
+        enddo
+        
+    end subroutine adv_fluxcorr_advect3d
+
 
     ! subroutine setup_cu_winds(domain, options, dt)
     !     implicit none
@@ -419,12 +693,12 @@ contains
         real, allocatable :: du(:,:), dv(:,:), dw(:,:)
         integer :: i,j,k
 
-        allocate(du(ims+1:ime-1,jms+1:jme-1))
-        allocate(dv(ims+1:ime-1,jms+1:jme-1))
-        allocate(dw(ims+1:ime-1,jms+1:jme-1))
+        allocate(du(i_s:i_e,j_s:j_e))
+        allocate(dv(i_s:i_e,j_s:j_e))
+        allocate(dw(i_s:i_e,j_s:j_e))
 
-        do i=ims+1,ime-1
-            do j=jms+1,jme-1
+        do i=i_s,i_e
+            do j=j_s,j_e
                 do k=kms,kme
                     du(i,j) = (U_m(i+1,k,j)-U_m(i,k,j))
                     dv(i,j) = (V_m(i,k,j+1)-V_m(i,k,j))
@@ -450,20 +724,9 @@ contains
         type(options_t),    intent(in)  :: options
         type(domain_t),  intent(inout) :: domain
         real,intent(in)::dt
-        real, allocatable, dimension(:,:,:) :: rho_i
-
         
-        ! if this if the first time we are called, we need to allocate the module level arrays
-        ! Could/should be put in an init procedure
-        if (.not.allocated(U_m)) then
-            allocate(U_m     (ims+1:ime,kms:kme,jms:jme  ))
-            allocate(V_m     (ims:ime,  kms:kme,jms+1:jme))
-            allocate(W_m     (ims:ime,  kms:kme,jms:jme  ))
-            !allocate(lastqv_m(ims:ime,  kms:kme,jms:jme  ))
-        endif
-        allocate(rho_i     (ims:ime,  kms:kme-1,jms:jme  ))
-
-
+        integer :: i, j, k
+        
         ! if (options%physics%convection > 0) then
             ! print*, "Advection of convective winds not enabled in ICAR >=1.5 yet"
             ! stop
@@ -476,20 +739,51 @@ contains
              ! since non-uniform dz spacing does not allow for the same spacing to be assumed on either side of a k+1/2 interface,
              ! as is required for the adv4 scheme.
             dx = domain%dx
-            rho = 1
-            if (options%parameters%advect_density) rho = domain%density%data_3d  
             
-            rho_i(:,kms:kme-1,:) = ( rho(:,kms:kme-1,:)*domain%advection_dz(:,kms:kme-1,:) + rho(:,kms+1:kme,:)*domain%advection_dz(:,kms+1:kme,:) ) &
-                                    / (domain%advection_dz(:,kms:kme-1,:)+domain%advection_dz(:,kms+1:kme,:))
-        
-            U_m = domain%u%data_3d(ims+1:ime,:,:) * dt * (rho(ims+1:ime,:,:)+rho(ims:ime-1,:,:))*0.5 * &
-                    domain%jacobian_u(ims+1:ime,:,:) / domain%dx
-            V_m = domain%v%data_3d(:,:,jms+1:jme) * dt * (rho(:,:,jms+1:jme)+rho(:,:,jms:jme-1))*0.5 * &
-                    domain%jacobian_v(:,:,jms+1:jme) / domain%dx
-                    
-            W_m(:,kms:kme-1,:) = domain%w%data_3d(:,kms:kme-1,:) * dt * domain%jacobian_w(:,kms:kme-1,:) * rho_i
-            W_m(:,kme,:) = domain%w%data_3d(:,kme,:) * dt * domain%jacobian_w(:,kme,:) * rho(:,kme,:)
-
+            if (options%parameters%advect_density) then
+                do j = jms,jme
+                    do k = kms,kme
+                        rho(:,k,j) = domain%density%data_3d(:,k,j)  
+                    enddo
+                enddo
+            else
+                do j = jms,jme
+                    do k = kms,kme
+                        rho(:,k,j) = 1
+                    enddo
+                enddo
+            endif
+            do j = j_s,j_e
+                do k = kms,kme
+                    do i = i_s,i_e+1
+                        U_m(i,k,j) = domain%u%data_3d(i,k,j) * dt * (rho(i,k,j)+rho(i-1,k,j))*0.5 * &
+                                domain%jacobian_u(i,k,j) / domain%dx
+                    enddo
+                enddo
+            enddo
+            do j = j_s,j_e+1
+                do k = kms,kme
+                    do i = i_s,i_e
+                        V_m(i,k,j) = domain%v%data_3d(i,k,j) * dt * (rho(i,k,j)+rho(i,k,j-1))*0.5 * &
+                                domain%jacobian_v(i,k,j) / domain%dx
+                    enddo
+                enddo
+            enddo
+            do j = j_s,j_e
+                do k = kms,kme-1
+                    do i = i_s,i_e
+                        W_m(i,k,j) = domain%w%data_3d(i,k,j) * dt * domain%jacobian_w(i,k,j) * &
+                                                ( rho(i,k,j)*domain%advection_dz(i,k,j) + &
+                                                  rho(i,k+1,j)*domain%advection_dz(i,k+1,j) ) / &
+                                                 (domain%advection_dz(i,k,j)+domain%advection_dz(i,k+1,j))
+                    enddo
+                enddo
+            enddo
+            do j = j_s,j_e
+                do i = i_s,i_e
+                    W_m(i,kme,j) = domain%w%data_3d(i,kme,j) * dt * domain%jacobian_w(i,kme,j) * rho(i,kme,j)
+                enddo
+            enddo
     end subroutine adv_std_compute_wind
 
     subroutine setup_advection_dz(domain, options)

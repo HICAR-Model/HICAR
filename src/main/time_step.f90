@@ -345,10 +345,10 @@ contains
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" rad(domain", fix=.True.)
                 call rad_timer%stop()
 
-                !call lsm_timer%start()
+                call lsm_timer%start()
                 call lsm(domain, options, real(dt%seconds()))!, halo=1)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" lsm")
-                !call lsm_timer%stop()
+                call lsm_timer%stop()
 
                 call pbl_timer%start()
                 call pbl(domain, options, real(dt%seconds()))!, halo=1)
