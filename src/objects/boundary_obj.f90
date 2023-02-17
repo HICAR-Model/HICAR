@@ -291,7 +291,7 @@ contains
 
         do while (domain_vars%has_more_elements())
             test_variable = domain_vars%next()
-            call add_var_hi_to_dict(this%variables_hi, test_variable%forcing_var, test_variable%n_dimensions, test_variable%dim_len)
+            call add_var_hi_to_dict(this%variables_hi, test_variable%forcing_var, test_variable%grid)
         enddo
 
     end subroutine
@@ -463,22 +463,16 @@ contains
 
     end subroutine
     
-    subroutine add_var_hi_to_dict(var_dict, var_name, ndims, dims)
+    subroutine add_var_hi_to_dict(var_dict, var_name, grid)
         implicit none
         type(var_dict_t), intent(inout) :: var_dict
         character(len=*), intent(in)    :: var_name
-        integer,          intent(in)    :: ndims
-        integer,          intent(in)    :: dims(3)
+        type(grid_t),     intent(in)    :: grid
 
         type(variable_t)  :: new_variable
 
-        if (ndims==2) then
-            call new_variable%initialize( [dims(1), dims(2)] , var_name)
-            call var_dict%add_var(var_name, new_variable)
-        elseif (ndims==3) then
-            call new_variable%initialize( [dims(1),dims(2),dims(3)] , var_name)
-            call var_dict%add_var(var_name, new_variable)
-        endif
+        call new_variable%initialize( grid, var_name)
+        call var_dict%add_var(var_name, new_variable)
 
     end subroutine
 
