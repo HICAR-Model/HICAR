@@ -2148,16 +2148,18 @@ contains
         !Define parameters
         integer :: roughness
         logical :: terr_diff, Sx, wind_only
-        real    :: Sx_dmax
+        real    :: Sx_dmax, Sx_scale_ang, TPI_scale
         
         !Make name-list
-        namelist /wind/ terr_diff, Sx, wind_only, Sx_dmax, roughness
+        namelist /wind/ terr_diff, Sx, wind_only, Sx_dmax, Sx_scale_ang, TPI_scale, roughness
         
         !Set defaults
         terr_diff = .False.
         Sx = .False.
         roughness = 0 ! No roughness correction, the only one implemented so far
         Sx_dmax = 300.0
+        Sx_scale_ang = 30.0
+        TPI_scale = 400.0
         wind_only = .False.
         
         !Read namelist file
@@ -2172,6 +2174,8 @@ contains
         options%wind%terr_diff = terr_diff
         options%wind%Sx = Sx
         options%wind%Sx_dmax = Sx_dmax
+        options%wind%TPI_scale = TPI_scale
+        options%wind%Sx_scale_ang = Sx_scale_ang
         options%wind%roughness = roughness
         options%wind%wind_only = wind_only
     

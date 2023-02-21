@@ -32,6 +32,8 @@ module options_types
         logical :: terr_diff
         logical :: Sx
         real    :: Sx_dmax
+        real    :: TPI_scale
+        real    :: Sx_scale_ang
         integer :: roughness
         logical :: wind_only
     end type wind_type
