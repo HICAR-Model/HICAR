@@ -21,9 +21,10 @@ module wind_surf
     real, parameter :: deg2rad=0.017453293 !2*pi/360
     real, parameter :: rad2deg=57.2957779371
     integer, save :: TPI_k_max, Sx_k_max = 0
-    real, parameter :: SX_SCALE_ANG = 30.0 !This means that for a (SX_SCALE_ANG/2)-degree difference between threshold and Sx, 
+    real, save    :: TPI_scale, Sx_scale_ang
+    ! real, parameter :: SX_SCALE_ANG = 30.0 !This means that for a (SX_SCALE_ANG/2)-degree difference between threshold and Sx, 
                             !reversal starts. Can be thought of as minimum terrain slope necesarry for flow reversal
-    real, parameter :: TPI_SCALE = 200.0
+    ! real, parameter :: TPI_SCALE = 200.0
     real, parameter :: SX_Z_MAX = 1500.0
     real, parameter :: TPI_Z_MAX = 200.0
                                               
@@ -108,6 +109,9 @@ contains
         real              :: search_height, pt_height, h_diff, Sx_temp, maxSxVal, TPI_Shelter_temp, exposed_TPI, z_mean
 
         d_max = options%wind%Sx_dmax
+        TPI_scale = options%wind%TPI_scale
+        Sx_scale_ang = options%wind%Sx_scale_ang
+
         search_max = floor(max(1.0,d_max/domain%dx))
        
         if (Sx_k_max==0 .or. TPI_k_max==0) then
@@ -443,7 +447,7 @@ contains
                         !If surface was sheltered and we are still sheltered
                         if ((Sx_curr(i,kms,j) > thresh_ang(i,j)) .and. (Sx_curr(i,k,j) > thresh_ang(i,j))) then
                             !Sheltered correction
-                            Sx_corr(i,k,j) = (Sx_curr(i,k,j)-thresh_ang(i,j))/SX_SCALE_ANG
+                            Sx_corr(i,k,j) = (Sx_curr(i,k,j)-thresh_ang(i,j))/Sx_scale_ang
                         end if
                     endif
 
@@ -451,7 +455,7 @@ contains
                     !Compute TPI_corr, only for negative TPI's (valleys)
                     if ((k <= TPI_k_max) .and. (TPI(i,j) < 0)) then
                         !Scale TPI correction and exposure with height so we smoothly merge with forcing data
-                        TPI_corr(i,k,j) = (TPI(i,j)/TPI_SCALE) * (1.0*(TPI_k_max+1-k)/TPI_k_max) !This is setup such that valleys <= -100
+                        TPI_corr(i,k,j) = (TPI(i,j)/TPI_scale) * (1.0*(TPI_k_max+1-k)/TPI_k_max) !This is setup such that valleys <= -100
                     end if
                 end do
             end do
