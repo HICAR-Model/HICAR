@@ -1197,7 +1197,7 @@ contains
             var%three_d     = .False.
             var%two_d       = .True.
             var%unlimited_dim=.True.
-            var%attributes  = [attribute_t("standard_name", "incoming direct shortwave radiation"), &
+            var%attributes  = [attribute_t("standard_name", "incoming direct longwave radiation"), &
                                attribute_t("units",         "W m-2"),                                    &
                                attribute_t("coordinates",   "lat lon")]
         end associate
