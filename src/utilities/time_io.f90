@@ -177,8 +177,8 @@ contains
 
         type(Time_type), allocatable :: times_in_file_up(:), times_in_file_down(:)
         type(time_delta_t) :: max_dt
-        integer :: i, n_t_down, n_t_up, nup, ndown, nup_o, ndown_o
-        logical :: found
+        integer :: i, n_t_down, n_t_up, nup, ndown, nup_o, ndown_o, ierr
+        logical :: found, fileExists
 
         call max_dt%set(seconds=1.0)
         if (present(error)) error=0
@@ -188,6 +188,24 @@ contains
         
         nup = size(filelist)
         ndown=1
+        ierr = 1
+        
+        !Find last existing file in file list (necesarray if doing runs concurrently)
+        do while (ierr==1)
+            !See if nup exists
+            inquire(file=filelist(nup), exist=fileExists)
+
+            !If nup does exist, set ierr to 0
+            if (fileExists) then
+                ierr = 0
+            !else if nup does not exist, decrement nup
+            else
+                nup = nup-1
+            endif
+            !If we reach beginning and nothing has existed, stop and error
+            if (nup < 1) stop "No files in file list exist"
+        enddo
+
         ndown_o = ndown
         nup_o = nup
 
