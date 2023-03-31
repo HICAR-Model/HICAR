@@ -290,14 +290,14 @@ contains
     !! @param next_output   Next time to write an output file (in "model_time")
     !!
     !!------------------------------------------------------------
-    subroutine step(domain, forcing, end_time, dt_in, options, mp_timer, adv_timer, exch_timer)
+    subroutine step(domain, forcing, end_time, dt_in, options, mp_timer, adv_timer, rad_timer, lsm_timer, pbl_timer, exch_timer, send_timer, ret_timer, wait_timer, forcing_timer, diagnostic_timer, wind_bal_timer)
         implicit none
         type(domain_t),     intent(inout)   :: domain
         type(boundary_t),   intent(in)      :: forcing
         type(Time_type),    intent(in)      :: end_time
         type(time_delta_t), intent(in)      :: dt_in
         type(options_t),    intent(in)      :: options
-        type(timer_t),      intent(inout)   :: mp_timer, adv_timer, exch_timer
+        type(timer_t),      intent(inout)   :: mp_timer, adv_timer, rad_timer, lsm_timer, pbl_timer, exch_timer, send_timer, ret_timer, wait_timer, forcing_timer, diagnostic_timer, wind_bal_timer
 
         real :: last_print_time
         type(time_delta_t) :: time_step_size, dt
@@ -316,12 +316,18 @@ contains
             endif
 
             ! ! apply/update boundary conditions including internal wind and pressure changes.
-            call domain%apply_forcing(forcing,dt)
-            
+            call forcing_timer%start()
+            call domain%apply_forcing(forcing,options,real(dt%seconds()))
+            call forcing_timer%stop()
+
+            call diagnostic_timer%start()
             call domain%diagnostic_update(options)
+            call diagnostic_timer%stop()
 
             ! if using advect_density winds need to be balanced at each update
+            call wind_bal_timer%start()
             if (options%parameters%advect_density) call balance_uvw(domain,options)
+            call wind_bal_timer%stop()
 
             ! if an interactive run was requested than print status updates everytime at least 5% of the progress has been made
             if (options%parameters%interactive .and. (this_image()==1)) then
@@ -334,13 +340,19 @@ contains
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" init", fix=.True.)
 
                 ! first process the halo section of the domain (currently hard coded at 1 should come from domain?)
+                call rad_timer%start()
                 call rad(domain, options, real(dt%seconds()))
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" rad(domain", fix=.True.)
-                
+                call rad_timer%stop()
+
+                call lsm_timer%start()
                 call lsm(domain, options, real(dt%seconds()))!, halo=1)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" lsm")
+                call lsm_timer%stop()
 
+                call pbl_timer%start()
                 call pbl(domain, options, real(dt%seconds()))!, halo=1)
+                call pbl_timer%stop()
                 ! balance u/v and re-calculate dt after winds have been modified by pbl:
                 ! if (options%physics%boundarylayer==kPBL_YSU) then
                 !     call balance_uvw(   domain%u%data_3d,   domain%v%data_3d,   domain%w%data_3d,       &
@@ -361,15 +373,14 @@ contains
                 
                 call exch_timer%start()
                 if (options%parameters%batched_exch) then
-                    call domain%halo_exchange_batch()
+                    call domain%halo_3d_exchange_batch(send_timer, ret_timer, wait_timer)
                 else
-                    call domain%halo_exchange()
+                    call domain%halo_exchange(send_timer,ret_timer,wait_timer)
                 endif
                 call exch_timer%stop()
 
 
                 call adv_timer%start()
-
                 call advect(domain, options, real(dt%seconds()))
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" advect(domain", fix=.True.)
                 call adv_timer%stop()

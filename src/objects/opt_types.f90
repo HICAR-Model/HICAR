@@ -31,7 +31,10 @@ module options_types
     type wind_type
         logical :: terr_diff
         logical :: Sx
+        logical :: thermal
         real    :: Sx_dmax
+        real    :: TPI_scale
+        real    :: Sx_scale_ang
         integer :: roughness
         logical :: wind_only
     end type wind_type
@@ -170,6 +173,33 @@ module options_types
         logical :: monthly_vegfrac
         logical :: surface_diagnostics !! MJ added
         logical :: monthly_albedo
+        integer :: sf_urban_phys
+        
+        integer :: nmp_dveg
+        integer :: nmp_opt_crs
+        integer :: nmp_opt_sfc
+        integer :: nmp_opt_btr
+        integer :: nmp_opt_run
+        integer :: nmp_opt_infdv
+        integer :: nmp_opt_frz
+        integer :: nmp_opt_inf
+        integer :: nmp_opt_rad
+        integer :: nmp_opt_alb
+        integer :: nmp_opt_snf
+        integer :: nmp_opt_tbot
+        integer :: nmp_opt_stc
+        integer :: nmp_opt_gla
+        integer :: nmp_opt_rsf
+        integer :: nmp_opt_soil
+        integer :: nmp_opt_pedo
+        integer :: nmp_opt_crop
+        integer :: nmp_opt_irr
+        integer :: nmp_opt_irrm
+        integer :: nmp_opt_tdrn
+        integer :: nmp_iz0tlnd
+        integer :: noahmp_output
+        real    :: nmp_soiltstep
+
     end type lsm_options_type
 
     ! ------------------------------------------------
@@ -248,7 +278,8 @@ module options_types
                                         lat_ext, lon_ext, swe_ext, hsnow_ext, rho_snow_ext, tss_ext, &
                                         tsoil2D_ext, tsoil3D_ext, z_ext, time_ext
 
-        character(len=MAXVARLENGTH) :: svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var, factor_p_var   !!MJ added
+        character(len=MAXVARLENGTH) :: svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var, ridge_dist_var, &
+                                       valley_dist_var, ridge_drop_var, factor_p_var !!MJ added
                                         
 
         character(len=MAXVARLENGTH) :: vars_to_read(kMAX_STORAGE_VARS)

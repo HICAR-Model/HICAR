@@ -20,10 +20,14 @@ module wind_surf
     public :: calc_Sx, calc_TPI, apply_Sx
     real, parameter :: deg2rad=0.017453293 !2*pi/360
     real, parameter :: rad2deg=57.2957779371
-    !Values coming from COSMO-2 downscaling regression analysis per Winstral et al. 2017
-    real, parameter, dimension(3,3) :: beta = reshape([-0.464, -0.236, 0.229, 0.155, 0.413, -0.055, 0.033, 0.031, 0.0],[3,3])
+    integer, save :: TPI_k_max, Sx_k_max = 0
+    real, save    :: TPI_scale, Sx_scale_ang
+    ! real, parameter :: SX_SCALE_ANG = 30.0 !This means that for a (SX_SCALE_ANG/2)-degree difference between threshold and Sx, 
+                            !reversal starts. Can be thought of as minimum terrain slope necesarry for flow reversal
+    ! real, parameter :: TPI_SCALE = 200.0
+    real, parameter :: SX_Z_MAX = 1500.0
+    real, parameter :: TPI_Z_MAX = 200.0
                                               
-    
     
 contains
 
@@ -102,23 +106,35 @@ contains
         integer, allocatable :: azm_indices(:,:), valid_ks(:)
         integer           :: d_max, search_max, i, j, k, ang, i_s, j_s, i_start_buffer, i_end_buffer, j_start_buffer, j_end_buffer
         integer           :: rear_ang, fore_ang, test_ang, rear_ang_diff, fore_ang_diff, ang_diff, k_max, window_rear, window_fore, maxSxLoc, window_width
-        real              :: search_height, pt_height, h_diff, Sx_temp, maxSxVal, TPI_Shelter_temp, exposed_TPI
+        real              :: search_height, pt_height, h_diff, Sx_temp, maxSxVal, TPI_Shelter_temp, exposed_TPI, z_mean
 
         d_max = options%wind%Sx_dmax
-        k_max = 30 !Max number of layers to compute Sx for
+        TPI_scale = options%wind%TPI_scale
+        Sx_scale_ang = options%wind%Sx_scale_ang
+
         search_max = floor(max(1.0,d_max/domain%dx))
-        
+       
+        if (Sx_k_max==0 .or. TPI_k_max==0) then
+            do k = domain%grid%kms,domain%grid%kme
+                z_mean = SUM(domain%global_z_interface(:,k,:)-domain%global_z_interface(:,domain%grid%kms,:))/SIZE(domain%global_z_interface(:,k,:))
+                if (z_mean > SX_Z_MAX .and. Sx_k_max==0) Sx_k_max = max(2,k-1)
+                if (z_mean > TPI_Z_MAX .and. TPI_k_max==0) TPI_k_max = max(2,k-1)
+            enddo
+        endif
+
+        Sx_k_max = max(Sx_k_max,TPI_k_max) !Ensure that Sx_k_max is larger than TPI_k_max, since we use this max to index correction vars
+
         exposed_TPI = 10.0
         
         ! Initialize Sx and set to value of -90 (absolute minimum possible) for search algorithm
-        allocate(domain%Sx( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:k_max, domain%grid2d%jms:domain%grid2d%jme ))
-        allocate(Sx_array_temp( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:k_max, domain%grid2d%jms:domain%grid2d%jme ))
+        allocate(domain%Sx( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:Sx_k_max, domain%grid2d%jms:domain%grid2d%jme ))
+        allocate(Sx_array_temp( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:Sx_k_max, domain%grid2d%jms:domain%grid2d%jme ))
         
         Sx_array_temp = -90.0
         domain%Sx = -90.0
         
-        allocate(temp_sheltering_TPI( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:k_max, domain%grid2d%jms:domain%grid2d%jme ))
-        allocate(sheltering_TPI( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:k_max, domain%grid2d%jms:domain%grid2d%jme ))
+        allocate(temp_sheltering_TPI( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:Sx_k_max, domain%grid2d%jms:domain%grid2d%jme ))
+        allocate(sheltering_TPI( 1:72, domain%grid2d%ims:domain%grid2d%ime, 1:Sx_k_max, domain%grid2d%jms:domain%grid2d%jme ))
 
         temp_sheltering_TPI = 0.0
         sheltering_TPI = 0.0
@@ -150,7 +166,7 @@ contains
         
         do i=domain%grid2d%ims, domain%grid2d%ime
             do j=domain%grid2d%jms, domain%grid2d%jme
-                do k = 1, k_max
+                do k = 1, Sx_k_max
 
                     if (k == 1) then
                         pt_height = domain%global_terrain(i,j)
@@ -299,7 +315,7 @@ contains
         !       , mask out negative (exposed) Sx shere the element is not "porminent"
         do i=domain%grid2d%ims, domain%grid2d%ime
             do j=domain%grid2d%jms, domain%grid2d%jme
-                do k = 1, k_max
+                do k = 1, Sx_k_max
                     do ang = 1, 72
                         if( (domain%Sx(ang,i,k,j) < 0.0) .and. (domain%global_TPI(i,j) <= exposed_TPI) ) domain%Sx(ang,i,k,j) = 0.0
                         if( (domain%Sx(ang,i,k,j) > 0.0) .and. (sheltering_TPI(ang,i,k,j) <= exposed_TPI) ) domain%Sx(ang,i,k,j) = 0.0
@@ -357,24 +373,17 @@ contains
     
     
 
-    subroutine apply_Sx(Sx, TPI, u, v, w, Ri, dzdx, dzdy, glob_z)
+    subroutine apply_Sx(Sx, TPI, u, v, w, Ri, dzdx, dzdy)
         implicit none
-        real, intent(in)                       :: Sx(:,:,:,:), TPI(:,:), Ri(:,:,:), dzdx(:,:,:), dzdy(:,:,:), glob_z(:,:,:)
+        real, intent(in)                       :: Sx(:,:,:,:), TPI(:,:), Ri(:,:,:), dzdx(:,:,:), dzdy(:,:,:)
         real, intent(inout),  dimension(:,:,:) :: u, v, w
         
         real, allocatable, dimension(:,:)   :: winddir, x_norm, y_norm, thresh_ang
         real, allocatable, dimension(:,:,:) :: Sx_U_corr, Sx_V_corr, Sx_curr, Sx_corr, TPI_corr
 
         integer ::  i, j, k, ims, ime, jms, jme, kms
-        real    ::  Ri_num, WS, max_spd, z_mean, SX_Z_MAX, TPI_Z_MAX, SX_SCALE_ANG, TPI_SCALE
-        integer, save :: TPI_k_max, Sx_k_max = 0
+        real    ::  Ri_num, WS, max_spd
                 
-        SX_SCALE_ANG = 30.0 !This means that for a (SX_SCALE_ANG/2)-degree difference between threshold and Sx, 
-                            !reversal starts. Can be thought of as minimum terrain slope necesarry for flow reversal
-        TPI_SCALE = 200.0
-        SX_Z_MAX = 1500.0
-        TPI_Z_MAX = 200.0
-        
         ims = lbound(w,1)
         ime = ubound(w,1)
         kms = lbound(w,2)
@@ -385,16 +394,6 @@ contains
         allocate(y_norm(ims:ime,jms:jme))
         allocate(thresh_ang(ims:ime,jms:jme))
        
-        if (Sx_k_max==0 .or. TPI_k_max==0) then
-            do k = kms,ubound(w,2)
-                z_mean =SUM(glob_z(:,k,:)-glob_z(:,kms,:))/SIZE(glob_z(:,k,:))
-                if (z_mean > SX_Z_MAX .and. Sx_k_max==0) Sx_k_max = max(2,k-1)
-                if (z_mean > TPI_Z_MAX .and. TPI_k_max==0) TPI_k_max = max(2,k-1)
-            enddo
-        endif
-
-        Sx_k_max = max(Sx_k_max,TPI_k_max) !Ensure that Sx_k_max is larger than TPI_k_max, since we use this max to index correction vars
-
         allocate(Sx_curr(ims:ime,kms:Sx_k_max,jms:jme))
         allocate(Sx_corr(ims:ime,kms:Sx_k_max,jms:jme))
         allocate(TPI_corr(ims:ime,kms:Sx_k_max,jms:jme))
@@ -448,7 +447,7 @@ contains
                         !If surface was sheltered and we are still sheltered
                         if ((Sx_curr(i,kms,j) > thresh_ang(i,j)) .and. (Sx_curr(i,k,j) > thresh_ang(i,j))) then
                             !Sheltered correction
-                            Sx_corr(i,k,j) = (Sx_curr(i,k,j)-thresh_ang(i,j))/SX_SCALE_ANG
+                            Sx_corr(i,k,j) = (Sx_curr(i,k,j)-thresh_ang(i,j))/Sx_scale_ang
                         end if
                     endif
 
@@ -456,7 +455,7 @@ contains
                     !Compute TPI_corr, only for negative TPI's (valleys)
                     if ((k <= TPI_k_max) .and. (TPI(i,j) < 0)) then
                         !Scale TPI correction and exposure with height so we smoothly merge with forcing data
-                        TPI_corr(i,k,j) = (TPI(i,j)/TPI_SCALE) * (1.0*(TPI_k_max+1-k)/TPI_k_max) !This is setup such that valleys <= -100
+                        TPI_corr(i,k,j) = (TPI(i,j)/TPI_scale) * (1.0*(TPI_k_max+1-k)/TPI_k_max) !This is setup such that valleys <= -100
                     end if
                 end do
             end do

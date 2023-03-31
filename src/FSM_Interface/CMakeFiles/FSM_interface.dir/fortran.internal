@@ -1,0 +1,17 @@
+# The fortran modules provided by this target.
+provides
+ constants.mod
+ diagnostics.mod
+ driving.mod
+ fsm_interface.mod
+ grid.mod
+ landuse.mod
+ modconf.mod
+ mode_write.mod
+ modoutput.mod
+ modtile.mod
+ modules_interface.mod
+ parameters.mod
+ parammaps.mod
+ soilparams.mod
+ state_variables.mod

@@ -559,17 +559,17 @@ contains
             enddo 
             
             !! due to float precision errors, it is possible to exceed (-1 - 1) in which case asin will break
-            where(cos_project_angle < -1)
-               cos_project_angle = -1
-            elsewhere(cos_project_angle > 1)
-               cos_project_angle = 1
-            endwhere       
+            !where(cos_project_angle < -1)
+            !   cos_project_angle = -1
+            !elsewhere(cos_project_angle > 1)
+            !   cos_project_angle = 1
+            !endwhere       
                         
             !! partitioning the total radiation per horizontal plane into the diffusive and direct ones based on https://www.sciencedirect.com/science/article/pii/S0168192320300058, HPEval
             ratio_dif=0.            
             do j = jts,jte
                 do i = its,ite
-                    trans_atm = max(min(domain%shortwave%data_2d(i,j)/( 1367* (sin(solar_elevation_store(i,j)) + 1.e-16) ),1.),0.)   ! atmospheric transmissivity
+                    trans_atm = max(min(domain%shortwave%data_2d(i,j)/( 1367* (sin(solar_elevation_store(i,j)+1.e-4)) ),1.),0.)   ! atmospheric transmissivity
                     if (trans_atm<=0.22) then
                         ratio_dif=1.-0.09*trans_atm  
                     elseif (0.22<trans_atm .and. trans_atm<=0.8) then
@@ -585,8 +585,8 @@ contains
             do j = jts,jte
                 do i = its,ite
                     ! determin maximum allowed direct swr
-                    trans_atm_dir = max(min(SW_dir(i,j)/(1367*sin(solar_elevation_store(i,j))),1.),0.)             ! atmospheric transmissivity for direct sw radiation
-                    max_dir_1     = 1367.*exp(log(1.-0.165)/max(sin(solar_elevation_store(i,j)),0.))            
+                    trans_atm_dir = max(min(SW_dir(i,j)/(1367*sin(solar_elevation_store(i,j)+1.e-4)),1.),0.)  ! atmospheric transmissivity for direct sw radiation
+                    max_dir_1     = 1367.*exp(log(1.-0.165)/max(sin(solar_elevation_store(i,j)),1.e-4))            
                     max_dir_2     = 1367.*trans_atm_dir                          
                     max_dir       = min(max_dir_1,max_dir_2)                     ! applying both above criteria 1 and 2                    
                     

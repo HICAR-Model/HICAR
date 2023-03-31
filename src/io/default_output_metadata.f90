@@ -308,7 +308,7 @@ contains
         character(len=16) :: three_d_soilcomp_dimensions(3)     = [character(len=16) :: "lon_x","lat_y","nsoil_composition"]
         character(len=16) :: three_d_crop_dimensions(3)         = [character(len=16) :: "lon_x","lat_y","crop"]
         character(len=16) :: three_d_t_gecros_dimensions(4)     = [character(len=16) :: "lon_x","lat_y","gecros","time"]
-        character(len=16) :: two_d_month_dimensions(3)          = [character(len=16) :: "lon_x","lat_y","month"]
+        character(len=16) :: two_d_t_month_dimensions(4)          = [character(len=16) :: "lon_x","lat_y","month","time"]
         character(len=16) :: three_d_t_lake_dimensions(4)           = [character(len=16) :: "lon_x","lat_y","nlevlake","time"]
         character(len=16) :: three_d_t_lake_soisno_dimensions(4)    = [character(len=16) :: "lon_x","lat_y","nlevsoisno","time"] !grid_lake_soisno
         character(len=16) :: three_d_t_lake_soisno_1_dimensions(4)  = [character(len=16) :: "lon_x","lat_y","nlevsoisno_1","time"]
@@ -1113,7 +1113,7 @@ contains
             var%three_d     = .False.
             var%two_d       = .True.
             var%unlimited_dim=.True.
-            var%attributes  = [attribute_t("standard_name", "incoming direct shortwave radiation"), &
+            var%attributes  = [attribute_t("standard_name", "incoming direct longwave radiation"), &
                                attribute_t("units",         "W m-2"),                                    &
                                attribute_t("coordinates",   "lat lon")]
         end associate
@@ -1200,10 +1200,11 @@ contains
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%vegetation_fraction))
             var%name        = "vegetation_fraction"
-            var%dimensions  = two_d_month_dimensions
+            var%dimensions  = two_d_t_month_dimensions
             var%three_d     = .True.
             var%two_d       = .False.
             var%dim_len(3)  = kMONTH_GRID_Z
+            var%unlimited_dim=.True.
             var%attributes  = [attribute_t("standard_name", "vegetation_area_fraction"),            &
                                attribute_t("units",         "m2 m-2"),                              &
                                attribute_t("coordinates",   "lat lon")]
@@ -1944,6 +1945,21 @@ contains
                                attribute_t("units",         "kg m-2"),                              &
                                attribute_t("coordinates",   "lat lon")]
         end associate
+        !>------------------------------------------------------------
+        !!  Grid cell albedo
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%albedo))
+            var%name        = "albedo"
+            var%dimensions  = two_d_t_month_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dim_len(3)  = kMONTH_GRID_Z
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "albedo"),            &
+                               attribute_t("units",         "1"),                                   &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
         !>------------------------------------------------------------
         !!  Snow albedo from previous timestep
         !!------------------------------------------------------------

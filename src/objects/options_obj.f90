@@ -219,6 +219,32 @@ contains
 
     end subroutine
 
+    !> -------------------------------
+    !! Add a set of variable(s) to the internal list of variables to be exchanged-only
+    !!
+    !! Sets error /= 0 if an error occurs in add_to_varlist
+    !!
+    !! -------------------------------
+    module subroutine exch_vars(this, input_vars, var_idx, error)
+        class(options_t),  intent(inout):: this
+        integer, optional, intent(in)  :: input_vars(:)
+        integer, optional, intent(in)  :: var_idx
+        integer, optional, intent(out) :: error
+
+        integer :: ierr
+
+        ierr=0
+        if (present(var_idx)) then
+            call add_to_varlist(this%vars_to_exch,[var_idx], ierr)
+        endif
+
+        if (present(input_vars)) then
+            call add_to_varlist(this%vars_to_exch,input_vars, ierr)
+        endif
+
+        if (present(error)) error=ierr
+
+    end subroutine
 
 
     !> ----------------------------------------------------------------------------
@@ -679,7 +705,8 @@ contains
                                         lat_ext, lon_ext, swe_ext, hsnow_ext, rho_snow_ext, tss_ext, tsoil2D_ext, tsoil3D_ext, z_ext, time_ext
 
 
-        character(len=MAXVARLENGTH) :: svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var, factor_p_var   !!MJ added
+        character(len=MAXVARLENGTH) :: svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var, ridge_dist_var,
+        valley_dist_var, ridge_drop_var, factor_p_var  !!MJ added
 
         namelist /var_list/ pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qgvar,qsvar,qncvar,qnivar,qnrvar,qngvar,qnsvar,&
                             i2mvar, i3mvar, i2nvar, i3nvar, i1avar, i2avar, i3avar, i1cvar, i2cvar, i3cvar, &
@@ -690,7 +717,9 @@ contains
                             soiltype_var, soil_t_var,soil_vwc_var,swe_var,soil_deept_var,           &
                             vegtype_var,vegfrac_var, vegfracmax_var, albedo_var, lai_var, canwat_var, linear_mask_var, nsq_calibration_var,  &
                             swdown_var, lwdown_var, sst_var, rain_var, time_var, sinalpha_var, cosalpha_var, &
-                            lat_ext, lon_ext, swe_ext, hsnow_ext, rho_snow_ext, tss_ext, tsoil2D_ext, tsoil3D_ext, z_ext, time_ext, svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var, factor_p_var!! MJ added
+                            lat_ext, lon_ext, swe_ext, hsnow_ext, rho_snow_ext, tss_ext, tsoil2D_ext, tsoil3D_ext, z_ext, time_ext, &
+                            svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var, ridge_dist_var, valley_dist_var, &
+                            ridge_drop_var, factor_p_var !! MJ added
 
         ! no default values supplied for variable names
         hgtvar=""
@@ -777,7 +806,10 @@ contains
         tsoil3D_ext=""
         z_ext = ""
         time_ext = ""
-        
+        ridge_dist_var = ""
+        valley_dist_var = ""
+        ridge_drop_var = ""
+
         !! MJ added
         svf_var = ""
         hlm_var = ""
@@ -958,6 +990,9 @@ contains
         options%slope_angle_var       = slope_angle_var
         options%aspect_angle_var      = aspect_angle_var
         options%factor_p_var      = factor_p_var
+        options%ridge_dist_var        = ridge_dist_var
+        options%valley_dist_var       = valley_dist_var
+        options%ridge_drop_var        = ridge_drop_var
 
     end subroutine var_namelist
 
@@ -1051,7 +1086,7 @@ contains
         end_date            = ""
         time_varying_z      = .False.
         longitude_system    = kMAINTAIN_LON
-        batched_exch        = .False.
+        batched_exch        = .True.
         
         ! flag set to read specific parameterization options
         use_mp_options=.False.
@@ -1801,13 +1836,22 @@ contains
         integer :: ice_category                      ! index that defines the ice category in LU_Categories
         integer :: water_category                    ! index that defines the water category in LU_Categories
         logical :: surface_diagnostics               ! MJ added: true means that temeprature_2m is calculated using sensible heat flux otherwise it is read from the first grid at 10 m													 ! ..this mean the first layer thickness in z-direction shoud be 20 m for which the center is at 10 m
+        integer :: sf_urban_phys
+        real    :: nmp_soiltstep
+        integer :: nmp_dveg, nmp_opt_crs, nmp_opt_sfc, nmp_opt_btr, nmp_opt_run, nmp_opt_infdv, nmp_opt_frz, nmp_opt_inf, nmp_opt_rad, nmp_opt_alb, nmp_opt_snf, nmp_opt_tbot, nmp_opt_stc, nmp_opt_gla, nmp_opt_rsf, nmp_opt_soil, nmp_opt_pedo, nmp_opt_crop, nmp_opt_irr, nmp_opt_irrm, nmp_opt_tdrn, nmp_iz0tlnd, noahmp_output
+
         integer :: lake_category                    ! index that defines the lake category in (some) LU_Categories
 
         ! define the namelist
         namelist /lsm_parameters/ LU_Categories, lh_feedback_fraction, sh_feedback_fraction, update_interval, &
                                   urban_category, ice_category, water_category, lake_category,                &
                                   monthly_vegfrac, monthly_albedo, sfc_layer_thickness, dz_lsm_modification,  &
-                                  wind_enhancement, max_swe, surface_diagnostics !! MJ added
+                                  wind_enhancement, max_swe, surface_diagnostics,  nmp_dveg, nmp_opt_crs,     &
+                                  nmp_opt_sfc, nmp_opt_btr, nmp_opt_run, nmp_opt_infdv, nmp_opt_frz,          &
+                                  nmp_opt_inf, nmp_opt_rad, nmp_opt_alb, nmp_opt_snf, nmp_opt_tbot,           &
+                                  nmp_opt_stc, nmp_opt_gla, nmp_opt_rsf, nmp_opt_soil, nmp_opt_pedo,          &
+                                  nmp_opt_crop, nmp_opt_irr, nmp_opt_irrm, nmp_opt_tdrn, nmp_soiltstep,       &
+                                  sf_urban_phys, nmp_iz0tlnd, noahmp_output !! MJ added
 
 
          ! because adv_options could be in a separate file
@@ -1832,11 +1876,38 @@ contains
         lake_category   = -1
 
         lh_feedback_fraction = 1.0
-        sh_feedback_fraction = 0.625
+        sh_feedback_fraction = 1.0 !0.625
         sfc_layer_thickness  = 400.0
-        dz_lsm_modification  = 0.5
-        wind_enhancement = 1.5
-
+        dz_lsm_modification  = 1.0 !0.5
+        wind_enhancement = 1.0 !1.5
+        
+        sf_urban_phys = 1
+        
+        nmp_dveg = 4
+        nmp_opt_crs = 1
+        nmp_opt_sfc = 1
+        nmp_opt_btr = 2
+        nmp_opt_run = 1
+        nmp_opt_infdv = 1
+        nmp_opt_frz = 1
+        nmp_opt_inf = 1
+        nmp_opt_rad = 3
+        nmp_opt_alb = 1
+        nmp_opt_snf = 1
+        nmp_opt_tbot = 2
+        nmp_opt_stc = 1
+        nmp_opt_gla = 1
+        nmp_opt_rsf = 1
+        nmp_opt_soil = 1
+        nmp_opt_pedo = 1
+        nmp_opt_crop = 0
+        nmp_opt_irr = 0
+        nmp_opt_irrm = 0
+        nmp_opt_tdrn = 0
+        nmp_soiltstep = 0.0
+        nmp_iz0tlnd   = 0
+        noahmp_output = 1
+        
         max_swe = 1e10
 
         ! read the namelist options
@@ -1864,6 +1935,34 @@ contains
         lsm_options%wind_enhancement     = wind_enhancement
         lsm_options%max_swe              = max_swe
         lsm_options%surface_diagnostics  = surface_diagnostics !! MJ added
+        lsm_options%sf_urban_phys        = sf_urban_phys
+
+        lsm_options%nmp_dveg             = nmp_dveg
+        lsm_options%nmp_opt_crs          = nmp_opt_crs
+        lsm_options%nmp_opt_sfc          = nmp_opt_sfc
+        lsm_options%nmp_opt_btr          = nmp_opt_btr
+        lsm_options%nmp_opt_run          = nmp_opt_run
+        lsm_options%nmp_opt_infdv        = nmp_opt_infdv
+        lsm_options%nmp_opt_frz          = nmp_opt_frz
+        lsm_options%nmp_opt_inf          = nmp_opt_inf
+        lsm_options%nmp_opt_rad          = nmp_opt_rad
+        lsm_options%nmp_opt_alb          = nmp_opt_alb
+        lsm_options%nmp_opt_snf          = nmp_opt_snf
+        lsm_options%nmp_opt_tbot         = nmp_opt_tbot
+        lsm_options%nmp_opt_stc          = nmp_opt_stc
+        lsm_options%nmp_opt_gla          = nmp_opt_gla
+        lsm_options%nmp_opt_rsf          = nmp_opt_rsf
+        lsm_options%nmp_opt_soil         = nmp_opt_soil
+        lsm_options%nmp_opt_pedo         = nmp_opt_pedo
+        lsm_options%nmp_opt_crop         = nmp_opt_crop
+        lsm_options%nmp_opt_irr          = nmp_opt_irr
+        lsm_options%nmp_opt_irrm         = nmp_opt_irrm
+        lsm_options%nmp_opt_tdrn         = nmp_opt_tdrn
+        lsm_options%nmp_soiltstep        = nmp_soiltstep
+        lsm_options%nmp_iz0tlnd          = nmp_iz0tlnd
+        lsm_options%noahmp_output        = noahmp_output
+
+        
         ! copy the data back into the global options data structure
         options%lsm_options = lsm_options
     end subroutine lsm_parameters_namelist
@@ -2149,17 +2248,20 @@ contains
         integer :: name_unit                            ! logical unit number for namelist
         !Define parameters
         integer :: roughness
-        logical :: terr_diff, Sx, wind_only
-        real    :: Sx_dmax
+        logical :: terr_diff, Sx, wind_only, thermal
+        real    :: Sx_dmax, Sx_scale_ang, TPI_scale
         
         !Make name-list
-        namelist /wind/ terr_diff, Sx, wind_only, Sx_dmax, roughness
+        namelist /wind/ terr_diff, Sx, thermal, wind_only, Sx_dmax, Sx_scale_ang, TPI_scale, roughness
         
         !Set defaults
         terr_diff = .False.
         Sx = .False.
+        thermal = .False.
         roughness = 0 ! No roughness correction, the only one implemented so far
         Sx_dmax = 300.0
+        Sx_scale_ang = 30.0
+        TPI_scale = 400.0
         wind_only = .False.
         
         !Read namelist file
@@ -2173,7 +2275,10 @@ contains
         !Store into options object
         options%wind%terr_diff = terr_diff
         options%wind%Sx = Sx
+        options%wind%thermal = thermal
         options%wind%Sx_dmax = Sx_dmax
+        options%wind%TPI_scale = TPI_scale
+        options%wind%Sx_scale_ang = Sx_scale_ang
         options%wind%roughness = roughness
         options%wind%wind_only = wind_only
     

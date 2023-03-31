@@ -48,13 +48,13 @@ program icar
     type(ioclient_t)  :: ioclient
     real, allocatable :: write_buffer(:,:,:,:)[:], read_buffer(:,:,:,:)[:]
 
-    type(timer_t)   :: initialization_timer, total_timer, input_timer, output_timer, physics_timer, wind_timer, mp_timer, adv_timer, exch_timer
+    type(timer_t)   :: initialization_timer, total_timer, input_timer, output_timer, physics_timer, wind_timer, mp_timer, adv_timer, rad_timer, lsm_timer, pbl_timer, exch_timer, send_timer, ret_timer, wait_timer, forcing_timer, diagnostic_timer, wind_bal_timer
     type(Time_type) :: next_output, next_input
     type(time_delta_t) :: small_time_delta, phys_dt
     
     integer :: i, ierr, exec_team
     integer :: sleep_cnt, ev_cnt
-
+    real :: t_val
     double precision    :: future_dt_seconds
     logical :: init_flag
 
@@ -236,10 +236,10 @@ program icar
             ! this is the meat of the model physics, run all the physics for the current time step looping over internal timesteps
             if (.not.(options%wind%wind_only)) then
                 call physics_timer%start()
-                call step(domain, boundary, step_end(next_input, next_output), phys_dt, options, mp_timer, adv_timer, exch_timer)
+                call step(domain, boundary, step_end(next_input, next_output), phys_dt, options, mp_timer, adv_timer, rad_timer, lsm_timer, pbl_timer, exch_timer, send_timer, ret_timer, wait_timer, forcing_timer, diagnostic_timer, wind_bal_timer)
                 call physics_timer%stop()
             elseif (options%wind%wind_only) then
-                call domain%apply_forcing(boundary, options%io_options%output_dt)
+                call domain%apply_forcing(boundary, options, real(options%io_options%output_dt%seconds()))
                 domain%model_time = next_output
             endif
 
@@ -327,7 +327,6 @@ program icar
     !
     !-----------------------------------------
     call total_timer%stop()
-
     if (this_image()==1) then
         write(*,*) ""
         write(*,*) "Model run from : ",trim(options%parameters%start_time%as_string())
@@ -335,17 +334,38 @@ program icar
         write(*,*) "Domain : ",trim(options%parameters%init_conditions_file)
         write(*,*) "Number of images:",num_images()
         write(*,*) ""
-        write(*,*) "First image timing:"
-        write(*,*) "total          : ", trim(total_timer%as_string())
-        write(*,*) "init           : ", trim(initialization_timer%as_string())
-        write(*,*) "input          : ", trim(input_timer%as_string())
-        write(*,*) "output         : ", trim(output_timer%as_string())
-        write(*,*) "physics        : ", trim(physics_timer%as_string())
-        write(*,*) "microphysics   : ", trim(mp_timer%as_string())
-        write(*,*) "advection      : ", trim(adv_timer%as_string())
-        write(*,*) "halo-exchange  : ", trim(exch_timer%as_string())
-        write(*,*) "winds          : ", trim(wind_timer%as_string())
+        write(*,*) "Average timing across compute images:"
     endif
+    t_val = timer_mean(total_timer)
+    if (this_image()==1) write(*,*) "total          : ", t_val 
+    t_val = timer_mean(initialization_timer)
+    if (this_image()==1) write(*,*) "init           : ", t_val
+    t_val = timer_mean(input_timer)
+    if (this_image()==1) write(*,*) "input          : ", t_val
+    t_val = timer_mean(output_timer)
+    if (this_image()==1) write(*,*) "output         : ", t_val
+    t_val = timer_mean(physics_timer)
+    if (this_image()==1) write(*,*) "physics        : ", t_val
+    t_val = timer_mean(mp_timer)
+    if (this_image()==1) write(*,*) "microphysics   : ", t_val
+    t_val = timer_mean(adv_timer)
+    if (this_image()==1) write(*,*) "advection      : ", t_val
+    t_val = timer_mean(rad_timer)
+    if (this_image()==1) write(*,*) "radiation      : ", t_val
+    t_val = timer_mean(lsm_timer)
+    if (this_image()==1) write(*,*) "LSM            : ", t_val
+    t_val = timer_mean(pbl_timer)
+    if (this_image()==1) write(*,*) "PBL            : ", t_val
+    t_val = timer_mean(forcing_timer)
+    if (this_image()==1) write(*,*) "forcing        : ", t_val 
+    t_val = timer_mean(wind_bal_timer)
+    if (this_image()==1) write(*,*) "wind bal       : ", t_val
+    t_val = timer_mean(diagnostic_timer)
+    if (this_image()==1) write(*,*) "diagnostic     : ", t_val
+    t_val = timer_mean(exch_timer)
+    if (this_image()==1) write(*,*) "halo-exchange  : ", t_val 
+    t_val = timer_mean(wind_timer)
+    if (this_image()==1) write(*,*) "winds          : ", t_val 
 
 contains
 
@@ -355,7 +375,7 @@ contains
     !    character(len=*), intent(in)     :: err_msg
     !    integer, intent(in), optional    :: until_count
     !    integer :: sleep_cnt, ev_cnt, until_cnt
-    !            
+    !        timer_mean
     !    call EVENT_QUERY(event,ev_cnt)
     !    sleep_cnt = 0
     !    do while(.not.(ev_cnt == 1))
@@ -367,6 +387,18 @@ contains
     !    !Finally, do an event wait to decrement the event counter
     !    EVENT WAIT (event)!, UNTIL_COUNT=ioserver%n_children)
     !end subroutine safe_wait
+
+    function timer_mean(timer) result(mean_t)
+        implicit none
+        type(timer_t), intent(inout) :: timer
+        
+        real :: mean_t, t_sum
+            
+        t_sum = timer%get_time()
+        call CO_SUM(t_sum)
+        mean_t = t_sum/kNUM_COMPUTE
+    
+    end function
 
     function step_end(time1, time2) result(min_time)
         implicit none

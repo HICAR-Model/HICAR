@@ -177,8 +177,8 @@ contains
 
         type(Time_type), allocatable :: times_in_file_up(:), times_in_file_down(:)
         type(time_delta_t) :: max_dt
-        integer :: i, n_t_down, n_t_up, nup, ndown, nup_o, ndown_o
-        logical :: found
+        integer :: i, n_t_down, n_t_up, nup, ndown, nup_o, ndown_o, ierr
+        logical :: found, fileExists
 
         call max_dt%set(seconds=1.0)
         if (present(error)) error=0
@@ -188,12 +188,43 @@ contains
         
         nup = size(filelist)
         ndown=1
+        ierr = 1
+        
+        !Find last existing file in file list (necesarray if doing runs concurrently)
+        do while (ierr==1)
+            !See if nup exists
+            inquire(file=filelist(nup), exist=fileExists)
+
+            !If nup does exist, set ierr to 0
+            if (fileExists) then
+                ierr = 0
+            !else if nup does not exist, decrement nup
+            else
+                nup = nup-1
+            endif
+            !If we reach beginning and nothing has existed, stop and error
+            if (nup < 1) stop "No files in file list exist"
+        enddo
+
         ndown_o = ndown
         nup_o = nup
 
         call read_times(filelist(ndown), time_var, times_in_file_down)
         call read_times(filelist(nup), time_var, times_in_file_up)
 
+        !Quick check that time is bounded by min and max existing files in list
+        if (times_in_file_down(1) > time .or. times_in_file_up(size(times_in_file_up)) < time) then
+            if (present(error)) then
+                error = 1
+                found = .True.
+            else
+                write(*,*) "ERROR: Requested date lays outside of filelist"
+                write(*,*) "First filename:           ",trim(filelist(1))
+                write(*,*) "Last (existing) filename: ",trim(filelist(nup))
+                write(*,*) "  time  : ",trim(time%as_string())
+                stop "Unable to find date in file"
+            endif
+        endif
 
         do while(.not.(found))
             ! read the times for all timesteps in the specified file

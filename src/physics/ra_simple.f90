@@ -267,7 +267,8 @@ contains
             if(present(solar_azimuth)) solar_azimuth(i)=solar_azimuth_angle*pi/180.
         end do
 
-        where(calc_solar_elevation_corr<0) calc_solar_elevation_corr=0
+        where(calc_solar_elevation_corr<0.0) calc_solar_elevation_corr=0.0
+        where(calc_solar_elevation_corr>90.0) calc_solar_elevation_corr=90.0
 
 !       if (this_image()==2 .and. j==jms+1) then
 !           write(*,*), trim(date%as_string()),solar_elev_corr_atm_ref_deg, solar_azimuth_angle

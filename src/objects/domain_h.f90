@@ -10,6 +10,8 @@ module domain_interface
   use time_object,              only : Time_type
   use time_delta_object,        only : time_delta_t
   use data_structures,          only : interpolable_type, tendencies_type
+  use timer_interface,          only : timer_t
+
   implicit none
 
   private
@@ -290,6 +292,7 @@ module domain_interface
     
     ! Array listing variables to advect with pointers to local data
     type(var_dict_t) :: adv_vars
+    type(var_dict_t) :: exch_vars
 
     type(interpolable_type) :: geo
     type(interpolable_type) :: geo_agl
@@ -360,10 +363,25 @@ module domain_interface
     ! Neighboring images of this image
     integer, allocatable :: neighbors(:)
 
-    real, allocatable :: south_in(:,:,:,:)[:]
-    real, allocatable :: north_in(:,:,:,:)[:]
-    real, allocatable :: west_in(:,:,:,:)[:]
-    real, allocatable :: east_in(:,:,:,:)[:]
+    real, allocatable :: south_in_3d(:,:,:,:)[:]
+    real, allocatable :: north_in_3d(:,:,:,:)[:]
+    real, allocatable :: west_in_3d(:,:,:,:)[:]
+    real, allocatable :: east_in_3d(:,:,:,:)[:]
+
+    real, allocatable :: north_buffer_3d(:,:,:,:)
+    real, allocatable :: south_buffer_3d(:,:,:,:)
+    real, allocatable :: east_buffer_3d(:,:,:,:)
+    real, allocatable :: west_buffer_3d(:,:,:,:)
+
+    real, allocatable :: south_in_2d(:,:,:)[:]
+    real, allocatable :: north_in_2d(:,:,:)[:]
+    real, allocatable :: west_in_2d(:,:,:)[:]
+    real, allocatable :: east_in_2d(:,:,:)[:]
+
+    real, allocatable :: north_buffer_2d(:,:,:)
+    real, allocatable :: south_buffer_2d(:,:,:)
+    real, allocatable :: east_buffer_2d(:,:,:)
+    real, allocatable :: west_buffer_2d(:,:,:)
 
     ! MPI communicator object for doing parallel communications among domain objects
     integer, public :: IO_comms
@@ -405,7 +423,10 @@ module domain_interface
     type(variable_t) :: factor_p
     type(variable_t) :: Sliq_out
     type(variable_t) :: hlm
-                
+    type(variable_t) :: ridge_dist
+    type(variable_t) :: valley_dist
+    type(variable_t) :: ridge_drop
+
 
   contains
     procedure :: init
@@ -414,9 +435,12 @@ module domain_interface
     procedure :: halo_send
     procedure :: halo_retrieve
     procedure :: halo_exchange
-    procedure :: halo_send_batch
-    procedure :: halo_retrieve_batch
-    procedure :: halo_exchange_batch
+    procedure :: halo_3d_send_batch
+    procedure :: halo_3d_retrieve_batch
+    procedure :: halo_3d_exchange_batch
+    procedure :: halo_2d_send_batch
+    procedure :: halo_2d_retrieve_batch
+    procedure :: halo_2d_exchange_batch
     procedure :: enforce_limits
 
     procedure :: get_initial_conditions
@@ -481,29 +505,49 @@ module domain_interface
         class(domain_t), intent(inout) :: this
     end subroutine
 
-    module subroutine halo_retrieve(this)
+    module subroutine halo_retrieve(this, wait_timer)
         implicit none
         class(domain_t), intent(inout) :: this
+        type(timer_t),   intent(inout) :: wait_timer
     end subroutine
 
     ! Exchange subdomain boundary information
-    module subroutine halo_exchange(this)
+    module subroutine halo_exchange(this, send_timer, ret_timer, wait_timer)
+        implicit none
+        class(domain_t), intent(inout) :: this
+        type(timer_t),   intent(inout) :: send_timer, ret_timer, wait_timer
+    end subroutine
+
+    module subroutine halo_3d_send_batch(this)
         implicit none
         class(domain_t), intent(inout) :: this
     end subroutine
 
-    module subroutine halo_send_batch(this)
+    module subroutine halo_3d_retrieve_batch(this, wait_timer)
+        implicit none
+        class(domain_t), intent(inout) :: this
+        type(timer_t),   intent(inout) :: wait_timer
+    end subroutine
+
+    ! Exchange subdomain boundary information as a batched exchange
+    module subroutine halo_3d_exchange_batch(this, send_timer, ret_timer, wait_timer)
+        implicit none
+        class(domain_t), intent(inout) :: this
+        type(timer_t),   intent(inout) :: send_timer, ret_timer, wait_timer
+    end subroutine
+
+    module subroutine halo_2d_send_batch(this)
         implicit none
         class(domain_t), intent(inout) :: this
     end subroutine
 
-    module subroutine halo_retrieve_batch(this)
+    module subroutine halo_2d_retrieve_batch(this)
         implicit none
         class(domain_t), intent(inout) :: this
     end subroutine
 
     ! Exchange subdomain boundary information as a batched exchange
-    module subroutine halo_exchange_batch(this)
+    module subroutine halo_2d_exchange_batch(this)
         implicit none
         class(domain_t), intent(inout) :: this
     end subroutine
@@ -521,11 +565,12 @@ module domain_interface
         type(time_delta_t), intent(in)    :: dt
     end subroutine
 
-    module subroutine apply_forcing(this, forcing, dt)
+    module subroutine apply_forcing(this, forcing, options, dt)
         implicit none
         class(domain_t),    intent(inout) :: this
         class(boundary_t),  intent(in)    :: forcing
-        type(time_delta_t), intent(in)    :: dt
+        type(options_t), intent(in)       :: options
+        real, intent(in)                  :: dt
     end subroutine
 
     module subroutine calculate_delta_terrain(this, forcing, options)
