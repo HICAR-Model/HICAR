@@ -47,6 +47,7 @@ endif
 # Model directories
 BUILD=build/
 PHYS=physics/
+NOAHMP=physics/noahmp/
 IO=io/
 MAIN=main/
 UTIL=utilities/
@@ -211,7 +212,7 @@ endif
 
 # Cray fortran
 ifeq ($(COMPILER), cray)
-	COMP= -h omp vector3 -O3 -c -hfp2 -eI
+	COMP= -h omp -O3 -c -hfp2 -eI
 	LINK= -fopenmp
 	PREPROC= -eZ
 	MODOUTPUT= -J $(BUILD) -em
@@ -348,6 +349,17 @@ ASSERT=-DUSE_ASSERTIONS=$(USE_ASSERTIONS)
 # export LD_RUN_PATH=$LD_RUN_PATH:/path/to/netcdf/libraries/lib:/path/to/fftw/libraries/lib
 LFLAGS=$(LINK) $(PROF) $(CAF_FLAG) $(CAF_LINK) $(LIBNETCDF) $(LIBFFT) $(PETSC_LIB) # $(LIBFSM) 
 FFLAGS=$(COMP) $(PROF) $(CAF_FLAG) $(PREPROC) -DVERSION=\"$(GIT_VERSION)\" $(INCNETCDF) $(INCFFT) $(PETSC_FC_INCLUDES)  $(MODOUTPUT) $(ASSERT) # $(INFSM)
+
+# Cray -O3 optimization can break NoahMP LSM, so create separate compiler flags for NoahMP here if -O3 is used
+ifeq ($(COMPILER), cray)
+	O4=-O4
+	O3=-O3
+	O2=-O2
+	HFP2=-hfp2
+	HFP3=-hfp3
+	NMP_FFLAGS=$(subst $(O3),$(O2),$(FFLAGS))
+	PHYS_FFLAGS=$(FFLAGS) #$(subst $(HFP2),$(HFP3),$(FFLAGS))
+endif
 
 $(info $$NODENAME    = ${NODENAME})
 $(info $$FC          = ${F90})
@@ -653,8 +665,17 @@ $(BUILD)%.o: $(IO)%.f90
 $(BUILD)%.o: $(OBJECTS)%.f90
 	${F90} ${FFLAGS} $< -o $@
 
-$(BUILD)%.o: $(PHYS)%.f90
-	${F90} ${FFLAGS} $< -o $@
+ifeq ($(COMPILER), cray)
+        $(BUILD)%.o: $(NOAHMP)%.f90
+		${F90} ${NMP_FFLAGS} $< -o $@
+        $(BUILD)%.o: $(PHYS)%.f90
+		${F90} ${PHYS_FFLAGS} $< -o $@
+else
+	$(BUILD)%.o: $(NOAHMP)%.f90
+		${F90} ${FFLAGS} $< -o $@
+	$(BUILD)%.o: $(PHYS)%.f90
+		${F90} ${FFLAGS} $< -o $@
+endif
 
 $(BUILD)%.o: $(TESTS)%.f90
 	${F90} ${FFLAGS} $< -o $@
@@ -884,15 +905,19 @@ $(BUILD)lsm_noahdrv.o: $(PHYS)lsm_noahdrv.f90 $(BUILD)lsm_noahlsm.o
 
 $(BUILD)lsm_noahlsm.o: $(PHYS)lsm_noahlsm.f90
 
-$(BUILD)lsm_noahmpdrv.o: $(PHYS)lsm_noahmpdrv.f90 $(BUILD)lsm_noahmplsm.o \
+
+###################################################################
+#       NoahMP code
+###################################################################
+$(BUILD)lsm_noahmpdrv.o: $(NOAHMP)lsm_noahmpdrv.f90 $(BUILD)lsm_noahmplsm.o \
 	          $(BUILD)lsm_noahmp_gecros.o $(BUILD)lsm_noahmp_glacier.o
 
-$(BUILD)lsm_noahmplsm.o: $(PHYS)lsm_noahmplsm.f90 $(BUILD)lsm_noahmp_gecros.o \
+$(BUILD)lsm_noahmplsm.o: $(NOAHMP)lsm_noahmplsm.f90 $(BUILD)lsm_noahmp_gecros.o \
 	          $(BUILD)lsm_noahmp_glacier.o
 
-$(BUILD)lsm_noahmp_gecros.o: $(PHYS)lsm_noahmp_gecros.f90
+$(BUILD)lsm_noahmp_gecros.o: $(NOAHMP)lsm_noahmp_gecros.f90
 
-$(BUILD)lsm_noahmp_glacier.o: $(PHYS)lsm_noahmp_glacier.f90
+$(BUILD)lsm_noahmp_glacier.o: $(NOAHMP)lsm_noahmp_glacier.f90
 
 ###################################################################
 #	Planetary Boundary Layer code
@@ -926,7 +951,8 @@ $(BUILD)adv_mpdata.o:$(PHYS)adv_mpdata.f90 $(PHYS)adv_mpdata_FCT_core.f90 $(BUIL
 #	Wind related code
 ###################################################################
 $(BUILD)wind.o:$(PHYS)wind.f90  $(BUILD)atm_utilities.o $(BUILD)data_structures.o $(BUILD)exchangeable_h.o \
-				$(BUILD)domain_h.o $(BUILD)wind_iterative.o $(BUILD)options_h.o $(BUILD)linear_winds.o $(BUILD)wind_surf.o
+				$(BUILD)domain_h.o $(BUILD)wind_iterative.o $(BUILD)options_h.o $(BUILD)linear_winds.o \
+				$(BUILD)wind_surf.o
 
 $(BUILD)wind_surf.o:$(PHYS)wind_surf.f90 $(BUILD)data_structures.o $(BUILD)atm_utilities.o $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)io_routines.o
 
