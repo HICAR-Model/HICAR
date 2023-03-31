@@ -373,7 +373,7 @@ contains
                 
                 call exch_timer%start()
                 if (options%parameters%batched_exch) then
-                    call domain%halo_exchange_batch(send_timer, ret_timer, wait_timer)
+                    call domain%halo_3d_exchange_batch(send_timer, ret_timer, wait_timer)
                 else
                     call domain%halo_exchange(send_timer,ret_timer,wait_timer)
                 endif
