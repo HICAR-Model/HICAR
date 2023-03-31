@@ -301,6 +301,7 @@ module domain_interface
     
     ! Array listing variables to advect with pointers to local data
     type(var_dict_t) :: adv_vars
+    type(var_dict_t) :: exch_vars
 
     type(interpolable_type) :: geo
     type(interpolable_type) :: geo_agl
@@ -371,15 +372,25 @@ module domain_interface
     ! Neighboring images of this image
     integer, allocatable :: neighbors(:)
 
-    real, allocatable :: south_in(:,:,:,:)[:]
-    real, allocatable :: north_in(:,:,:,:)[:]
-    real, allocatable :: west_in(:,:,:,:)[:]
-    real, allocatable :: east_in(:,:,:,:)[:]
+    real, allocatable :: south_in_3d(:,:,:,:)[:]
+    real, allocatable :: north_in_3d(:,:,:,:)[:]
+    real, allocatable :: west_in_3d(:,:,:,:)[:]
+    real, allocatable :: east_in_3d(:,:,:,:)[:]
 
-    real, allocatable :: north_buffer(:,:,:,:)
-    real, allocatable :: south_buffer(:,:,:,:)
-    real, allocatable :: east_buffer(:,:,:,:)
-    real, allocatable :: west_buffer(:,:,:,:)
+    real, allocatable :: north_buffer_3d(:,:,:,:)
+    real, allocatable :: south_buffer_3d(:,:,:,:)
+    real, allocatable :: east_buffer_3d(:,:,:,:)
+    real, allocatable :: west_buffer_3d(:,:,:,:)
+
+    real, allocatable :: south_in_2d(:,:,:)[:]
+    real, allocatable :: north_in_2d(:,:,:)[:]
+    real, allocatable :: west_in_2d(:,:,:)[:]
+    real, allocatable :: east_in_2d(:,:,:)[:]
+
+    real, allocatable :: north_buffer_2d(:,:,:)
+    real, allocatable :: south_buffer_2d(:,:,:)
+    real, allocatable :: east_buffer_2d(:,:,:)
+    real, allocatable :: west_buffer_2d(:,:,:)
 
     ! MPI communicator object for doing parallel communications among domain objects
     integer, public :: IO_comms
@@ -420,7 +431,10 @@ module domain_interface
     type(variable_t) :: svf
     type(variable_t) :: Sliq_out
     type(variable_t) :: hlm
-                
+    type(variable_t) :: ridge_dist
+    type(variable_t) :: valley_dist
+    type(variable_t) :: ridge_drop
+
 
   contains
     procedure :: init
@@ -429,9 +443,12 @@ module domain_interface
     procedure :: halo_send
     procedure :: halo_retrieve
     procedure :: halo_exchange
-    procedure :: halo_send_batch
-    procedure :: halo_retrieve_batch
-    procedure :: halo_exchange_batch
+    procedure :: halo_3d_send_batch
+    procedure :: halo_3d_retrieve_batch
+    procedure :: halo_3d_exchange_batch
+    procedure :: halo_2d_send_batch
+    procedure :: halo_2d_retrieve_batch
+    procedure :: halo_2d_exchange_batch
     procedure :: enforce_limits
 
     procedure :: get_initial_conditions
@@ -509,22 +526,38 @@ module domain_interface
         type(timer_t),   intent(inout) :: send_timer, ret_timer, wait_timer
     end subroutine
 
-    module subroutine halo_send_batch(this)
+    module subroutine halo_3d_send_batch(this)
         implicit none
         class(domain_t), intent(inout) :: this
     end subroutine
 
-    module subroutine halo_retrieve_batch(this, wait_timer)
+    module subroutine halo_3d_retrieve_batch(this, wait_timer)
         implicit none
         class(domain_t), intent(inout) :: this
         type(timer_t),   intent(inout) :: wait_timer
     end subroutine
 
     ! Exchange subdomain boundary information as a batched exchange
-    module subroutine halo_exchange_batch(this, send_timer, ret_timer, wait_timer)
+    module subroutine halo_3d_exchange_batch(this, send_timer, ret_timer, wait_timer)
         implicit none
         class(domain_t), intent(inout) :: this
         type(timer_t),   intent(inout) :: send_timer, ret_timer, wait_timer
+    end subroutine
+
+    module subroutine halo_2d_send_batch(this)
+        implicit none
+        class(domain_t), intent(inout) :: this
+    end subroutine
+
+    module subroutine halo_2d_retrieve_batch(this)
+        implicit none
+        class(domain_t), intent(inout) :: this
+    end subroutine
+
+    ! Exchange subdomain boundary information as a batched exchange
+    module subroutine halo_2d_exchange_batch(this)
+        implicit none
+        class(domain_t), intent(inout) :: this
     end subroutine
 
     ! Make sure no hydrometeors are getting below 0

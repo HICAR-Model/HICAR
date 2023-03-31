@@ -56,6 +56,8 @@ contains
         call setup_meta_data(this, options)
 
         call set_var_lists(this, options)
+        
+        if (options%parameters%batched_exch) call setup_batch_exch(this)
 
         call init_relax_filters(this)
 
@@ -67,6 +69,7 @@ contains
 
         integer :: var_list(kMAX_STORAGE_VARS)
 
+        !Advection variables -- these are exchanged AND advected
         if (options%vars_to_advect(kVARS%water_vapor)>0) call this%adv_vars%add_var('qv', this%water_vapor%meta_data)
         if (options%vars_to_advect(kVARS%potential_temperature)>0) call this%adv_vars%add_var('theta', this%potential_temperature%meta_data) 
         if (options%vars_to_advect(kVARS%cloud_water)>0) call this%adv_vars%add_var('qc', this%cloud_water_mass%meta_data)                  
@@ -89,6 +92,8 @@ contains
         if (options%vars_to_advect(kVARS%ice3_a)>0) call this%adv_vars%add_var('ice3_a', this%ice3_a%meta_data)   
         if (options%vars_to_advect(kVARS%ice3_c)>0) call this%adv_vars%add_var('ice3_c', this%ice3_c%meta_data)   
 
+        !Exchange-only variables
+        if (options%vars_to_exch(kVARS%sensible_heat)>0) call this%exch_vars%add_var('hfss', this%sensible_heat)   
  
         var_list = options%io_options%vars_for_output + options%vars_for_restart
         if (0<var_list( kVARS%u) )                          call this%vars_to_out%add_var( trim( get_varname( kVARS%u                            )), this%u%meta_data)
@@ -187,6 +192,7 @@ contains
         if (0<var_list( kVARS%rainfall_ground) )            call this%vars_to_out%add_var( trim( get_varname( kVARS%rainfall_ground              )), this%rainfall_ground)
         if (0<var_list( kVARS%snow_water_equivalent) )      call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_water_equivalent        )), this%snow_water_equivalent)
         if (0<var_list( kVARS%snow_water_eq_prev) )         call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_water_eq_prev           )), this%snow_water_eq_prev)
+        if (0<var_list( kVARS%albedo) )                     call this%vars_to_out%add_var( trim( get_varname( kVARS%albedo                       )), this%albedo)
         if (0<var_list( kVARS%snow_albedo_prev) )           call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_albedo_prev             )), this%snow_albedo_prev)
         if (0<var_list( kVARS%snow_temperature) )           call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_temperature             )), this%snow_temperature)
         if (0<var_list( kVARS%snow_layer_depth) )           call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_layer_depth             )), this%snow_layer_depth)
@@ -311,28 +317,71 @@ contains
         if (0<var_list( kVARS%hpbl) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%hpbl                         )), this%hpbl)
         if (0<var_list( kVARS%coeff_heat_exchange_3d) )     call this%vars_to_out%add_var( trim( get_varname( kVARS%coeff_heat_exchange_3d       )), this%coeff_heat_exchange_3d)
 
-        if (options%parameters%batched_exch) then
-            allocate(this%north_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
-                            this%kms:this%kme,1:this%grid%halo_size)[*])
-            allocate(this%south_in(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
-                            this%kms:this%kme,1:this%grid%halo_size)[*])
-            allocate(this%east_in(this%adv_vars%n_vars,1:this%grid%halo_size,&
-                            this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
-            allocate(this%west_in(this%adv_vars%n_vars,1:this%grid%halo_size,&
-                            this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
-                            
-            if (.not.(this%north_boundary)) allocate(this%north_buffer(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
-                            this%kms:this%kme,1:this%grid%halo_size))
-            if (.not.(this%south_boundary)) allocate(this%south_buffer(this%adv_vars%n_vars,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
-                            this%kms:this%kme,1:this%grid%halo_size))
-            if (.not.(this%east_boundary)) allocate(this%east_buffer(this%adv_vars%n_vars,1:this%grid%halo_size,&
-                            this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2)))
-            if (.not.(this%west_boundary)) allocate(this%west_buffer(this%adv_vars%n_vars,1:this%grid%halo_size,&
-                            this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2)))
-
-        endif
     end subroutine set_var_lists
 
+    !> -------------------------------
+    !! Initialize the arrays and co-arrays needed to perform a batch exchange
+    !!
+    !! -------------------------------
+    module subroutine setup_batch_exch(this)
+        implicit none
+        class(domain_t),  intent(inout) :: this
+        type(variable_t) :: var
+
+        integer :: n_2d, n_3d = 0
+      
+        ! Loop over all adv_vars and count how many are 3D
+        call this%adv_vars%reset_iterator()
+        
+        do while (this%adv_vars%has_more_elements())
+            var = this%adv_vars%next()
+            if (var%three_d) n_3d = n_3d + 1
+        end do
+        
+        ! Loop over all exch vars and count how many are 3D
+        call this%exch_vars%reset_iterator()
+        
+        do while (this%exch_vars%has_more_elements())
+            var = this%exch_vars%next()
+            if (var%three_d) n_3d = n_3d + 1
+        end do
+
+        ! Determine number of 2D and 3D vars present
+        n_2d = (this%adv_vars%n_vars+this%exch_vars%n_vars)-n_3d
+
+        allocate(this%north_in_3d(n_3d,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
+                        this%kms:this%kme,1:this%grid%halo_size)[*])
+        allocate(this%south_in_3d(n_3d,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
+                        this%kms:this%kme,1:this%grid%halo_size)[*])
+        allocate(this%east_in_3d(n_3d,1:this%grid%halo_size,&
+                        this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
+        allocate(this%west_in_3d(n_3d,1:this%grid%halo_size,&
+                        this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
+
+        if (.not.(this%north_boundary)) allocate(this%north_buffer_3d(n_3d,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
+                        this%kms:this%kme,1:this%grid%halo_size))
+        if (.not.(this%south_boundary)) allocate(this%south_buffer_3d(n_3d,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),&
+                        this%kms:this%kme,1:this%grid%halo_size))
+        if (.not.(this%east_boundary)) allocate(this%east_buffer_3d(n_3d,1:this%grid%halo_size,&
+                        this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2)))
+        if (.not.(this%west_boundary)) allocate(this%west_buffer_3d(n_3d,1:this%grid%halo_size,&
+                        this%kms:this%kme,1:(this%grid%ew_halo_ny+this%grid%halo_size*2)))
+      
+
+        ! If no 2D vars present, don't allocate arrays (nothing should be calling exch 2D then)
+        if (n_2d > 0) then
+            allocate(this%north_in_2d(n_2d,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),1:this%grid%halo_size)[*])
+            allocate(this%south_in_2d(n_2d,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),1:this%grid%halo_size)[*])
+            allocate(this%east_in_2d(n_2d,1:this%grid%halo_size,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
+            allocate(this%west_in_2d(n_2d,1:this%grid%halo_size,1:(this%grid%ew_halo_ny+this%grid%halo_size*2))[*])
+
+            if (.not.(this%north_boundary)) allocate(this%north_buffer_2d(n_2d,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),1:this%grid%halo_size))
+            if (.not.(this%south_boundary)) allocate(this%south_buffer_2d(n_2d,1:(this%grid%ns_halo_nx+this%grid%halo_size*2),1:this%grid%halo_size))
+            if (.not.(this%east_boundary)) allocate(this%east_buffer_2d(n_2d,1:this%grid%halo_size,1:(this%grid%ew_halo_ny+this%grid%halo_size*2)))
+            if (.not.(this%west_boundary)) allocate(this%west_buffer_2d(n_2d,1:this%grid%halo_size,1:(this%grid%ew_halo_ny+this%grid%halo_size*2)))
+        endif
+    
+    end subroutine setup_batch_exch
 
     !> -------------------------------
     !! Set up the initial conditions for the domain
@@ -606,57 +655,73 @@ contains
 
     end subroutine
     
-    module subroutine halo_send_batch(this)
+    module subroutine halo_3d_send_batch(this)
         class(domain_t), intent(inout) :: this
-        type(variable_t) :: var_to_advect
-
-        real, allocatable :: temp_north(:,:,:,:)
-        real, allocatable :: temp_south(:,:,:,:)
-        real, allocatable :: temp_east(:,:,:,:)
-        real, allocatable :: temp_west(:,:,:,:)
+        type(variable_t) :: var
         integer :: n
 
         call this%adv_vars%reset_iterator()
+        call this%exch_vars%reset_iterator()
         n = 1
         ! Now iterate through the dictionary as long as there are more elements present
         do while (this%adv_vars%has_more_elements())
             ! get the next variable
-            var_to_advect = this%adv_vars%next()
-            if (.not.(this%north_boundary)) this%north_buffer(n,1:(this%ite-this%its+1),:,:) = &
-                    var_to_advect%data_3d(this%its:this%ite,:,(this%jte-this%grid%halo_size+1):this%jte)
-            if (.not.(this%south_boundary)) this%south_buffer(n,1:(this%ite-this%its+1),:,:) = &
-                    var_to_advect%data_3d(this%its:this%ite,:,this%jts:(this%jts+this%grid%halo_size-1))
-            if (.not.(this%east_boundary)) this%east_buffer(n,:,:,1:(this%jte-this%jts+1)) = &
-                    var_to_advect%data_3d((this%ite-this%grid%halo_size+1):this%ite,:,this%jts:this%jte)
-            if (.not.(this%west_boundary)) this%west_buffer(n,:,:,1:(this%jte-this%jts+1)) = &
-                    var_to_advect%data_3d(this%its:(this%its+this%grid%halo_size)-1,:,this%jts:this%jte)
-            
-            n = n+1
+            var = this%adv_vars%next()
+            if (var%three_d) then
+                if (.not.(this%north_boundary)) this%north_buffer_3d(n,1:(this%ite-this%its+1),:,:) = &
+                        var%data_3d(this%its:this%ite,:,(this%jte-this%grid%halo_size+1):this%jte)
+                if (.not.(this%south_boundary)) this%south_buffer_3d(n,1:(this%ite-this%its+1),:,:) = &
+                        var%data_3d(this%its:this%ite,:,this%jts:(this%jts+this%grid%halo_size-1))
+                if (.not.(this%east_boundary)) this%east_buffer_3d(n,:,:,1:(this%jte-this%jts+1)) = &
+                        var%data_3d((this%ite-this%grid%halo_size+1):this%ite,:,this%jts:this%jte)
+                if (.not.(this%west_boundary)) this%west_buffer_3d(n,:,:,1:(this%jte-this%jts+1)) = &
+                        var%data_3d(this%its:(this%its+this%grid%halo_size)-1,:,this%jts:this%jte)
+
+                n = n+1
+            endif
+        enddo
+
+        ! Now iterate through the exchange-only objects as long as there are more elements present
+        do while (this%exch_vars%has_more_elements())
+            ! get the next variable
+            var = this%exch_vars%next()
+            if (var%three_d) then
+                if (.not.(this%north_boundary)) this%north_buffer_3d(n,1:(this%ite-this%its+1),:,:) = &
+                        var%data_3d(this%its:this%ite,:,(this%jte-this%grid%halo_size+1):this%jte)
+                if (.not.(this%south_boundary)) this%south_buffer_3d(n,1:(this%ite-this%its+1),:,:) = &
+                        var%data_3d(this%its:this%ite,:,this%jts:(this%jts+this%grid%halo_size-1))
+                if (.not.(this%east_boundary)) this%east_buffer_3d(n,:,:,1:(this%jte-this%jts+1)) = &
+                        var%data_3d((this%ite-this%grid%halo_size+1):this%ite,:,this%jts:this%jte)
+                if (.not.(this%west_boundary)) this%west_buffer_3d(n,:,:,1:(this%jte-this%jts+1)) = &
+                        var%data_3d(this%its:(this%its+this%grid%halo_size)-1,:,this%jts:this%jte)
+
+                n = n+1
+            endif
         enddo
 
         if (.not.(this%north_boundary)) then
             !DIR$ PGAS DEFER_SYNC
-            this%south_in(:,:,:,:)[this%north_neighbor] = this%north_buffer(:,:,:,:)
+            this%south_in_3d(:,:,:,:)[this%north_neighbor] = this%north_buffer_3d(:,:,:,:)
         endif
         if (.not.(this%south_boundary)) then
             !DIR$ PGAS DEFER_SYNC
-            this%north_in(:,:,:,:)[this%south_neighbor] = this%south_buffer(:,:,:,:)
+            this%north_in_3d(:,:,:,:)[this%south_neighbor] = this%south_buffer_3d(:,:,:,:)
         endif
         if (.not.(this%east_boundary)) then
             !DIR$ PGAS DEFER_SYNC
-            this%west_in(:,:,:,:)[this%east_neighbor] = this%east_buffer(:,:,:,:)
+            this%west_in_3d(:,:,:,:)[this%east_neighbor] = this%east_buffer_3d(:,:,:,:)
         endif
         if (.not.(this%west_boundary)) then
             !DIR$ PGAS DEFER_SYNC
-            this%east_in(:,:,:,:)[this%west_neighbor] = this%west_buffer(:,:,:,:)
+            this%east_in_3d(:,:,:,:)[this%west_neighbor] = this%west_buffer_3d(:,:,:,:)
         endif
 
-    end subroutine halo_send_batch
+    end subroutine halo_3d_send_batch
 
-    module subroutine halo_retrieve_batch(this, wait_timer)
+    module subroutine halo_3d_retrieve_batch(this, wait_timer)
         class(domain_t), intent(inout) :: this
         type(timer_t),   intent(inout) :: wait_timer
-        type(variable_t) :: var_to_advect
+        type(variable_t) :: var
         integer :: n
 
         call wait_timer%start()
@@ -664,40 +729,142 @@ contains
         call wait_timer%stop()
 
         call this%adv_vars%reset_iterator()
+        call this%exch_vars%reset_iterator()
         n = 1
         ! Now iterate through the dictionary as long as there are more elements present
         do while (this%adv_vars%has_more_elements())
             ! get the next variable
-            var_to_advect = this%adv_vars%next()
-            
-            if (.not.(this%north_boundary)) var_to_advect%data_3d(this%its:this%ite,:,(this%jte+1):this%jme) = &
-                    this%north_in(n,1:(this%ite-this%its+1),:,:)
-            if (.not.(this%south_boundary)) var_to_advect%data_3d(this%its:this%ite,:,this%jms:(this%jts-1)) = &
-                    this%south_in(n,1:(this%ite-this%its+1),:,:)
-            if (.not.(this%east_boundary)) var_to_advect%data_3d((this%ite+1):this%ime,:,this%jts:this%jte) = &
-                    this%east_in(n,:,:,1:(this%jte-this%jts+1))
-            if (.not.(this%west_boundary)) var_to_advect%data_3d(this%ims:(this%its-1),:,this%jts:this%jte) = &
-                    this%west_in(n,:,:,1:(this%jte-this%jts+1))
-            n = n+1
+            var = this%adv_vars%next()
+            if (var%three_d) then
+                if (.not.(this%north_boundary)) var%data_3d(this%its:this%ite,:,(this%jte+1):this%jme) = &
+                        this%north_in_3d(n,1:(this%ite-this%its+1),:,:)
+                if (.not.(this%south_boundary)) var%data_3d(this%its:this%ite,:,this%jms:(this%jts-1)) = &
+                        this%south_in_3d(n,1:(this%ite-this%its+1),:,:)
+                if (.not.(this%east_boundary)) var%data_3d((this%ite+1):this%ime,:,this%jts:this%jte) = &
+                        this%east_in_3d(n,:,:,1:(this%jte-this%jts+1))
+                if (.not.(this%west_boundary)) var%data_3d(this%ims:(this%its-1),:,this%jts:this%jte) = &
+                        this%west_in_3d(n,:,:,1:(this%jte-this%jts+1))
+                n = n+1
+            endif
         enddo
     
-    end subroutine halo_retrieve_batch
+        ! Now iterate through the exchange-only objects as long as there are more elements present
+        do while (this%exch_vars%has_more_elements())
+            ! get the next variable
+            var = this%exch_vars%next()
+            if (var%three_d) then
+                if (.not.(this%north_boundary)) var%data_3d(this%its:this%ite,:,(this%jte+1):this%jme) = &
+                        this%north_in_3d(n,1:(this%ite-this%its+1),:,:)
+                if (.not.(this%south_boundary)) var%data_3d(this%its:this%ite,:,this%jms:(this%jts-1)) = &
+                        this%south_in_3d(n,1:(this%ite-this%its+1),:,:)
+                if (.not.(this%east_boundary)) var%data_3d((this%ite+1):this%ime,:,this%jts:this%jte) = &
+                        this%east_in_3d(n,:,:,1:(this%jte-this%jts+1))
+                if (.not.(this%west_boundary)) var%data_3d(this%ims:(this%its-1),:,this%jts:this%jte) = &
+                        this%west_in_3d(n,:,:,1:(this%jte-this%jts+1))
+                n = n+1
+            endif
+        enddo
+
+    
+    end subroutine halo_3d_retrieve_batch
+
+    module subroutine halo_2d_send_batch(this)
+        class(domain_t), intent(inout) :: this
+        type(variable_t) :: var
+        integer :: n
+
+        call this%exch_vars%reset_iterator()
+        n = 1
+        ! Now iterate through the exchange-only objects as long as there are more elements present
+        do while (this%exch_vars%has_more_elements())
+            ! get the next variable
+            var = this%exch_vars%next()
+            if (var%two_d) then
+                if (.not.(this%north_boundary)) this%north_buffer_2d(n,1:(this%ite-this%its+1),:) = &
+                        var%data_2d(this%its:this%ite,(this%jte-this%grid%halo_size+1):this%jte)
+                if (.not.(this%south_boundary)) this%south_buffer_2d(n,1:(this%ite-this%its+1),:) = &
+                        var%data_2d(this%its:this%ite,this%jts:(this%jts+this%grid%halo_size-1))
+                if (.not.(this%east_boundary)) this%east_buffer_2d(n,:,1:(this%jte-this%jts+1)) = &
+                        var%data_2d((this%ite-this%grid%halo_size+1):this%ite,this%jts:this%jte)
+                if (.not.(this%west_boundary)) this%west_buffer_2d(n,:,1:(this%jte-this%jts+1)) = &
+                        var%data_2d(this%its:(this%its+this%grid%halo_size)-1,this%jts:this%jte)
+
+                n = n+1
+            endif
+        enddo
+
+        if (.not.(this%north_boundary)) then
+            !DIR$ PGAS DEFER_SYNC
+            this%south_in_2d(:,:,:)[this%north_neighbor] = this%north_buffer_2d(:,:,:)
+        endif
+        if (.not.(this%south_boundary)) then
+            !DIR$ PGAS DEFER_SYNC
+            this%north_in_2d(:,:,:)[this%south_neighbor] = this%south_buffer_2d(:,:,:)
+        endif
+        if (.not.(this%east_boundary)) then
+            !DIR$ PGAS DEFER_SYNC
+            this%west_in_2d(:,:,:)[this%east_neighbor] = this%east_buffer_2d(:,:,:)
+        endif
+        if (.not.(this%west_boundary)) then
+            !DIR$ PGAS DEFER_SYNC
+            this%east_in_2d(:,:,:)[this%west_neighbor] = this%west_buffer_2d(:,:,:)
+        endif
+
+    end subroutine halo_2d_send_batch
+
+    module subroutine halo_2d_retrieve_batch(this)
+        class(domain_t), intent(inout) :: this
+        type(variable_t) :: var
+        integer :: n
+
+        sync images( this%neighbors )
+
+        call this%exch_vars%reset_iterator()
+        n = 1    
+        ! Now iterate through the exchange-only objects as long as there are more elements present
+        do while (this%exch_vars%has_more_elements())
+            ! get the next variable
+            var = this%exch_vars%next()
+            if (var%two_d) then
+                if (.not.(this%north_boundary)) var%data_2d(this%its:this%ite,(this%jte+1):this%jme) = this%north_in_2d(n,1:(this%ite-this%its+1),:)
+                if (.not.(this%south_boundary)) var%data_2d(this%its:this%ite,this%jms:(this%jts-1)) = this%south_in_2d(n,1:(this%ite-this%its+1),:)
+                if (.not.(this%east_boundary)) var%data_2d((this%ite+1):this%ime,this%jts:this%jte) = this%east_in_2d(n,:,1:(this%jte-this%jts+1))
+                if (.not.(this%west_boundary)) var%data_2d(this%ims:(this%its-1),this%jts:this%jte) = this%west_in_2d(n,:,1:(this%jte-this%jts+1))
+                n = n+1
+            endif
+        enddo
+
+    
+    end subroutine halo_2d_retrieve_batch
 
     !> -------------------------------
-    !! Send and get the halos from all exchangable objects to/from their neighbors
+    !! Send and get the data from all exch+adv objects to/from their neighbors (3D)
     !!
     !! -------------------------------
-    module subroutine halo_exchange_batch(this, send_timer, ret_timer, wait_timer)
+    module subroutine halo_3d_exchange_batch(this, send_timer, ret_timer, wait_timer)
         class(domain_t), intent(inout) :: this
         type(timer_t),   intent(inout) :: send_timer, ret_timer, wait_timer
         
         call send_timer%start()
-        call this%halo_send_batch()
+        call this%halo_3d_send_batch()
         call send_timer%stop()
 
         call ret_timer%start()
-        call this%halo_retrieve_batch(wait_timer)
+        call this%halo_3d_retrieve_batch(wait_timer)
         call ret_timer%stop()
+    end subroutine
+
+
+    !> -------------------------------
+    !! Send and get the data from all exch+adv objects to/from their neighbors (2D)
+    !!
+    !! -------------------------------
+    module subroutine halo_2d_exchange_batch(this)
+        class(domain_t), intent(inout) :: this
+        
+        call this%halo_2d_send_batch()
+
+        call this%halo_2d_retrieve_batch()
     end subroutine
 
 
@@ -1011,6 +1178,9 @@ contains
         if (0<opt%vars_to_allocate( kVARS%slope_angle) )                call setup(this%slope_angle,        this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%aspect_angle) )               call setup(this%aspect_angle,       this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%svf) )                        call setup(this%svf,                this%grid2d) 
+        if (0<opt%vars_to_allocate( kVARS%ridge_dist) )                 call setup(this%ridge_dist,         this%grid2d) 
+        if (0<opt%vars_to_allocate( kVARS%valley_dist) )                call setup(this%valley_dist,        this%grid2d) 
+        if (0<opt%vars_to_allocate( kVARS%ridge_drop) )                 call setup(this%ridge_drop,         this%grid2d) 
         if (0<opt%vars_to_allocate( kVARS%hlm) )                        call setup(this%hlm,                this%grid_hlm) 
     end subroutine
 
@@ -2023,6 +2193,7 @@ contains
             call setup_Sx(this, options)
         endif
 
+
     end subroutine initialize_core_variables
         
     subroutine setup_grid_rotations(this,options)
@@ -2709,51 +2880,33 @@ contains
             endif
         endif
 
-        ! these will all be udpated by either forcing data or the land model, but initialize to sensible values to avoid breaking other initialization routines
-        if (associated(this%skin_temperature%data_2d)) this%skin_temperature%data_2d = init_surf_temp
-        if (associated(this%sst%data_2d)) this%sst%data_2d = init_surf_temp
-        if (associated(this%roughness_z0%data_2d)) this%roughness_z0%data_2d = 0.001
-        if (associated(this%sensible_heat%data_2d)) this%sensible_heat%data_2d=0
-        if (associated(this%latent_heat%data_2d)) this%latent_heat%data_2d=0
-        if (associated(this%u_10m%data_2d)) this%u_10m%data_2d=0
-        if (associated(this%v_10m%data_2d)) this%v_10m%data_2d=0
-        if (associated(this%windspd_10m%data_2d)) this%windspd_10m%data_2d=0
-        if (associated(this%temperature_2m%data_2d)) this%temperature_2m%data_2d=init_surf_temp
-        if (associated(this%humidity_2m%data_2d)) this%humidity_2m%data_2d=0.001
-        if (associated(this%surface_pressure%data_2d)) this%surface_pressure%data_2d=102000
-        if (associated(this%longwave_up%data_2d)) this%longwave_up%data_2d=0
-        if (associated(this%ground_heat_flux%data_2d)) this%ground_heat_flux%data_2d=0
-        if (associated(this%veg_leaf_temperature%data_2d)) this%veg_leaf_temperature%data_2d=init_surf_temp
-        if (associated(this%ground_surf_temperature%data_2d)) this%ground_surf_temperature%data_2d=init_surf_temp
-        if (associated(this%canopy_vapor_pressure%data_2d)) this%canopy_vapor_pressure%data_2d=2000
-        if (associated(this%canopy_temperature%data_2d)) this%canopy_temperature%data_2d=init_surf_temp
-        if (associated(this%coeff_momentum_drag%data_2d)) this%coeff_momentum_drag%data_2d=0
-        if (associated(this%coeff_heat_exchange%data_2d)) this%coeff_heat_exchange%data_2d=0
-        if (associated(this%coeff_heat_exchange_3d%data_3d)) this%coeff_heat_exchange_3d%data_3d=0.01
-        if (associated(this%canopy_fwet%data_2d)) this%canopy_fwet%data_2d=0
-        if (associated(this%snow_water_eq_prev%data_2d)) this%snow_water_eq_prev%data_2d=0
-        if (associated(this%snow_albedo_prev%data_2d)) this%snow_albedo_prev%data_2d=0.65
-        if (associated(this%storage_lake%data_2d)) this%storage_lake%data_2d=0
-
-        call read_land_variables_FSM(this, options)
-        !stop
-    end subroutine read_land_variables
-
-
-    !>------------------------------------------------------------
-    !! setting up vars for FSM in addition to what is done in read_land_variables...reading from high-res file
-    !!
-    !! @param domain    Model domain structure
-    !!
-    !!------------------------------------------------------------
-    subroutine read_land_variables_FSM(this, options)
-        implicit none
-        class(domain_t), intent(inout)  :: this
-        type(options_t), intent(in)     :: options
-
-        integer :: i, j 
-        real, allocatable :: temporary_data(:,:), temporary_data_3d(:,:,:)
+        if (options%parameters%ridge_dist_var /= "") then
+            call io_read(options%parameters%init_conditions_file,   &
+                           options%parameters%ridge_dist_var,       &
+                           temporary_data)
+            if (associated(this%ridge_dist%data_2d)) then
+                this%ridge_dist%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+            endif
+        endif
         
+        if (options%parameters%valley_dist_var /= "") then
+            call io_read(options%parameters%init_conditions_file,   &
+                           options%parameters%valley_dist_var,       &
+                           temporary_data)
+            if (associated(this%valley_dist%data_2d)) then
+                this%valley_dist%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+            endif
+        endif
+        
+        if (options%parameters%ridge_drop_var /= "") then
+            call io_read(options%parameters%init_conditions_file,   &
+                           options%parameters%ridge_drop_var,       &
+                           temporary_data)
+            if (associated(this%ridge_drop%data_2d)) then
+                this%ridge_drop%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+            endif
+        endif
+
         if (options%physics%radiation_downScaling==1) then
             !!
             if (options%parameters%hlm_var /= "") then
@@ -2805,7 +2958,32 @@ contains
             endif
         endif
 
-        !! these will all be udpated by either forcing data or the land model, but initialize to sensible values to avoid breaking other initialization routines
+        ! these will all be udpated by either forcing data or the land model, but initialize to sensible values to avoid breaking other initialization routines
+        if (associated(this%skin_temperature%data_2d)) this%skin_temperature%data_2d = init_surf_temp
+        if (associated(this%sst%data_2d)) this%sst%data_2d = init_surf_temp
+        if (associated(this%roughness_z0%data_2d)) this%roughness_z0%data_2d = 0.001
+        if (associated(this%sensible_heat%data_2d)) this%sensible_heat%data_2d=0
+        if (associated(this%latent_heat%data_2d)) this%latent_heat%data_2d=0
+        if (associated(this%u_10m%data_2d)) this%u_10m%data_2d=0
+        if (associated(this%v_10m%data_2d)) this%v_10m%data_2d=0
+        if (associated(this%windspd_10m%data_2d)) this%windspd_10m%data_2d=0
+        if (associated(this%temperature_2m%data_2d)) this%temperature_2m%data_2d=init_surf_temp
+        if (associated(this%humidity_2m%data_2d)) this%humidity_2m%data_2d=0.001
+        if (associated(this%surface_pressure%data_2d)) this%surface_pressure%data_2d=102000
+        if (associated(this%longwave_up%data_2d)) this%longwave_up%data_2d=0
+        if (associated(this%ground_heat_flux%data_2d)) this%ground_heat_flux%data_2d=0
+        if (associated(this%veg_leaf_temperature%data_2d)) this%veg_leaf_temperature%data_2d=init_surf_temp
+        if (associated(this%ground_surf_temperature%data_2d)) this%ground_surf_temperature%data_2d=init_surf_temp
+        if (associated(this%canopy_vapor_pressure%data_2d)) this%canopy_vapor_pressure%data_2d=2000
+        if (associated(this%canopy_temperature%data_2d)) this%canopy_temperature%data_2d=init_surf_temp
+        if (associated(this%coeff_momentum_drag%data_2d)) this%coeff_momentum_drag%data_2d=0
+        if (associated(this%coeff_heat_exchange%data_2d)) this%coeff_heat_exchange%data_2d=0
+        if (associated(this%coeff_heat_exchange_3d%data_3d)) this%coeff_heat_exchange_3d%data_3d=0.01
+        if (associated(this%canopy_fwet%data_2d)) this%canopy_fwet%data_2d=0
+        if (associated(this%snow_water_eq_prev%data_2d)) this%snow_water_eq_prev%data_2d=0
+        if (associated(this%snow_albedo_prev%data_2d)) this%snow_albedo_prev%data_2d=0.65
+        if (associated(this%storage_lake%data_2d)) this%storage_lake%data_2d=0
+        
         if (associated(this%runoff_tstep%data_2d))        this%runoff_tstep%data_2d=0.
         if (associated(this%snowdepth%data_2d))           this%snowdepth%data_2d=0.
         if (associated(this%Tsnow%data_3d))               this%Tsnow%data_3d=273.15
@@ -2824,12 +3002,8 @@ contains
         if (associated(this%shortwave_direct_above%data_2d))  this%shortwave_direct_above%data_2d=0.
         if (associated(this%shortwave_total%data_2d))  this%shortwave_total%data_2d=0.
         if (associated(this%Sliq_out%data_2d))  this%Sliq_out%data_2d=0.
-        !if (associated(this%slope%data_2d))               this%slope%data_2d=0.
-        !if (associated(this%slope_angle%data_2d))         this%slope_angle%data_2d=0.
-        !if (associated(this%aspect_angle%data_2d))        this%aspect_angle%data_2d=0.
-        !if (associated(this%svf%data_2d))                 this%svf%data_2d=0.
-        !if (associated(this%hlm%data_2d))                 this%hlm%data_2d=0.
-    end subroutine read_land_variables_FSM
+    end subroutine read_land_variables
+
     
     !> -------------------------------
     !! Initialize various internal variables that need forcing data first, e.g. temperature, pressure on interface, exner, ...
