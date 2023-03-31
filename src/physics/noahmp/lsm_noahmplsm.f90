@@ -1604,10 +1604,10 @@ ENDIF   ! CROPTYPE == 0
 !   ERRSW   = SWDOWN - (SAV+SAG + FSRV+FSRG)
    IF (ABS(ERRSW) > 0.1) THEN            ! w/m2  ! BK 2022/10/14: modified to prevent error when running with cray-compiled icar
     WRITE(*,*) "ERRSW =",ERRSW
-    ! write(*,*) "SWDOWN=", SWDOWN 
-    ! write(*,*) "(FSA + FSR)=", (FSA + FSR)
-    ! write(*,*) "FSA =", (FSA)
-    ! write(*,*) "FSR=", FSR
+   write(*,*) "SWDOWN=", SWDOWN 
+   write(*,*) "(FSA + FSR)=", (FSA + FSR)
+   write(*,*) "FSA =", (FSA)
+   write(*,*) "FSR=", FSR
    WRITE(*,*) "VEGETATION!"
    WRITE(*,*) "SWDOWN*FVEG =",SWDOWN*FVEG
    WRITE(*,*) "FVEG*(SAV+SAG) =",FVEG*SAV + SAG
@@ -1622,6 +1622,9 @@ ENDIF   ! CROPTYPE == 0
    WRITE(*,*) "SAV    =",SAV
    WRITE(*,*) "SAG    =",SAG
    WRITE(*,*) "FSA    =",FSA
+   WRITE(*,*) "IST    =",IST
+   WRITE(*,*) "ILOC    =",ILOC
+   WRITE(*,*) "JLOC    =",JLOC
 !jref:end
       WRITE(message,*) 'ERRSW =',ERRSW
       WRITE(*,*) "Stop in Noah-MP"
