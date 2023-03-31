@@ -45,7 +45,7 @@ module land_surface
     use icar_constants,      only : kVARS, kLSM_SIMPLE, kLSM_NOAH, kLSM_NOAHMP, kPBL_DIAGNOSTIC
     use options_interface,   only : options_t
     use domain_interface,    only : domain_t
-    use module_ra_simple, only: calc_solar_elevation
+    use module_ra_simple, only: calc_solar_elevation_corr
     use ieee_arithmetic
 
     implicit none
@@ -97,7 +97,8 @@ module land_surface
     real    :: sfc_layer_thickness
 
     !Noah-MP specific
-    integer :: IDVEG,IOPT_CRS,IOPT_BTR,IOPT_RUN,IOPT_SFC,IOPT_FRZ,IOPT_INF,IOPT_RAD,IOPT_ALB,IOPT_SNF,IOPT_TBOT
+    real    :: NMP_SOILTSTEP
+    integer :: IDVEG,IOPT_CRS,IOPT_BTR,IOPT_RUN,IOPT_SFC,IOPT_FRZ,IOPT_INF,IOPT_RAD,IOPT_ALB,IOPT_SNF,IOPT_TBOT, IOPT_TDRN, IOPT_NMPOUTPUT
     integer :: IOPT_STC, IOPT_GLA, IOPT_RSF, IOPT_SOIL, IOPT_PEDO, IOPT_CROP, IOPT_IRR, IOPT_IRRM, IZ0TLND, SF_URBAN_PHYSICS
     real,allocatable,dimension(:,:) :: chstarxy
     character(len=MAXVARLENGTH) :: landuse_name
@@ -814,28 +815,32 @@ contains
             where(domain%soil_temperature%data_3d<200) domain%soil_temperature%data_3d=200
             where(domain%soil_water_content%data_3d<0.0001) domain%soil_water_content%data_3d=0.0001
 
-            ! Hard-coded Noah-MP input options (read in from namelist in future); TLE
-            IDVEG = 1            ! dynamic vegetation (1 = OFF; 2 = ON)
-            IOPT_CRS = 1         ! canopy stomatal resistance (1 = Ball-Berry; 2 = Jarvis)
-            IOPT_BTR = 1         ! soil moisture factor for stomatal resistance (1 = Noah; 2 = CLM; 3 = SSiB)
-            IOPT_RUN = 1         ! runoff and gw (1 = SIMGM; 2 = SIMTOP; 3 = Schaake96; 4 = BATS)
-            IOPT_SFC = 1         ! surface layer drag coefficient (CH & CM) (1 = M-O; 2 = Chen97)
-            IOPT_FRZ = 1         ! supercooled liquid water (1 = NY06; 2 = Koren99)
-            IOPT_INF = 1         ! frozen soil permeability (1 = NY06; 2 = Koren99)
-            IOPT_RAD = 1         ! radiation transfer (1 = gap=F(3D,cosz); 2 = gap=0; 3 = gap=1-Fveg)
-            IOPT_ALB = 1         ! snow surface albedo (1 = BATS; 2 = CLASS; 3 = Noah)
-            IOPT_SNF = 1         ! rain/snow partitioning (1 = Jordan91; 2 = BATS; 3 = CLASS)
-            IOPT_TBOT = 2        ! lower boundary of soil temperature (1 = zero-flux; 2 = Noah)
-            IOPT_STC = 1         ! snow/soil temp. time scheme
-            IOPT_GLA = 1         ! glacier option (1 = phase change; 2 = simple)
-            IOPT_RSF = 1         ! surface resistance (1 = Sakaguchi/Zeng; 2 = Sellers; 3 = modified Sellers; 4 = 1+snow)
-            IOPT_SOIL = 1        ! soil config. option (1 = homogeneous with depth; 2 & 3 = variable with depth--not currently set up)
-            IOPT_PEDO = 1        ! soil pedotransfer function option
-            IOPT_CROP = 0        ! crop model option (0 = none; 1 = Liu et al.; 2 = Gecros)
-            IOPT_IRR = 0         ! irrigation scheme (0 = OFF; 1 = ON)
-            IOPT_IRRM = 0        ! irrigation method
-            IZ0TLND = 0          ! option of Chen adjustment of Czil (not used)
-            SF_URBAN_PHYSICS = 0 ! urban physics (0 = off)
+            IDVEG = options%lsm_options%nmp_dveg
+            IOPT_CRS = options%lsm_options%nmp_opt_crs
+            IOPT_SFC = options%lsm_options%nmp_opt_sfc
+            IOPT_BTR = options%lsm_options%nmp_opt_btr
+            IOPT_RUN = options%lsm_options%nmp_opt_run
+            IOPT_INF = options%lsm_options%nmp_opt_inf
+            IOPT_FRZ = options%lsm_options%nmp_opt_frz
+            IOPT_INF = options%lsm_options%nmp_opt_inf
+            IOPT_RAD = options%lsm_options%nmp_opt_rad
+            IOPT_ALB = options%lsm_options%nmp_opt_alb
+            IOPT_SNF = options%lsm_options%nmp_opt_snf
+            IOPT_TBOT = options%lsm_options%nmp_opt_tbot
+            IOPT_STC = options%lsm_options%nmp_opt_stc
+            IOPT_GLA = options%lsm_options%nmp_opt_gla
+            IOPT_RSF = options%lsm_options%nmp_opt_rsf
+            IOPT_SOIL = options%lsm_options%nmp_opt_soil
+            IOPT_PEDO = options%lsm_options%nmp_opt_pedo
+            IOPT_CROP = options%lsm_options%nmp_opt_crop
+            IOPT_IRR = options%lsm_options%nmp_opt_irr
+            IOPT_IRRM = options%lsm_options%nmp_opt_irrm
+            IOPT_TDRN = options%lsm_options%nmp_opt_tdrn
+            IOPT_NMPOUTPUT = options%lsm_options%noahmp_output
+            IZ0TLND = options%lsm_options%nmp_iz0tlnd
+            NMP_SOILTSTEP = options%lsm_options%nmp_soiltstep
+            SF_URBAN_PHYSICS = options%lsm_options%sf_urban_phys
+
 
             !allocate dummy variable that doesn't do anything
             allocate(chstarxy(ims:ime,jms:jme))
@@ -1386,7 +1391,7 @@ contains
 
 
                 do j = jms,jme
-                    solar_elevation  = calc_solar_elevation(date=domain%model_time, lon=domain%longitude%data_2d, &
+                    solar_elevation  = calc_solar_elevation_corr(date=domain%model_time, lon=domain%longitude%data_2d, &
                                     j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac)
                     domain%cosine_zenith_angle%data_2d(its:ite,j)=sin(solar_elevation(its:ite))
                 enddo
@@ -1447,7 +1452,8 @@ contains
                              domain%ground_heat_flux%data_2d,          &  ! GRDFLX
                              SMSTAV,                                   &
                              domain%soil_totalmoisture%data_2d,        &
-                             SFCRUNOFF, UDRUNOFF, ALBEDO, SNOWC,       &
+                             SFCRUNOFF, UDRUNOFF,                      &
+                             ALBEDO, SNOWC,                            &
                              domain%soil_water_content%data_3d,        &
                              SH2O,                                     &
                              domain%soil_temperature%data_3d,          &
@@ -1555,6 +1561,9 @@ contains
                              ids,ide,  jds,jde,  kds,kde,              &
                              ims,ime,  jms,jme,  kms,kme,              &
                              its,ite,  jts,jte,  kts,kte)
+
+                domain%albedo%data_3d(:, domain%model_time%month, :) = ALBEDO
+
 
     !         TLE: OMITTING OPTIONAL PRECIP INPUTS FOR NOW
     !                         MP_RAINC, MP_RAINNC, MP_SHCV, MP_SNOW, MP_GRAUP, MP_HAIL     )
