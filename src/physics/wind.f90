@@ -19,6 +19,7 @@ module wind
     use options_interface, only : options_t
     use grid_interface,    only : grid_t
     use wind_surf, only         : apply_Sx
+    use wind_thermal, only      : apply_thermal_winds, init_thermal_winds
     use io_routines, only : io_read, io_write
     use mod_atm_utilities,   only : calc_froude, calc_Ri, calc_dry_stability
     
@@ -71,6 +72,12 @@ contains
 
             if (options%physics%windtype == kITERATIVE_WINDS .or. options%physics%windtype == kLINEAR_ITERATIVE_WINDS) then
                 call options%restart_vars([kVARS%w_real])
+            endif
+            
+            if (options%wind%thermal) then
+                call options%alloc_vars([kVARS%sensible_heat, kVARS%ridge_dist, kVARS%valley_dist, kVARS%ridge_drop, kVARS%roughness_z0])
+                call options%exch_vars([kVARS%sensible_heat])
+                call options%restart_vars([kVARS%sensible_heat, kVARS%roughness_z0])
             endif
         end subroutine wind_var_request
 
@@ -375,8 +382,21 @@ contains
             !     call add_blocked_flow(domain, options)
             ! endif
 
+            if (options%wind%thermal) then
+                call apply_thermal_winds(domain%sensible_heat%data_2d,domain%density%data_3d,domain%temperature%data_3d,  &
+                                         domain%ridge_dist%data_2d, domain%valley_dist%data_2d,domain%ridge_drop%data_2d, &
+                                         domain%u%data_3d, domain%v%data_3d,domain%dzdx,domain%dzdy,  &
+                                         domain%z%data_3d,domain%roughness_z0%data_2d)
+                
+                call domain%u%exchange_x()
+                call domain%v%exchange_y()
+            endif 
+                        
             if (options%wind%Sx) then
                 call apply_Sx(domain%Sx,domain%TPI,domain%u%data_3d, domain%v%data_3d, domain%w%data_3d,domain%Ri,domain%dzdx,domain%dzdy)
+                
+                call domain%u%exchange_x()
+                call domain%v%exchange_y()
             endif 
 
             ! linear winds
@@ -441,10 +461,13 @@ contains
                 !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
                 if (options%parameters%wvar=="") domain%w_real%data_3d = 0.0  
                 domain%w%data_3d = (domain%w_real%data_3d-domain%w%data_3d)/domain%jacobian
+                
+                domain%w%data_3d(:,kms:kme-1,:) = 0.5*(domain%w%data_3d(:,kms:kme-1,:)+domain%w%data_3d(:,kms+1:kme,:))
+                
                 call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
                                 domain%density%data_3d,options,horz_only=.False.)
-
+                                
                 call calc_iter_winds(domain,alpha,div,options%parameters%advect_density)
             endif
             ! else assumes even flow over the mountains
@@ -469,8 +492,24 @@ contains
             call domain%u%exchange_x(do_metadata=.True.)
             call domain%v%exchange_y(do_metadata=.True.)
             
+            if (options%wind%thermal) then
+                !Since this is an update call and the sensible heat fluxes can now be quite variable/patch, exchange sensible heat so that corrections are consistent
+                call domain%halo_2d_exchange_batch()
+                
+                call apply_thermal_winds(domain%sensible_heat%data_2d,domain%density%data_3d,domain%temperature%data_3d,  &
+                                         domain%ridge_dist%data_2d, domain%valley_dist%data_2d,domain%ridge_drop%data_2d, &
+                                         domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d,domain%dzdx,domain%dzdy,  &
+                                         domain%z%data_3d,domain%roughness_z0%data_2d)
+                
+                call domain%u%exchange_x(do_metadata=.True.)
+                call domain%v%exchange_y(do_metadata=.True.)
+            endif 
+
             if (options%wind%Sx) then
                 call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d,domain%Ri,domain%dzdx,domain%dzdy)
+                
+                call domain%u%exchange_x(do_metadata=.True.)
+                call domain%v%exchange_y(do_metadata=.True.)
             endif 
 
             ! linear winds
@@ -541,11 +580,13 @@ contains
                 else
                     domain%w%meta_data%dqdt_3d = (domain%w_real%dqdt_3d-domain%w%meta_data%dqdt_3d)/domain%jacobian
                 endif
+                
+                domain%w%meta_data%dqdt_3d(:,kms:kme-1,:) = 0.5*(domain%w%meta_data%dqdt_3d(:,kms:kme-1,:)+domain%w%meta_data%dqdt_3d(:,kms+1:kme,:))
 
                 call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
                                 domain%density%data_3d,options,horz_only=.False.)
-                                
+
                 call calc_iter_winds(domain,alpha,div,options%parameters%advect_density,update_in=.True.)
             endif
 
@@ -557,9 +598,8 @@ contains
                              domain% w_real %data_3d,           &
                              domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
-
-
         endif
+
 
     end subroutine update_winds
     
@@ -787,6 +827,8 @@ contains
         do i=domain%grid%kms, domain%grid%kme
             domain%advection_dz(:,i,:) = options%parameters%dz_levels(i)
         enddo
+        
+        if (options%wind%thermal) call init_thermal_winds(domain)
         
     end subroutine init_winds
 

@@ -87,9 +87,7 @@ contains
         else
             call update_coefs(domain)
         endif
-                                
-        !call init_iter_winds()
-                                
+                                                                
         call KSPCreate(domain%IO_comms,ksp,ierr)
         conv_tol = 1e-4
 
