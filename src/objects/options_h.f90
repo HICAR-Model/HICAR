@@ -17,6 +17,8 @@ module options_interface
 
         ! these are the variables that the advection code should process
         integer :: vars_to_advect(   kMAX_STORAGE_VARS ) = 0
+        ! these are the variables that should be exchanged only
+        integer :: vars_to_exch(   kMAX_STORAGE_VARS ) = 0
         ! these are the variables that need to be allocated for the model to run given the physics options requested
         integer :: vars_to_allocate( kMAX_STORAGE_VARS ) = 0
         ! these are the variables that need to be written and read from disk for a model restart run
@@ -56,6 +58,7 @@ module options_interface
         procedure, public  :: alloc_vars
         procedure, public  :: restart_vars
         procedure, public  :: advect_vars
+        procedure, public  :: exch_vars
     end type
 
 
@@ -83,6 +86,14 @@ interface
     end subroutine
 
     module subroutine advect_vars(this, input_vars, var_idx, error)
+        implicit none
+        class(options_t), intent(inout):: this
+        integer, optional, intent(in)  :: input_vars(:)
+        integer, optional, intent(in)  :: var_idx
+        integer, optional, intent(out) :: error
+    end subroutine
+
+    module subroutine exch_vars(this, input_vars, var_idx, error)
         implicit none
         class(options_t), intent(inout):: this
         integer, optional, intent(in)  :: input_vars(:)
