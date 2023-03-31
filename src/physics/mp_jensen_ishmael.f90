@@ -56,9 +56,8 @@ module module_mp_jensen_ishmael
   real, private, allocatable, dimension(:,:,:) :: coltab, coltabn
 
   !.. Added for double precision
-  integer, parameter :: LUT_KIND_R4 = selected_real_kind(6) !.. 4 byte real
-  real(kind=LUT_KIND_R4), private, allocatable, dimension(:,:,:,:,:) :: itab_o, itabr_o
-  real(kind=LUT_KIND_R4), private, allocatable, dimension(:) :: gamma_tab_o
+  real, private, allocatable, dimension(:,:,:,:,:) :: itab_o, itabr_o
+  real, private, allocatable, dimension(:) :: gamma_tab_o
   
 contains
   !--------------------------------------------------------------------------------------------------------------!
@@ -72,7 +71,7 @@ contains
 
     implicit none
     
-    integer :: i1, i2, i3, i4, icat, scratch_i
+    integer :: i1, i2, i3, i4, icat
     integer, parameter :: ncat=7,npair=35,ndn=60
     integer :: ipair(ncat,ncat)
     real, dimension(ncat,9) :: dstprms
@@ -257,8 +256,10 @@ contains
 
     real, dimension(ims:ime, kms:kme, jms:jme), intent(inout) ::     &
          th, qv, qc, qr, nr, qi1, ni1, ai1, ci1, qi2, ni2, ai2, ci2, &
-         qi3, ni3, ai3, ci3, diag_effc3d, diag_effi3d
-
+         qi3, ni3, ai3, ci3, diag_effc3d, diag_effi3d,               &
+         diag_rhopo3d_1, diag_phii3d_1,                              &
+         diag_rhopo3d_2, diag_phii3d_2,                              &
+         diag_rhopo3d_3, diag_phii3d_3                         
   !.. 2D variables
     real, dimension(ims:ime, jms:jme), intent(inout) ::              &
          rainnc, rainncv, snownc, snowncv
@@ -285,9 +286,9 @@ contains
          
     real, dimension(ims:ime, kms:kme, jms:jme) ::  &
                   diag_dbz3d,              &
-         diag_vmi3d_1, diag_di3d_1, diag_rhopo3d_1, diag_phii3d_1,   &
-         diag_vmi3d_2, diag_di3d_2, diag_rhopo3d_2, diag_phii3d_2,   &
-         diag_vmi3d_3, diag_di3d_3, diag_rhopo3d_3, diag_phii3d_3,   &
+         diag_vmi3d_1, diag_di3d_1,        &
+         diag_vmi3d_2, diag_di3d_2,        &
+         diag_vmi3d_3, diag_di3d_3,        &
          diag_itype_1, diag_itype_2, diag_itype_3                                    
 
 
@@ -1341,7 +1342,7 @@ contains
                 if(temp.gt.T0) then
 
   !.. Melting: ice shapes become more spherical
-                   qmlt(cc)=2.*PI*(kt*fh(cc)*(T0-temp)+rhoair(cc)*xxlv*dv*fv(cc)*(qs0-qv(k)))/   & 
+                   qmlt(cc)=2.*PI*(kt*fh(cc)*(T0-temp)+rhoair(k)*xxlv*dv*fv(cc)*(qs0-qv(k)))/   & 
                         xxlf*(ni(cc,k)*NU*max(ani(cc),cni(cc))) - &
                         (CPW/xxlf*(temp-T0)*(rimetotal(cc)/rhoair(k) + dQImltri(cc)))
                    
@@ -3954,11 +3955,11 @@ contains
        denfac(k) = sqrt(1./rhoa(k))
        dn(k,3) = ddum1
        en(k,3) = ndum1*rhoa(k)
-       r(k,3)  = qdum1
+       r(k,3)  = max(qdum1,0.)
        
        dn(k,4) = ddum2
        en(k,4) = ndum2*rhoa(k)
-       r(k,4) =  qdum2
+       r(k,4) =  max(qdum2,0.)
        
        qr(k,3) = 0.0 !.. internal energy... not needed so pass in zero                                        
        qq(k,3) = t(k,3)
@@ -3972,7 +3973,7 @@ contains
        
        dn(k,5) = ddum3
        en(k,5) = ndum3*rhoa(k)
-       r(k,5) =  qdum3
+       r(k,5) =  max(qdum3,0.)
 
        totaldc(k)=0.
     enddo
@@ -4326,8 +4327,8 @@ contains
   !.. dependence on the collection efficiency
        eff(k)=min(0.2,10.**(0.035*tmax-0.7))*efdum
        
-       if(my.eq.6.and.qr(k,6).gt.0)eff(k)=1.
-       if(my.eq.7.and.qr(k,7).gt.0)eff(k)=1.
+       !if(my.eq.6.and.qr(k,6).gt.0)eff(k)=1.
+       !if(my.eq.7.and.qr(k,7).gt.0)eff(k)=1.
 
   !.. see note above on efdum
        if(mz.eq.5.and.abs(t(k,mx)+14.).le.2.)eff(k)=1.4*efdum
