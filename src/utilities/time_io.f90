@@ -212,6 +212,19 @@ contains
         call read_times(filelist(ndown), time_var, times_in_file_down)
         call read_times(filelist(nup), time_var, times_in_file_up)
 
+        !Quick check that time is bounded by min and max existing files in list
+        if (times_in_file_down(1) > time .or. times_in_file_up(size(times_in_file_up)) < time) then
+            if (present(error)) then
+                error = 1
+                found = .True.
+            else
+                write(*,*) "ERROR: Requested date lays outside of filelist"
+                write(*,*) "First filename:           ",trim(filelist(1))
+                write(*,*) "Last (existing) filename: ",trim(filelist(nup))
+                write(*,*) "  time  : ",trim(time%as_string())
+                stop "Unable to find date in file"
+            endif
+        endif
 
         do while(.not.(found))
             ! read the times for all timesteps in the specified file
