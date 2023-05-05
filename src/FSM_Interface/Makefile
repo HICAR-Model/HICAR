@@ -577,6 +577,33 @@ code/FSM_interface/SETUP_interface.F90.s:
 	$(MAKE) -f CMakeFiles/FSM_interface.dir/build.make CMakeFiles/FSM_interface.dir/code/FSM_interface/SETUP_interface.F90.s
 .PHONY : code/FSM_interface/SETUP_interface.F90.s
 
+code/FSM_interface/SNOWTRAN3D_interface.o: code/FSM_interface/SNOWTRAN3D_interface.F90.o
+
+.PHONY : code/FSM_interface/SNOWTRAN3D_interface.o
+
+# target to build an object file
+code/FSM_interface/SNOWTRAN3D_interface.F90.o:
+	$(MAKE) -f CMakeFiles/FSM_interface.dir/build.make CMakeFiles/FSM_interface.dir/code/FSM_interface/SNOWTRAN3D_interface.F90.o
+.PHONY : code/FSM_interface/SNOWTRAN3D_interface.F90.o
+
+code/FSM_interface/SNOWTRAN3D_interface.i: code/FSM_interface/SNOWTRAN3D_interface.F90.i
+
+.PHONY : code/FSM_interface/SNOWTRAN3D_interface.i
+
+# target to preprocess a source file
+code/FSM_interface/SNOWTRAN3D_interface.F90.i:
+	$(MAKE) -f CMakeFiles/FSM_interface.dir/build.make CMakeFiles/FSM_interface.dir/code/FSM_interface/SNOWTRAN3D_interface.F90.i
+.PHONY : code/FSM_interface/SNOWTRAN3D_interface.F90.i
+
+code/FSM_interface/SNOWTRAN3D_interface.s: code/FSM_interface/SNOWTRAN3D_interface.F90.s
+
+.PHONY : code/FSM_interface/SNOWTRAN3D_interface.s
+
+# target to generate assembly for a file
+code/FSM_interface/SNOWTRAN3D_interface.F90.s:
+	$(MAKE) -f CMakeFiles/FSM_interface.dir/build.make CMakeFiles/FSM_interface.dir/code/FSM_interface/SNOWTRAN3D_interface.F90.s
+.PHONY : code/FSM_interface/SNOWTRAN3D_interface.F90.s
+
 code/LUDCMP.o: code/LUDCMP.F90.o
 
 .PHONY : code/LUDCMP.o
@@ -1065,6 +1092,9 @@ help:
 	@echo "... code/FSM_interface/SETUP_interface.o"
 	@echo "... code/FSM_interface/SETUP_interface.i"
 	@echo "... code/FSM_interface/SETUP_interface.s"
+	@echo "... code/FSM_interface/SNOWTRAN3D_interface.o"
+	@echo "... code/FSM_interface/SNOWTRAN3D_interface.i"
+	@echo "... code/FSM_interface/SNOWTRAN3D_interface.s"
 	@echo "... code/LUDCMP.o"
 	@echo "... code/LUDCMP.i"
 	@echo "... code/LUDCMP.s"

@@ -3,9 +3,7 @@
 !-----------------------------------------------------------------------
 subroutine SFEXCH(gs1,KH,KHa,KHg,KHv,KWg,KWv,Usc)
 
-use MODCONF, only: CANMOD, ZOFFST, EXCHNG, OSHDTN
-
-use MODTILE, only: tthresh
+use MODCONF, only: CANMOD, ZOFFST, EXCHNG
 
 use CONSTANTS, only: &
   grav,              &! Acceleration due to gravity (m/s^2)
@@ -34,9 +32,11 @@ use PARAMETERS, only : &
   zsub,              &! Sub-canopy reference height (m)
   zgf,               &! z0g canopy dependence factors and ranges 
   zgr,               &! z0g canopy dependence range
-  khcf                ! diffusivity correction factor 
+  khcf,              &! diffusivity correction factor 
+  fthresh             ! Forest fraction required for forest tile to be considered
 
 use PARAMMAPS, only: &
+  fves,              &! Stand-scale vegetation fraction
   VAI,               &! Vegetation area index
   z0sf                ! Snow-free surface roughness length (m)
 
@@ -52,10 +52,9 @@ use STATE_VARIABLES, only : &
 
 use LANDUSE, only: &
   dem,               &! Terrain elevation (m) 
+  forest,            &! Grid cell forest fraction
   fveg,              &! Canopy cover fraction
-  fves,              &! Stand-scale vegetation fraction
-  hcan,              &! Canopy height (m)
-  tilefrac            ! Grid cell tile fraction
+  hcan                ! Canopy height (m)
 
 implicit none
 
@@ -89,7 +88,6 @@ real :: &
   z0g,               &! Ground surface roughness length (m)
   z0h,               &! Roughness length for heat (m)
   z0v,               &! Vegetation roughness length (m)
-  Uc,                &! Wind speed in canopy layer (at height of turbulent flux from veg to cas) (m/s)
   Uso,               &! Windspeed at sub-canopy reference height - open (m/s)
   Usf,               &! Windspeed at sub-canopy reference height - forest (m/s)
   Usub,              &! Wind speed at sub-canopy reference height (m/s)
@@ -97,13 +95,27 @@ real :: &
   KHh,               &! Eddy diffusivity at canopy top (m/s)
   rad,               &! Aerodynamic resistance between canopy air space and atmosphere in dense canopy, at reference height (s/m)
   rgd,               &! Aerodynamic resistance between canopy air space and atmosphere in dense canopy, at reference height (s/m)
-  rgo,               &! Theoretical ground aerodynamic resistance for an open site (s/m) 
-  z0loc               ! Elevation-dependent roughness length of snow (m), constant or tuned depending on OSHDTN
+  rgo                 ! Theoretical ground aerodynamic resistance for an open site (s/m) 
+  
+real :: &
+  z0loc(Nx,Ny)        ! For elevation-dependent roughness lengths (m)
 
 do j = 1, Ny
 do i = 1, Nx
 
-  if (tilefrac(i,j) < tthresh) goto 1 ! exclude points outside tile of interest
+  if (isnan(dem(i,j))) goto 1 ! Exclude points outside of the domain
+
+  if (CANMOD == 1 .and. forest(i,j) < fthresh) goto 1 
+
+  if (dem(i,j) >= 2300) then  
+    z0loc(i,j) = 0.003
+  else if (dem(i,j) >= 1500) then 
+    z0loc(i,j) = 0.03 + (dem(i,j) - 1500) / (2300 - 1500) * (0.003 - 0.03)
+  else if (dem(i,j) >= 1200) then  ! simple linear b/w two above values
+    z0loc(i,j) = 0.2 + (dem(i,j) - 1200) / (1500 - 1200) * (0.03 - 0.2)
+  else
+    z0loc(i,j) = 0.2
+  end if
 
   if (ZOFFST == 0) then
     ! Heights specified above ground
@@ -115,27 +127,11 @@ do i = 1, Nx
     zT1 = zT + hcan(i,j)
   endif
 
-  ! Ground roughness length
-  if (OSHDTN == 0) then 
-    z0loc = z0sn
-  else ! OSHDTN == 1
-    if (dem(i,j) >= 2300) then  
-      z0loc = 0.003
-    else if (dem(i,j) >= 1500) then 
-      z0loc = 0.01 + (dem(i,j) - 1500) / (2300 - 1500) * (0.003 - 0.01)
-    else if (dem(i,j) >= 1200) then  ! simple linear b/w two above values
-      z0loc = 0.1 + (dem(i,j) - 1200) / (1500 - 1200) * (0.01 - 0.1)
-    else
-      z0loc = 0.1
-    end if
-  end if 
-  
-  z0g = z0loc
-  if (fsnow(i,j) == 0) z0g = z0sf(i,j)
-
-  ! Additional roughness lengths and friction velocity
+  ! Roughness lengths and friction velocity
   if (EXCHNG == 2) then ! Forest - specific adjustment *GM
-    ! Open
+    ! Open 
+    z0g = z0loc(i,j)
+    if (fsnow(i,j) == 0) z0g = z0sf(i,j)
     z0h = 0.1 * z0g 
     Uso = Ua(i,j)*log(zsub/z0g)/log(zU/z0g)
     ustar = vkman*Ua(i,j)/log(zU/z0g) 
@@ -143,6 +139,8 @@ do i = 1, Nx
 
     ! Forest
     if (fveg(i,j) > epsilon(fveg(i,j))) then
+      z0g = z0sn
+      if (fsnow(i,j) == 0) z0g = z0sf(i,j)
       z0g = (zgf + zgr*fveg(i,j)) * z0g    
       z0h = 0.1 * z0g
       dh = rchd * hcan(i,j) 
@@ -153,6 +151,9 @@ do i = 1, Nx
       Usf = exp(wcan*(zsub/hcan(i,j) - 1))*Uh
     end if
   else
+    z0g = z0loc(i,j)
+    if (fsnow(i,j) == 0) z0g = z0sf(i,j)
+
     z0v = rchz*hcan(i,j)
     z0  = (z0v**fveg(i,j)) * (z0g**(1 - fveg(i,j)))
     z0h = 0.1*z0
@@ -190,19 +191,17 @@ do i = 1, Nx
     else
       KWg(i,j) = gs1(i,j)*KH(i,j) / (gs1(i,j) + KH(i,j))
     endif
-    Usc(i,j) = Uso
   else
     if (EXCHNG == 2) then
       rad = (log((zT1 - dh)/(hcan(i,j)- dh))/(vkman*ustar) +  & 
         hcan(i,j)*(exp(wcan*(1 -(z0v + dh)/hcan(i,j))) - 1)/(wcan*KHh))/khcf
       KHa(i,j) = sqrt(fves(i,j))/ rad 
       Usub = sqrt(fves(i,j))*Usf + (1 - sqrt(fves(i,j)))*Uso
-      Usub = max(Usub, 0.1)
       rgd = 1 / (vkman**2 * Usub) * log(zsub/z0h) * log(zsub/z0g); 
       KHg(i,j)  = 1/rgd
-      Uc = exp(wcan*((z0v + dh)/hcan(i,j) - 1))*Uh
-      KHv(i,j) = VAI(i,j)*sqrt(Uc)/cveg
-      Usc(i,j) = Usub
+      Usc(i,j) = exp(wcan*((z0v + dh)/hcan(i,j) - 1))*Uh
+      KHv(i,j) = VAI(i,j)*sqrt(Usc(i,j) )/cveg
+
     else
       KHa(i,j) = fh*vkman*ustar / log((zT1 - dh)/z0)
       KHg(i,j) = vkman*ustar*((1 - fveg(i,j))*fh/log(z0/z0h) + fveg(i,j)*cden/(1 + 0.5*Ric))
@@ -222,7 +221,7 @@ do i = 1, Nx
     endif
   
     if (CANMOD == 0) then
-    ! Combined resistances for 0-layer canopy model
+  ! Combined resistances for 0-layer canopy model
       KH(i,j) = KHg(i,j)*(KHa(i,j) + KHv(i,j)) / (KHa(i,j) + KHg(i,j) + KHv(i,j))
       KWg(i,j) = KWg(i,j)*(KHa(i,j) + KWv(i,j)) / (KHa(i,j) + KWg(i,j) + KWv(i,j))
     end if

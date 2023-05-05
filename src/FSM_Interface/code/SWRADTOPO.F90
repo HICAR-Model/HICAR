@@ -2,6 +2,7 @@
 ! Include subgrid topographical influences on surface shortwave energy balance terms
 ! Author: Nora Helbig
 !--------------------------------------------------------------------------
+
 subroutine SWRADTOPO(alball_n,Sdir_n,Sdif_n,SWtn,Sdirt_n,Sdift_n,SWtopo_out,sun_elev,year,month,day,hour,i,j)
 
 use CONSTANTS, only : &

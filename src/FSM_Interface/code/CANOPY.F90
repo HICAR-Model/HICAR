@@ -3,7 +3,7 @@
 !-----------------------------------------------------------------------
 subroutine CANOPY(Eveg,unload,intcpt,Sbveg)
 
-use MODTILE, only: tthresh 
+use MODCONF, only: CANMOD
 
 use CONSTANTS, only: &
   Tm                  ! Melting point (K)
@@ -19,7 +19,8 @@ use PARAMETERS, only: &
   tcnc,              &! Canopy unloading time scale for cold snow (s)
   tcnm,              &! Canopy unloading time scale for melting snow (s)
   psf,               &! Scaling factor for solid precipitation (within forest stand, at min fveg)
-  psr                 ! Range of solid precipitation (within forest stand, spread min-max CC)
+  psr,               &! Range of solid precipitation (within forest stand, spread min-max CC)
+  fthresh             ! Forest fraction required for forest tile to be considered
   
 use PARAMMAPS, only: &
   scap                ! Canopy snow capacity (kg/m^2)
@@ -29,9 +30,9 @@ use STATE_VARIABLES, only: &
   Tveg                ! Vegetation temperature (K)
 
 use LANDUSE, only: &
-  fveg,              &! Canopy cover fraction
-  pmultf,            &! Precip multiplier applied to open-area snowfall 
-  tilefrac            ! Grid cell tile fraction
+  dem,               &! Terrain elevation (m)
+  forest,            &! Grid cell forest fraction
+  fveg                ! Canopy cover fraction
 
 implicit none
 
@@ -57,17 +58,16 @@ do i = 1, Nx
   intcpt(i,j) = 0
   Sbveg(i,j)  = 0
 
-  if (tilefrac(i,j) < tthresh) goto 1 ! exclude points outside tile of interest
+  if (isnan(dem(i,j))) goto 1 ! Exclude points outside of the domain
+
+  if (CANMOD == 1 .and. forest(i,j) < fthresh) goto 1 ! exclude points outside forest tile
   
   if (fveg(i,j) > epsilon(fveg(i,j))) then
-    ! rescale precipitation to correct back precip multiplier applied to open area 
-    Sf(i,j) = pmultf(i,j)*Sf(i,j)
-
     ! interception
     intcpt(i,j) = (scap(i,j) - Sveg(i,j))*(1 - exp(-fveg(i,j)*Sf(i,j)*dt/scap(i,j)))
     Sveg(i,j) = Sveg(i,j) + intcpt(i,j)
     Sf(i,j) = Sf(i,j) - intcpt(i,j)/dt 
-    Sf(i,j) = (psf - psr*fveg(i,j))*Sf(i,j) ! including preferential deposition in canopy gaps; might have to be revisited to ensure mass conservation, potentially integrate with pmultf
+    Sf(i,j) = (psf - psr*fveg(i,j))*Sf(i,j) ! including preferential deposition in canopy gaps
 
     ! sublimation
     Evegs = 0

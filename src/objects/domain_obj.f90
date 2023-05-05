@@ -94,7 +94,13 @@ contains
 
         !Exchange-only variables
         if (options%vars_to_exch(kVARS%sensible_heat)>0) call this%exch_vars%add_var('hfss', this%sensible_heat)   
- 
+        if (options%vars_to_exch(kVARS%Ds)>0) call this%exch_vars%add_var('Ds', this%Ds)   
+        if (options%vars_to_exch(kVARS%fsnow)>0) call this%exch_vars%add_var('fsnow', this%fsnow)   
+        if (options%vars_to_exch(kVARS%Sice)>0) call this%exch_vars%add_var('Sice', this%Sice)   
+        if (options%vars_to_exch(kVARS%Sliq)>0) call this%exch_vars%add_var('Sliq', this%Sliq)   
+        if (options%vars_to_exch(kVARS%Tsnow)>0) call this%exch_vars%add_var('Tsnow', this%Tsnow)   
+        if (options%vars_to_exch(kVARS%Nsnow)>0) call this%exch_vars%add_var('Nsnow', this%Nsnow)   
+
         var_list = options%io_options%vars_for_output + options%vars_for_restart
         if (0<var_list( kVARS%u) )                          call this%vars_to_out%add_var( trim( get_varname( kVARS%u                            )), this%u%meta_data)
         if (0<var_list( kVARS%v) )                          call this%vars_to_out%add_var( trim( get_varname( kVARS%v                            )), this%v%meta_data)
@@ -296,14 +302,17 @@ contains
         if (0<var_list( kVARS%tend_swrad) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%tend_swrad                   )), this%tend_swrad)
         !! MJ added for FSM:
         if (0<var_list( kVARS%runoff_tstep) )               call this%vars_to_out%add_var( trim( get_varname( kVARS%runoff_tstep                 )), this%runoff_tstep)
-        if (0<var_list( kVARS%snowdepth) )                  call this%vars_to_out%add_var( trim( get_varname( kVARS%snowdepth                    )), this%snowdepth)
         if (0<var_list( kVARS%Tsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%Tsnow                        )), this%Tsnow)
         if (0<var_list( kVARS%Sice) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%Sice                         )), this%Sice)
         if (0<var_list( kVARS%Sliq) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%Sliq                         )), this%Sliq)
-        if (0<var_list( kVARS%albs) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%albs                         )), this%albs)
         if (0<var_list( kVARS%Ds) )                         call this%vars_to_out%add_var( trim( get_varname( kVARS%Ds                           )), this%Ds)
         if (0<var_list( kVARS%fsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%fsnow                        )), this%fsnow)
-        if (0<var_list( kVARS%Nsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%Nsnow                        )), this%Nsnow)        
+        if (0<var_list( kVARS%Nsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%Nsnow                        )), this%Nsnow)   
+        if (0<var_list( kVARS%dm_salt))                     call this%vars_to_out%add_var( trim( get_varname( kVARS%dm_salt                      )), this%dm_salt) 
+        if (0<var_list( kVARS%dm_susp))                     call this%vars_to_out%add_var( trim( get_varname( kVARS%dm_susp                      )), this%dm_susp) 
+        if (0<var_list( kVARS%dm_subl))                     call this%vars_to_out%add_var( trim( get_varname( kVARS%dm_subl                      )), this%dm_subl) 
+        if (0<var_list( kVARS%dm_slide))                    call this%vars_to_out%add_var( trim( get_varname( kVARS%dm_slide                     )), this%dm_slide) 
+
         !!
         if (0<var_list( kVARS%rainfall_tstep) )             call this%vars_to_out%add_var( trim( get_varname( kVARS%rainfall_tstep               )), this%rainfall_tstep)        
         if (0<var_list( kVARS%snowfall_tstep) )             call this%vars_to_out%add_var( trim( get_varname( kVARS%snowfall_tstep               )), this%snowfall_tstep)        
@@ -656,45 +665,50 @@ contains
 
     end subroutine
     
-    module subroutine halo_3d_send_batch(this)
+    module subroutine halo_3d_send_batch(this, exch_var_only)
         class(domain_t), intent(inout) :: this
+        logical, intent(in) :: exch_var_only
+        
         type(variable_t) :: var
-        integer :: n
+        integer :: n, k_max
 
         call this%adv_vars%reset_iterator()
         call this%exch_vars%reset_iterator()
         n = 1
         ! Now iterate through the dictionary as long as there are more elements present
-        do while (this%adv_vars%has_more_elements())
-            ! get the next variable
-            var = this%adv_vars%next()
-            if (var%three_d) then
-                if (.not.(this%north_boundary)) this%north_buffer_3d(n,1:(this%ite-this%its+1),:,:) = &
-                        var%data_3d(this%its:this%ite,:,(this%jte-this%grid%halo_size+1):this%jte)
-                if (.not.(this%south_boundary)) this%south_buffer_3d(n,1:(this%ite-this%its+1),:,:) = &
-                        var%data_3d(this%its:this%ite,:,this%jts:(this%jts+this%grid%halo_size-1))
-                if (.not.(this%east_boundary)) this%east_buffer_3d(n,:,:,1:(this%jte-this%jts+1)) = &
-                        var%data_3d((this%ite-this%grid%halo_size+1):this%ite,:,this%jts:this%jte)
-                if (.not.(this%west_boundary)) this%west_buffer_3d(n,:,:,1:(this%jte-this%jts+1)) = &
-                        var%data_3d(this%its:(this%its+this%grid%halo_size)-1,:,this%jts:this%jte)
+        if (.not.(exch_var_only)) then
+            do while (this%adv_vars%has_more_elements())
+                ! get the next variable
+                var = this%adv_vars%next()
+                if (var%three_d) then
+                    if (.not.(this%north_boundary)) this%north_buffer_3d(n,1:(this%ite-this%its+1),:,:) = &
+                            var%data_3d(this%its:this%ite,:,(this%jte-this%grid%halo_size+1):this%jte)
+                    if (.not.(this%south_boundary)) this%south_buffer_3d(n,1:(this%ite-this%its+1),:,:) = &
+                            var%data_3d(this%its:this%ite,:,this%jts:(this%jts+this%grid%halo_size-1))
+                    if (.not.(this%east_boundary)) this%east_buffer_3d(n,:,:,1:(this%jte-this%jts+1)) = &
+                            var%data_3d((this%ite-this%grid%halo_size+1):this%ite,:,this%jts:this%jte)
+                    if (.not.(this%west_boundary)) this%west_buffer_3d(n,:,:,1:(this%jte-this%jts+1)) = &
+                            var%data_3d(this%its:(this%its+this%grid%halo_size)-1,:,this%jts:this%jte)
 
-                n = n+1
-            endif
-        enddo
+                    n = n+1
+                endif
+            enddo
+        endif
 
         ! Now iterate through the exchange-only objects as long as there are more elements present
         do while (this%exch_vars%has_more_elements())
             ! get the next variable
             var = this%exch_vars%next()
             if (var%three_d) then
-                if (.not.(this%north_boundary)) this%north_buffer_3d(n,1:(this%ite-this%its+1),:,:) = &
-                        var%data_3d(this%its:this%ite,:,(this%jte-this%grid%halo_size+1):this%jte)
-                if (.not.(this%south_boundary)) this%south_buffer_3d(n,1:(this%ite-this%its+1),:,:) = &
-                        var%data_3d(this%its:this%ite,:,this%jts:(this%jts+this%grid%halo_size-1))
-                if (.not.(this%east_boundary)) this%east_buffer_3d(n,:,:,1:(this%jte-this%jts+1)) = &
-                        var%data_3d((this%ite-this%grid%halo_size+1):this%ite,:,this%jts:this%jte)
-                if (.not.(this%west_boundary)) this%west_buffer_3d(n,:,:,1:(this%jte-this%jts+1)) = &
-                        var%data_3d(this%its:(this%its+this%grid%halo_size)-1,:,this%jts:this%jte)
+                k_max = ubound(var%data_3d,2)
+                if (.not.(this%north_boundary)) this%north_buffer_3d(n,1:(this%ite-this%its+1),1:k_max,:) = &
+                        var%data_3d(this%its:this%ite,1:k_max,(this%jte-this%grid%halo_size+1):this%jte)
+                if (.not.(this%south_boundary)) this%south_buffer_3d(n,1:(this%ite-this%its+1),1:k_max,:) = &
+                        var%data_3d(this%its:this%ite,1:k_max,this%jts:(this%jts+this%grid%halo_size-1))
+                if (.not.(this%east_boundary)) this%east_buffer_3d(n,:,1:k_max,1:(this%jte-this%jts+1)) = &
+                        var%data_3d((this%ite-this%grid%halo_size+1):this%ite,1:k_max,this%jts:this%jte)
+                if (.not.(this%west_boundary)) this%west_buffer_3d(n,:,1:k_max,1:(this%jte-this%jts+1)) = &
+                        var%data_3d(this%its:(this%its+this%grid%halo_size)-1,1:k_max,this%jts:this%jte)
 
                 n = n+1
             endif
@@ -719,49 +733,54 @@ contains
 
     end subroutine halo_3d_send_batch
 
-    module subroutine halo_3d_retrieve_batch(this, wait_timer)
+    module subroutine halo_3d_retrieve_batch(this, exch_var_only, wait_timer)
         class(domain_t), intent(inout) :: this
-        type(timer_t),   intent(inout) :: wait_timer
+        logical, intent(in) :: exch_var_only
+        type(timer_t), optional,  intent(inout) :: wait_timer
+        
         type(variable_t) :: var
-        integer :: n
+        integer :: n, k_max
 
-        call wait_timer%start()
+        if (present(wait_timer)) call wait_timer%start()
         sync images( this%neighbors )
-        call wait_timer%stop()
+        if (present(wait_timer)) call wait_timer%stop()
 
         call this%adv_vars%reset_iterator()
         call this%exch_vars%reset_iterator()
         n = 1
         ! Now iterate through the dictionary as long as there are more elements present
-        do while (this%adv_vars%has_more_elements())
-            ! get the next variable
-            var = this%adv_vars%next()
-            if (var%three_d) then
-                if (.not.(this%north_boundary)) var%data_3d(this%its:this%ite,:,(this%jte+1):this%jme) = &
-                        this%north_in_3d(n,1:(this%ite-this%its+1),:,:)
-                if (.not.(this%south_boundary)) var%data_3d(this%its:this%ite,:,this%jms:(this%jts-1)) = &
-                        this%south_in_3d(n,1:(this%ite-this%its+1),:,:)
-                if (.not.(this%east_boundary)) var%data_3d((this%ite+1):this%ime,:,this%jts:this%jte) = &
-                        this%east_in_3d(n,:,:,1:(this%jte-this%jts+1))
-                if (.not.(this%west_boundary)) var%data_3d(this%ims:(this%its-1),:,this%jts:this%jte) = &
-                        this%west_in_3d(n,:,:,1:(this%jte-this%jts+1))
-                n = n+1
-            endif
-        enddo
+        if (.not.(exch_var_only)) then
+            do while (this%adv_vars%has_more_elements())
+                ! get the next variable
+                var = this%adv_vars%next()
+                if (var%three_d) then
+                    if (.not.(this%north_boundary)) var%data_3d(this%its:this%ite,:,(this%jte+1):this%jme) = &
+                            this%north_in_3d(n,1:(this%ite-this%its+1),:,:)
+                    if (.not.(this%south_boundary)) var%data_3d(this%its:this%ite,:,this%jms:(this%jts-1)) = &
+                            this%south_in_3d(n,1:(this%ite-this%its+1),:,:)
+                    if (.not.(this%east_boundary)) var%data_3d((this%ite+1):this%ime,:,this%jts:this%jte) = &
+                            this%east_in_3d(n,:,:,1:(this%jte-this%jts+1))
+                    if (.not.(this%west_boundary)) var%data_3d(this%ims:(this%its-1),:,this%jts:this%jte) = &
+                            this%west_in_3d(n,:,:,1:(this%jte-this%jts+1))
+                    n = n+1
+                endif
+            enddo
+        endif
     
         ! Now iterate through the exchange-only objects as long as there are more elements present
         do while (this%exch_vars%has_more_elements())
             ! get the next variable
             var = this%exch_vars%next()
             if (var%three_d) then
-                if (.not.(this%north_boundary)) var%data_3d(this%its:this%ite,:,(this%jte+1):this%jme) = &
-                        this%north_in_3d(n,1:(this%ite-this%its+1),:,:)
-                if (.not.(this%south_boundary)) var%data_3d(this%its:this%ite,:,this%jms:(this%jts-1)) = &
-                        this%south_in_3d(n,1:(this%ite-this%its+1),:,:)
-                if (.not.(this%east_boundary)) var%data_3d((this%ite+1):this%ime,:,this%jts:this%jte) = &
-                        this%east_in_3d(n,:,:,1:(this%jte-this%jts+1))
-                if (.not.(this%west_boundary)) var%data_3d(this%ims:(this%its-1),:,this%jts:this%jte) = &
-                        this%west_in_3d(n,:,:,1:(this%jte-this%jts+1))
+                k_max = ubound(var%data_3d,2)
+                if (.not.(this%north_boundary)) var%data_3d(this%its:this%ite,1:k_max,(this%jte+1):this%jme) = &
+                        this%north_in_3d(n,1:(this%ite-this%its+1),1:k_max,:)
+                if (.not.(this%south_boundary)) var%data_3d(this%its:this%ite,1:k_max,this%jms:(this%jts-1)) = &
+                        this%south_in_3d(n,1:(this%ite-this%its+1),1:k_max,:)
+                if (.not.(this%east_boundary)) var%data_3d((this%ite+1):this%ime,1:k_max,this%jts:this%jte) = &
+                        this%east_in_3d(n,:,1:k_max,1:(this%jte-this%jts+1))
+                if (.not.(this%west_boundary)) var%data_3d(this%ims:(this%its-1),1:k_max,this%jts:this%jte) = &
+                        this%west_in_3d(n,:,1:k_max,1:(this%jte-this%jts+1))
                 n = n+1
             endif
         enddo
@@ -842,17 +861,27 @@ contains
     !! Send and get the data from all exch+adv objects to/from their neighbors (3D)
     !!
     !! -------------------------------
-    module subroutine halo_3d_exchange_batch(this, send_timer, ret_timer, wait_timer)
+    module subroutine halo_3d_exchange_batch(this, send_timer, ret_timer, wait_timer, exch_var_only)
         class(domain_t), intent(inout) :: this
-        type(timer_t),   intent(inout) :: send_timer, ret_timer, wait_timer
+        type(timer_t),   optional, intent(inout) :: send_timer, ret_timer, wait_timer
+        logical, optional, intent(in) :: exch_var_only
         
-        call send_timer%start()
-        call this%halo_3d_send_batch()
-        call send_timer%stop()
+        logical :: exch_only
+        
+        exch_only = .False.
+        if (present(exch_var_only)) exch_only = exch_var_only
 
-        call ret_timer%start()
-        call this%halo_3d_retrieve_batch(wait_timer)
-        call ret_timer%stop()
+        if (present(send_timer)) call send_timer%start()
+        call this%halo_3d_send_batch(exch_var_only=exch_only)
+        if (present(send_timer)) call send_timer%stop()
+
+        if (present(ret_timer)) call ret_timer%start()
+        if (present(wait_timer)) then
+            call this%halo_3d_retrieve_batch(exch_only,wait_timer)
+        else
+            call this%halo_3d_retrieve_batch(exch_only)
+        endif
+        if (present(ret_timer)) call ret_timer%stop()
     end subroutine
 
 
@@ -1162,14 +1191,17 @@ contains
         !! note that, in lsm_driver, it is alreaddy decieded if we need these vars or not..so it should be here..
         !if (0<opt%vars_to_allocate( kVARS%FSM_slopemu) )               allocate(this%FSM_slopemu                (ims:ime, jms:jme))!,          source=0.0)        
         if (0<opt%vars_to_allocate( kVARS%runoff_tstep) )               call setup(this%runoff_tstep,     this%grid2d)        
-        if (0<opt%vars_to_allocate( kVARS%snowdepth) )                  call setup(this%snowdepth,  this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%Tsnow) )                      call setup(this%Tsnow,      this%grid_snow)        
         if (0<opt%vars_to_allocate( kVARS%Sice) )                       call setup(this%Sice,       this%grid_snow)        
         if (0<opt%vars_to_allocate( kVARS%Sliq) )                       call setup(this%Sliq,       this%grid_snow)        
-        if (0<opt%vars_to_allocate( kVARS%albs) )                       call setup(this%albs,       this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%Ds) )                         call setup(this%Ds,         this%grid_snow)        
         if (0<opt%vars_to_allocate( kVARS%fsnow) )                      call setup(this%fsnow,      this%grid2d)        
-        if (0<opt%vars_to_allocate( kVARS%Nsnow) )                      call setup(this%Nsnow,      this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%Nsnow) )                      call setup(this%Nsnow,      this%grid2d)   
+        if (0<opt%vars_to_allocate( kVARS%dm_salt) )                    call setup(this%dm_salt,    this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%dm_susp) )                    call setup(this%dm_susp,    this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%dm_subl) )                    call setup(this%dm_subl,    this%grid2d)        
+        if (0<opt%vars_to_allocate( kVARS%dm_slide) )                   call setup(this%dm_slide,   this%grid2d)        
+
         !!
         if (0<opt%vars_to_allocate( kVARS%rainfall_tstep) )             call setup(this%rainfall_tstep,     this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%snowfall_tstep) )             call setup(this%snowfall_tstep,     this%grid2d)        
@@ -1179,11 +1211,13 @@ contains
         if (0<opt%vars_to_allocate( kVARS%slope_angle) )                call setup(this%slope_angle,        this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%aspect_angle) )               call setup(this%aspect_angle,       this%grid2d)        
         if (0<opt%vars_to_allocate( kVARS%svf) )                        call setup(this%svf,                this%grid2d) 
-        if (0<opt%vars_to_allocate( kVARS%factor_p) )                   call setup(this%factor_p,                this%grid2d) 
+        if (0<opt%vars_to_allocate( kVARS%factor_p) )                   call setup(this%factor_p,           this%grid2d) 
         if (0<opt%vars_to_allocate( kVARS%ridge_dist) )                 call setup(this%ridge_dist,         this%grid2d) 
         if (0<opt%vars_to_allocate( kVARS%valley_dist) )                call setup(this%valley_dist,        this%grid2d) 
         if (0<opt%vars_to_allocate( kVARS%ridge_drop) )                 call setup(this%ridge_drop,         this%grid2d) 
         if (0<opt%vars_to_allocate( kVARS%hlm) )                        call setup(this%hlm,                this%grid_hlm) 
+        if (0<opt%vars_to_allocate( kVARS%shd) )                        call setup(this%shd,                this%grid2d) 
+
     end subroutine
 
     !> -------------------------------
@@ -2908,6 +2942,15 @@ contains
                 this%ridge_drop%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
             endif
         endif
+        
+        if (options%parameters%shd_var /= "") then
+            call io_read(options%parameters%init_conditions_file,   &
+                           options%parameters%shd_var,       &
+                           temporary_data)
+            if (associated(this%shd%data_2d)) then
+                this%shd%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+            endif
+        endif
 
         if (options%physics%radiation_downScaling==1) then
             !!
@@ -2987,8 +3030,8 @@ contains
         if (associated(this%ground_surf_temperature%data_2d)) this%ground_surf_temperature%data_2d=init_surf_temp
         if (associated(this%canopy_vapor_pressure%data_2d)) this%canopy_vapor_pressure%data_2d=2000
         if (associated(this%canopy_temperature%data_2d)) this%canopy_temperature%data_2d=init_surf_temp
-        if (associated(this%coeff_momentum_drag%data_2d)) this%coeff_momentum_drag%data_2d=0
-        if (associated(this%coeff_heat_exchange%data_2d)) this%coeff_heat_exchange%data_2d=0
+        if (associated(this%coeff_momentum_drag%data_2d)) this%coeff_momentum_drag%data_2d=0.01
+        if (associated(this%coeff_heat_exchange%data_2d)) this%coeff_heat_exchange%data_2d=0.01
         if (associated(this%coeff_heat_exchange_3d%data_3d)) this%coeff_heat_exchange_3d%data_3d=0.01
         if (associated(this%canopy_fwet%data_2d)) this%canopy_fwet%data_2d=0
         if (associated(this%snow_water_eq_prev%data_2d)) this%snow_water_eq_prev%data_2d=0
@@ -2996,14 +3039,17 @@ contains
         if (associated(this%storage_lake%data_2d)) this%storage_lake%data_2d=0
         
         if (associated(this%runoff_tstep%data_2d))        this%runoff_tstep%data_2d=0.
-        if (associated(this%snowdepth%data_2d))           this%snowdepth%data_2d=0.
         if (associated(this%Tsnow%data_3d))               this%Tsnow%data_3d=273.15
         if (associated(this%Sice%data_3d))                this%Sice%data_3d=0.
         if (associated(this%Sliq%data_3d))                this%Sliq%data_3d=0.
-        if (associated(this%albs%data_2d))                this%albs%data_2d=1.
         if (associated(this%Ds%data_3d))                  this%Ds%data_3d=0.
         if (associated(this%fsnow%data_2d))               this%fsnow%data_2d=0.
         if (associated(this%Nsnow%data_2d))               this%Nsnow%data_2d=0.
+        if (associated(this%dm_salt%data_2d))             this%dm_salt%data_2d=0.
+        if (associated(this%dm_susp%data_2d))             this%dm_susp%data_2d=0.
+        if (associated(this%dm_subl%data_2d))             this%dm_subl%data_2d=0.
+        if (associated(this%dm_slide%data_2d))            this%dm_slide%data_2d=0.
+
         !!
         if (associated(this%rainfall_tstep%data_2d))      this%rainfall_tstep%data_2d=0.
         if (associated(this%snowfall_tstep%data_2d))      this%snowfall_tstep%data_2d=0.
@@ -3288,6 +3334,7 @@ contains
         my_index = FINDLOC(DOM_IMG_INDX,this_image(),dim=1)
         !If we were found/are a compute process
         if (my_index > 0) then
+            !Compute cardinal direction neighbors
             if (.not.(this%south_boundary)) this%south_neighbor = DOM_IMG_INDX(my_index - this%grid%ximages)
             if (.not.(this%north_boundary)) this%north_neighbor = DOM_IMG_INDX(my_index + this%grid%ximages)
             if (.not.(this%east_boundary)) this%east_neighbor  = DOM_IMG_INDX(my_index + 1)
@@ -3318,9 +3365,47 @@ contains
                 this%neighbors(current) = this%west_neighbor
                 current = current+1
             endif
+            
         ! if current = 1 then all of the boundaries were set, just store ourself as our "neighbor"
             if (current == 1) then
                 this%neighbors(current) = this_image()
+            endif
+
+            !Compute diagonal direction neighbors
+            if (.not.(this%south_boundary) .and. .not.(this%west_boundary)) this%southwest_neighbor = DOM_IMG_INDX(my_index - this%grid%ximages - 1)
+            if (.not.(this%north_boundary) .and. .not.(this%west_boundary)) this%northwest_neighbor = DOM_IMG_INDX(my_index + this%grid%ximages - 1)
+            if (.not.(this%south_boundary) .and. .not.(this%east_boundary)) this%southeast_neighbor  = DOM_IMG_INDX(my_index - this%grid%ximages + 1)
+            if (.not.(this%north_boundary) .and. .not.(this%east_boundary)) this%northeast_neighbor  = DOM_IMG_INDX(my_index + this%grid%ximages + 1)
+
+            n_neighbors = merge(0,1,(this%south_boundary .or. this%west_boundary))  &
+                     +merge(0,1,(this%north_boundary .or. this%west_boundary))  &
+                     +merge(0,1,(this%south_boundary .or. this%east_boundary))   &
+                     +merge(0,1,(this%north_boundary .or. this%east_boundary))
+            n_neighbors = max(1, n_neighbors)
+
+            allocate(this%corner_neighbors(n_neighbors))
+
+            current = 1
+            if (.not.(this%south_boundary) .and. .not.(this%west_boundary)) then
+                this%corner_neighbors(current) = this%southwest_neighbor
+                current = current+1
+            endif
+            if (.not.(this%north_boundary) .and. .not.(this%west_boundary)) then
+                this%corner_neighbors(current) = this%northwest_neighbor
+                current = current+1
+            endif
+            if (.not.(this%south_boundary) .and. .not.(this%east_boundary)) then
+                this%corner_neighbors(current) = this%southeast_neighbor
+                current = current+1
+            endif
+            if (.not.(this%north_boundary) .and. .not.(this%east_boundary)) then
+                this%corner_neighbors(current) = this%northeast_neighbor
+                current = current+1
+            endif
+
+        ! if current = 1 then all of the boundaries were set, just store ourself as our "neighbor"
+            if (current == 1) then
+                this%corner_neighbors(current) = this_image()
             endif
         endif
     end subroutine

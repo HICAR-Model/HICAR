@@ -9,9 +9,9 @@ module MODE_WRITE
     implicit none
     real, dimension(:,:), intent(in):: var
     integer, intent(in) :: fileid
-    integer :: pos,i,j
+    integer :: pos
     inquire(unit = fileid, pos = pos)
-    write(fileid, pos = pos) ((var(i,j),j=1,size(var,2)),i=1,size(var,1))
+    write(fileid, pos = pos) var
   end subroutine WRITE_2D
 
 end module MODE_WRITE

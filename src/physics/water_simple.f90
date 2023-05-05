@@ -83,11 +83,11 @@ contains
     module subroutine water_simple(options, sst, psfc, wind, ustar, qv, temperature,  &
                             sensible_heat, latent_heat, &
                             z_atm, Z0, landmask, &
-                            qv_surf, evap_flux, tskin, vegtype, its, ite, kts, kte, jts, jte)
+                            qv_surf, evap_flux, tskin, coef_heat_exch, vegtype, its, ite, kts, kte, jts, jte)
         implicit none
         type(options_t),intent(in)    :: options        
         real,    dimension(its:ite,kts:kte,jts:jte),intent(in)    :: qv, temperature
-        real,    dimension(its:ite,jts:jte),  intent(inout) :: sensible_heat, latent_heat, Z0, qv_surf, evap_flux, tskin
+        real,    dimension(its:ite,jts:jte),  intent(inout) :: sensible_heat, latent_heat, Z0, qv_surf, evap_flux, tskin, coef_heat_exch
         real,    dimension(its:ite,jts:jte),  intent(in)    :: sst, psfc, wind, ustar, z_atm
         integer, dimension(its:ite,jts:jte),  intent(in)    :: landmask
         integer, dimension(its:ite,jts:jte),  optional, intent(in)    :: vegtype
@@ -119,7 +119,7 @@ contains
 
                     call calc_exchange_coefficient(wind(i,j),sst(i,j),temperature(i,1,j),&
                                                    z,lnz_atm_term,base_exchange_term,exchange_C)
-
+                    coef_heat_exch(i,j) = exchange_C
                     sensible_heat(i,j) = exchange_C * wind(i,j) * (sst(i,j)-temperature(i,1,j))
                     evap_flux(i,j)     = exchange_C * wind(i,j) * (qv_surf(i,j)-qv(i,1,j))
                     latent_heat(i,j)   = evap_flux(i,j) * LH_vaporization

@@ -2,12 +2,10 @@
 ! Surface energy balance in open areas or zero-layer forest canopy model
 !-----------------------------------------------------------------------
 subroutine EBALSRF(Ds1,KH,KHa,KHv,KWg,KWv,ks1,SWsrf,SWveg,Ts1, &
-                   Esrf,Eveg,G,H,Hsrf,LE,LEsrf,Melt,Rnet,Rsrf, &
+                   Esrf,Eveg,G,H,Hsrf,LE,LEsrf,Melt,Rnet,Rsrf,LWt, &
                    LWsci,LWveg)
 
 use MODCONF, only: CANMOD
-
-use MODTILE, only: tthresh 
 
 use CONSTANTS, only: &
   cp,                &! Specific heat capacity of air (J/K/kg)
@@ -29,18 +27,22 @@ use DRIVING, only: &
 use GRID, only: &
   Nx,Ny               ! Grid dimensions
 
+use PARAMETERS, only: &
+  fthresh             ! Forest fraction required for forest tile to be considered
+
 use PARAMMAPS, only: &
   trcn                ! Canopy transmissivity
 
 use STATE_VARIABLES, only: &
   Sice,              &! Ice content of snow layers (kg/m^2)
-  Tcan,              &! Canopy air space temperature (K)
   Tsrf,              &! Surface temperature (K)
   Tveg                ! Vegetation temperature (K)
 
 use LANDUSE, only : &
-  fveg,              &! Canopy cover fraction
-  tilefrac            ! Grid cell tile fraction
+  dem,               &! Terrain elevation (m)
+  forest,            &! Grid cell forest fraction
+  fveg                ! Canopy cover fraction
+
 
 implicit none
 
@@ -68,7 +70,9 @@ real, intent(out) :: &
   LWveg(Nx,Ny),      &! Subcanopy incoming LWR (W/m^2)
   Melt(Nx,Ny),       &! Surface melt rate (kg/m^2/s)
   Rnet(Nx,Ny),       &! Net radiation (W/m^2)
-  Rsrf(Nx,Ny)         ! Net radiation absorbed by the surface (W/m^2)
+  Rsrf(Nx,Ny),       &! Net radiation absorbed by the surface (W/m^2)
+  LWt(Nx,Ny)          ! Incoming longwave radiation corrected for subgrid topography (W/m^2)
+
 
 integer :: & 
   i,j                 ! Point counters
@@ -89,11 +93,12 @@ real :: &
 do j = 1, Ny
 do i = 1, Nx
 
-  if (tilefrac(i,j) < tthresh) goto 1 ! exclude points outside tile of interest
+  if (isnan(dem(i,j))) goto 1 ! Exclude points outside of the domain
+
+  if (CANMOD == 1 .and. forest(i,j) < fthresh) goto 1 ! exclude points that have no forest
 
   if ((CANMOD == 1 .and. fveg(i,j) == 0) .or. CANMOD == 0) then
     Tveg(i,j) = Ta(i,j) 
-    Tcan(i,j) = Ta(i,j) 
 
     ! Saturation humidity and density of air
     call QSAT(Ps(i,j),Tsrf(i,j),Qs)
@@ -164,6 +169,9 @@ do i = 1, Nx
     Hsrf(i,j) = H(i,j)
     LEsrf(i,j) = LE(i,j)
     Rsrf(i,j) = Rnet(i,j)
+
+    ! In case of HIRES LWt=LW:
+    LWt(i,j) = LW(i,j)
 
     ! Ensure LWsci and LWveg exist as variable even in open runs
     LWsci(i,j) = LW(i,j)

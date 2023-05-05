@@ -3,9 +3,7 @@
 !-----------------------------------------------------------------------
 subroutine THERMAL(csoil,Ds1,gs1,ks1,ksnow,ksoil,Ts1,Tveg0)
 
-use MODCONF, only: CONDCT, DENSTY
-
-use MODTILE, only: tthresh 
+use MODCONF, only: CANMOD, CONDCT, DENSTY
 
 use CONSTANTS, only: &
   grav,              &! Acceleration due to gravity (m/s^2)
@@ -29,7 +27,8 @@ use PARAMETERS, only: &
   bthr,              &! Snow thermal conductivity exponent
   gsat,              &! Surface conductance for saturated soil (m/s)
   kfix,              &! Thermal conductivity at fixed snow density (W/m/K)
-  rhof                ! Fresh snow density (kg/m^3)
+  rhof,              &! Fresh snow density (kg/m^3)
+  fthresh             ! Forest fraction required for forest tile to be considered
 
 use SOILPARAMS, only: &
   b,                 &! Clapp-Hornberger exponent
@@ -42,6 +41,7 @@ use SOILPARAMS, only: &
 use STATE_VARIABLES, only: &
   Ds,                &! Snow layer thicknesses (m)
   Nsnow,             &! Number of snow layers
+  fsnow,             &! Snow cover fraction
   Sice,              &! Ice content of snow layers (kg/m^2)
   Sliq,              &! Liquid content of snow layers (kg/m^2)
   theta,             &! Volumetric soil moisture content
@@ -50,7 +50,8 @@ use STATE_VARIABLES, only: &
   Tveg                ! Vegetation temperature (K)
 
 use LANDUSE, only: &
-  tilefrac            ! Grid cell tile fraction
+  dem,               &! Terrain elevation (m)
+  forest              ! Grid cell forest fraction
 
 implicit none
 
@@ -88,7 +89,9 @@ real :: &
 do j = 1, Ny
 do i = 1, Nx
 
-  if (tilefrac(i,j) < tthresh) goto 1 ! exclude points outside tile of interest
+  if (isnan(dem(i,j))) goto 1 ! Exclude points outside of the domain
+  
+  if (CANMOD == 1 .and. forest(i,j) < fthresh) goto 1  ! Exclude points that have no forest
 
   ! Fixed
   ksnow(:,i,j) = kfix
@@ -96,8 +99,8 @@ do i = 1, Nx
     ! Density function
     do k = 1, Nsnow(i,j)
       rhos = rhof
-      if ((DENSTY /= 0) .and. (Ds(k,i,j) > epsilon(Ds))) then
-        rhos = (Sice(k,i,j) + Sliq(k,i,j)) / Ds(k,i,j)
+      if ((DENSTY /= 0) .and. (Ds(k,i,j) > epsilon(Ds)) .and. fsnow(i,j) > epsilon(fsnow)) then
+        rhos = (Sice(k,i,j) + Sliq(k,i,j)) / Ds(k,i,j) / fsnow(i,j)
       endif
       ksnow(k,i,j) = hcon_ice*(rhos/rho_ice)**bthr
     end do
@@ -113,7 +116,9 @@ dPsidT = - rho_ice*Lf/(rho_wat*grav*Tm)
 do j = 1, Ny
 do i = 1, Nx
 
-  if (tilefrac(i,j) < tthresh) goto 2 ! exclude points outside tile of interest
+  if (isnan(dem(i,j))) goto 2 ! Exclude points outside of the domain
+
+  if (CANMOD == 1 .and. forest(i,j) < fthresh) goto 2 ! Exclude points that have no forest
 
   do k = 1, Nsoil
     csoil(k,i,j) = hcap_soil(i,j)*Dzsoil(k)
@@ -156,7 +161,9 @@ end do
 do j = 1, Ny
 do i = 1, Nx
 
-  if (tilefrac(i,j) < tthresh) goto 3 ! exclude points outside tile of interest
+  if (isnan(dem(i,j))) goto 3 ! Exclude points outside of the domain
+  
+  if (CANMOD == 1 .and. forest(i,j) < fthresh) goto 3 ! Exclude points that have no forest
 
   Ds1(i,j) = max(Dzsoil(1), Ds(1,i,j))
   Ts1(i,j) = Tsoil(1,i,j) + (Tsnow(1,i,j) - Tsoil(1,i,j))*Ds(1,i,j)/Dzsoil(1)

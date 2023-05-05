@@ -5,7 +5,7 @@ subroutine EBALFOR(Ds1,KHa,KHg,KHv,KWg,KWv,ks1,SWsrf,SWveg,Ts1,Tveg0,  &
                    Esrf,Eveg,G,H,Hsrf,LE,LEsrf,Melt,Rnet,Rsrf,LWsci,LWveg)
 
 
-use MODTILE, only: tthresh 
+use MODCONF, only: CANMOD
 
 use CONSTANTS, only : &
   cp,                &! Specific heat capacity of air (J/K/kg)
@@ -26,7 +26,10 @@ use DRIVING, only: &
 
 use GRID, only: &
   Nx,Ny               ! Grid dimensions
-  
+
+use PARAMETERS, only: &
+  fthresh             ! Forest fraction required for forest tile to be considered
+
 use PARAMMAPS, only: &
   canh,              &! Canopy heat capacity (J/K/m^2)
   fsky,              &! Terrain / distant canopy shading
@@ -40,8 +43,9 @@ use STATE_VARIABLES, only : &
   Tveg                ! Vegetation temperature (K)
 
 use LANDUSE, only : &
-  fveg,              &! Canopy cover fraction
-  tilefrac            ! Grid cell tile fraction
+  dem,               &! Terrain elevation (m)
+  forest,            &! Grid cell forest fraction
+  fveg                ! Canopy cover fraction
 
 implicit none
 
@@ -106,7 +110,9 @@ real :: &
 do j = 1, Ny
 do i = 1, Nx
 
-  if (tilefrac(i,j) < tthresh) goto 1 ! exclude points outside tile of interest
+  if (isnan(dem(i,j))) goto 1 ! Exclude points outside of the domain
+
+  if (CANMOD == 1 .and. forest(i,j) < fthresh) goto 1 ! exclude points outside of forest tile
 
   if (fveg(i,j) > epsilon(fveg(i,j))) then
     ! Saturation humidity and density of air
@@ -186,8 +192,7 @@ do i = 1, Nx
         Esrf(i,j) = rho*KWg(i,j)*(Qsrf - Qcan(i,j))
         G(i,j) = 2*ks1(i,j)*(Tm - Ts1(i,j))/Ds1(i,j)
         Hsrf(i,j) = rho*cp*KHg(i,j)*(Tm - Tcan(i,j))
-        Rsrf(i,j) = SWsrf(i,j) + trcn(i,j)*(fsky(i,j)*LW(i,j) + (1 - fsky(i,j))*sb*Ta(i,j)**4) &
-                    - sb*Tm**4 + (1 - trcn(i,j))*sb*Tveg(i,j)**4
+        Rsrf(i,j) = SWsrf(i,j) + trcn(i,j)*LW(i,j) - sb*Tm**4 + (1 - trcn(i,j))*sb*Tveg(i,j)**4
         Rveg = SWveg(i,j) + (1 - trcn(i,j))*(LW(i,j) + sb*Tm**4 - 2*sb*Tveg(i,j)**4) 
         A(1,3) = 0
         b(1)   = (H(i,j) - Hveg - Hsrf(i,j)) / (rho*cp)

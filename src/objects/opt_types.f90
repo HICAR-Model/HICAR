@@ -17,6 +17,7 @@ module options_types
         integer::advection
         integer::boundarylayer
         integer::landsurface
+        integer::snowmodel
         integer::watersurface
         integer::radiation
         integer::convection
@@ -279,7 +280,7 @@ module options_types
                                         tsoil2D_ext, tsoil3D_ext, z_ext, time_ext
 
         character(len=MAXVARLENGTH) :: svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var, ridge_dist_var, &
-                                       valley_dist_var, ridge_drop_var, factor_p_var !!MJ added
+                                       valley_dist_var, ridge_drop_var, shd_var, factor_p_var !!MJ added
                                         
 
         character(len=MAXVARLENGTH) :: vars_to_read(kMAX_STORAGE_VARS)

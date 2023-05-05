@@ -6,8 +6,6 @@ subroutine EBALSRF_SBG(Ds1,KH,KHa,KHv,KWg,KWv,ks1,SWsrf,SWveg,Ts1, &
 
 use MODCONF, only: CANMOD
 
-use MODTILE, only: tthresh 
-
 use CONSTANTS, only: &
   cp,                &! Specific heat capacity of air (J/K/kg)
   Lf,                &! Latent heat of fusion (J/kg)
@@ -30,6 +28,9 @@ use DRIVING, only: &
 use GRID, only: &
   Nx,Ny               ! Grid dimensions
 
+use PARAMETERS, only: &
+  fthresh             ! Forest fraction required for forest tile to be considered
+
 use PARAMMAPS, only: &
   trcn                ! Canopy transmissivity
 
@@ -40,8 +41,9 @@ use STATE_VARIABLES, only: &
   Tveg                ! Vegetation temperature (K)
 
 use LANDUSE, only : &
-  fveg,              &! Canopy cover fraction
-  tilefrac            ! Grid cell tile fraction
+  dem,               &! Terrain elevation (m)
+  forest,            &! Grid cell forest fraction
+  fveg                ! Canopy cover fraction
 
 implicit none
 
@@ -94,7 +96,9 @@ real*8 :: &
 do j = 1, Ny
 do i = 1, Nx
 
-  if (tilefrac(i,j) < tthresh) goto 1 ! exclude points outside tile of interest
+  if (isnan(dem(i,j))) goto 1 ! Exclude points outside of the domain
+
+  if (CANMOD == 1 .and. forest(i,j) < fthresh) goto 1 ! Exclude points that have no forest
 
   if ((CANMOD == 1 .and. fveg(i,j) == 0) .or. CANMOD == 0) then  ! Surface energy balance in forests handled by subroutine EBALFOR
     Tveg(i,j) = Ta(i,j) 

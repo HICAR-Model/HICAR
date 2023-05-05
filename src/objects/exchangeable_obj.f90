@@ -56,10 +56,10 @@ contains
         this%ye = 1
     endif
 
-    allocate( this%halo_south_in( grid%ns_halo_nx+halo_size*2, grid%halo_nz, halo_size+this%ye   )[*])
-    allocate( this%halo_north_in( grid%ns_halo_nx+halo_size*2, grid%halo_nz, halo_size           )[*])
-    allocate( this%halo_east_in(  halo_size        ,  grid%halo_nz, grid%ew_halo_ny+halo_size*2  )[*])
-    allocate( this%halo_west_in(  halo_size+this%xe,  grid%halo_nz, grid%ew_halo_ny+halo_size*2  )[*])
+    allocate( this%halo_south_in( grid%ns_halo_nx+grid%halo_size*2, grid%halo_nz, halo_size+this%ye   )[*])
+    allocate( this%halo_north_in( grid%ns_halo_nx+grid%halo_size*2, grid%halo_nz, halo_size           )[*])
+    allocate( this%halo_east_in(  halo_size        ,  grid%halo_nz, grid%ew_halo_ny+grid%halo_size*2  )[*])
+    allocate( this%halo_west_in(  halo_size+this%xe,  grid%halo_nz, grid%ew_halo_ny+grid%halo_size*2  )[*])
     
     if (.not.allocated(neighbors)) call this%set_neighbors(grid)
 

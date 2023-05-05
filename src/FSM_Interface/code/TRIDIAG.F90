@@ -35,5 +35,5 @@ end do
 do n = Nvec - 1, 1, -1
   x(n) = x(n) - gamma(n+1)*x(n+1)
 end do
-  
+
 end subroutine TRIDIAG

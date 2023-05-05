@@ -5,6 +5,7 @@
 !      - with a snow depth history at each pixel in the season originally suggested from Jan Magnusson
 ! Author: Nora Helbig & Michael Schirmer & Jan Magnusson
 !--------------------------------------------------------------------------
+
 subroutine SNOWCOVERFRACTION(snowdepth,SWEtmp,i,j)
 
 use MODCONF, only: SNFRAC
@@ -90,9 +91,9 @@ if (SNFRAC == 0) then
 
   ! merge current SWEtmp with SWEtmp history from past 14 days
   SWEbuffer(1) = SWEtmp
-  SWEbuffer(2:15) = swehist(:,i,j)
+  SWEbuffer(2:15) = swehist(i,j,:)
   snowdepthbuffer(1) = snowdepth
-  snowdepthbuffer(2:15) = snowdepthhist(:,i,j)
+  snowdepthbuffer(2:15) = snowdepthhist(i,j,:)
 
   ! calculate snowdepthmin_buffer, snowdepthmax_buffer, snowdepthmin_recent 
   ! find indices of global min and max in SWEbuffer
@@ -242,12 +243,6 @@ if (SNFRAC == 0) then
   ! Use the largest of the two fsnow estimates
   fsnow(i,j) = max(fsnow_season,fsnow_nsnow)
 
-  ! BC update history of SWE and hs only if they correspond to 6:00am values
-  if (hour > 4.5 .and. hour < 5.5) then
-    SWEhist(:,i,j) = SWEbuffer(1:14)
-    snowdepthhist(:,i,j) = snowdepthbuffer(1:14)
-  end if
-  
 else if (SNFRAC == 1) then
   ! HelbigHS
   ! calculate standard deviation
@@ -303,6 +298,12 @@ if (snowdepth < epsilon(snowdepth)) then
   fsnow(i,j) = 0
 else
   fsnow(i,j) = min(fsnow(i,j), 1.)
+end if
+
+! BC update history of SWE and hs only if they correspond to 6:00am values
+if (hour > 4.5 .and. hour < 5.5) then
+  SWEhist(i,j,:) = SWEbuffer(1:14)
+  snowdepthhist(i,j,:) = snowdepthbuffer(1:14)
 end if
 
 end subroutine SNOWCOVERFRACTION

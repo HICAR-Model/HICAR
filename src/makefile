@@ -124,18 +124,14 @@ ifeq ($(ASSERTIONS),)
 endif
 
 
-
-
 ##################################
-ifndef FSM
-	FSM=${HOME}
-	ifdef FSM_DIR
-		FSM=${FSM_DIR}
-    endif
+LIBFSM=
+INFSM=
+
+ifdef FSM_DIR
+	LIBFSM= -L$(FSM_DIR)/lib/FSM_interface -lFSM_interface
+	INFSM=-I$(FSM_DIR)/include/FSM_interface/build
 endif
-FSM_PATH = ${FSM}
-LIBFSM= -L$(FSM_PATH)/lib/FSM_interface -lFSM_interface
-INFSM=-I$(FSM_PATH)/include/FSM_interface/build
 ##################################
 
 #MJ added:
@@ -246,7 +242,7 @@ ifeq ($(MODE), debug)
 		LINK=
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-O2 -h noomp -c -g -hfp0
+		COMP=-O2 -h noomp -c -g -hfp2
 		LINK=-h noomp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
@@ -369,7 +365,9 @@ $(info $$GIT_VERSION = ${GIT_VERSION})
 $(info $$COMP        = ${COMP})
 $(info $$LINK        = ${LINK})
 $(info $$MODE        = ${MODE})
+ifdef FSM_DIR
 $(info $$FSM_PATH   = ${FSM_DIR})
+endif
 $(info $$LFLAGS   = ${LFLAGS})
 $(info $$FFLAGS   = ${FFLAGS})
 
@@ -453,7 +451,6 @@ OBJS=	\
 		$(BUILD)advect.o			\
 		$(BUILD)adv_mpdata.o        \
 		$(BUILD)lsm_driver.o		\
-		$(BUILD)lsm_FSMdrv.o		\
 		$(BUILD)lsm_noahdrv.o		\
 		$(BUILD)lsm_noahlsm.o		\
 		$(BUILD)lsm_noahmpdrv.o  	\
@@ -467,6 +464,10 @@ OBJS=	\
 		$(BUILD)data_structures.o	\
 		$(BUILD)vinterp.o			\
 		$(BUILD)array_utilities.o
+
+ifdef FSM_DIR
+	OBJS += $(BUILD)lsm_FSMdrv.o
+endif
 
 CAF_TEST_EXECUTABLES = 	caf_options_test 				\
 						caf_init_test 					\
@@ -610,11 +611,15 @@ caf_no_forcing_test: $(BUILD)test_caf_no_forcing.o							\
 					$(BUILD)advect.o		 $(BUILD)data_structures.o	\
 					$(BUILD)vinterp.o		 $(BUILD)array_utilities.o	\
 					$(BUILD)lsm_driver.o	\
-					$(BUILD)lsm_FSMdrv.o	\
 					$(BUILD)lsm_noahdrv.o 	 $(BUILD)lsm_noahlsm.o \
 					$(BUILD)lsm_noahmpdrv.o  $(BUILD)lsm_noahmplsm.o \
 					$(BUILD)water_simple.o   $(BUILD)water_lake.o
 	${LINKER} $^ -o $@ ${LFLAGS}
+
+ifdef FSM_DIR
+	caf_no_forcing_test: $(BUILD)test_caf_no_forcing.o  $(BUILD)lsm_FSMdrv.o
+		${LINKER} $^ -o $@ ${LFLAGS}
+endif
 
 caf_domain_init_test: $(BUILD)test_caf_domain_init.o $(OBJS)
 	${LINKER} $^ -o $@ ${LFLAGS}
@@ -668,14 +673,14 @@ $(BUILD)%.o: $(OBJECTS)%.f90
 	${F90} ${FFLAGS} $< -o $@
 
 ifeq ($(COMPILER), cray)
-        $(BUILD)%.o: $(NOAHMP)%.f90
+$(BUILD)%.o: $(NOAHMP)%.f90
 		${F90} ${NMP_FFLAGS} $< -o $@
-        $(BUILD)%.o: $(PHYS)%.f90
+$(BUILD)%.o: $(PHYS)%.f90
 		${F90} ${PHYS_FFLAGS} $< -o $@
 else
-	$(BUILD)%.o: $(NOAHMP)%.f90
+$(BUILD)%.o: $(NOAHMP)%.f90
 		${F90} ${FFLAGS} $< -o $@
-	$(BUILD)%.o: $(PHYS)%.f90
+$(BUILD)%.o: $(PHYS)%.f90
 		${F90} ${FFLAGS} $< -o $@
 endif
 
@@ -890,8 +895,21 @@ $(BUILD)lsm_driver.o: $(PHYS)lsm_driver.f90 $(BUILD)data_structures.o	\
 						$(BUILD)lsm_noahmpdrv.o $(BUILD)lsm_noahmplsm.o \
 						$(BUILD)water_simple.o $(BUILD)water_lake.o		\
 						$(BUILD)domain_h.o $(BUILD)options_h.o			\
-						$(BUILD)atm_utilities.o $(BUILD)ra_simple.o $(BUILD)lsm_FSMdrv.o	\
+						$(BUILD)atm_utilities.o $(BUILD)ra_simple.o	\
 						$(BUILD)opt_types.o	$(BUILD)icar_constants.o
+
+ifdef FSM_DIR
+$(BUILD)lsm_driver.o: $(PHYS)lsm_driver.f90 $(BUILD)lsm_FSMdrv.o
+
+# J added 
+$(BUILD)lsm_FSMdrv.o: $(PHYS)lsm_FSMdrv.f90 $(BUILD)data_structures.o \
+                                                $(BUILD)lsm_noahdrv.o $(BUILD)lsm_noahlsm.o \
+                                                $(BUILD)lsm_noahmpdrv.o $(BUILD)lsm_noahmplsm.o \
+                                                $(BUILD)water_simple.o $(BUILD)icar_constants.o \
+						$(BUILD)wrf_constants.o $(BUILD)io_routines.o                   \
+                                                $(BUILD)domain_h.o $(BUILD)options_h.o                  \
+                                                $(BUILD)atm_utilities.o $(BUILD)ra_simple.o
+endif
 
 # $(BUILD)lsm_basic.o $(BUILD)lsm_simple.o
 
@@ -921,13 +939,6 @@ $(BUILD)lsm_noahmp_gecros.o: $(NOAHMP)lsm_noahmp_gecros.f90
 
 $(BUILD)lsm_noahmp_glacier.o: $(NOAHMP)lsm_noahmp_glacier.f90
 
-# J added
-$(BUILD)lsm_FSMdrv.o: $(PHYS)lsm_FSMdrv.f90 $(BUILD)data_structures.o \
-						$(BUILD)lsm_noahdrv.o $(BUILD)lsm_noahlsm.o \
-						$(BUILD)lsm_noahmpdrv.o $(BUILD)lsm_noahmplsm.o \
-						$(BUILD)water_simple.o $(BUILD)icar_constants.o \
-						$(BUILD)domain_h.o $(BUILD)options_h.o			\
-						$(BUILD)atm_utilities.o $(BUILD)ra_simple.o
 
 ###################################################################
 #	Planetary Boundary Layer code

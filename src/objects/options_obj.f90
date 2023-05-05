@@ -456,11 +456,11 @@ contains
 
         integer :: name_unit
 !       variables to be used in the namelist
-        integer :: pbl, lsm, water, mp, rad, conv, adv, wind, radiation_downScaling
+        integer :: pbl, lsm, sm, water, mp, rad, conv, adv, wind, radiation_downScaling
         character(len=MAXVARLENGTH) :: phys_suite
         
 !       define the namelist
-        namelist /physics/ pbl, lsm, water, mp, rad, conv, adv, wind, phys_suite, radiation_downScaling
+        namelist /physics/ pbl, lsm, sm, water, mp, rad, conv, adv, wind, phys_suite, radiation_downScaling
 
 !       default values for physics options (advection+linear winds+simple_microphysics)
         pbl = 0 ! 0 = no PBL,
@@ -472,6 +472,10 @@ contains
                 ! 1 = Fluxes from GCM,
                 ! 2 = simple LSM, (not complete)
                 ! 3 = Noah LSM
+                ! 4 = Noah MP
+                
+        sm = 0  ! 0 = no Snow Model
+                ! 1 = FSM2 (Flexible Snow Model)
 
         water =0! 0 = no open water fluxes,
                 ! 1 = Fluxes from GCM, (needs lsm=1)
@@ -515,6 +519,7 @@ contains
         options%physics%convection    = conv
         options%physics%advection     = adv
         options%physics%landsurface   = lsm
+        options%physics%snowmodel     = sm
         options%physics%watersurface  = water
         options%physics%microphysics  = mp
         options%physics%radiation     = rad
@@ -705,8 +710,7 @@ contains
                                         lat_ext, lon_ext, swe_ext, hsnow_ext, rho_snow_ext, tss_ext, tsoil2D_ext, tsoil3D_ext, z_ext, time_ext
 
 
-        character(len=MAXVARLENGTH) :: svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var, ridge_dist_var,
-        valley_dist_var, ridge_drop_var, factor_p_var  !!MJ added
+        character(len=MAXVARLENGTH) :: svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var, ridge_dist_var, valley_dist_var, ridge_drop_var, shd_var, factor_p_var  !!MJ added
 
         namelist /var_list/ pvar,pbvar,tvar,qvvar,qcvar,qivar,qrvar,qgvar,qsvar,qncvar,qnivar,qnrvar,qngvar,qnsvar,&
                             i2mvar, i3mvar, i2nvar, i3nvar, i1avar, i2avar, i3avar, i1cvar, i2cvar, i3cvar, &
@@ -719,7 +723,7 @@ contains
                             swdown_var, lwdown_var, sst_var, rain_var, time_var, sinalpha_var, cosalpha_var, &
                             lat_ext, lon_ext, swe_ext, hsnow_ext, rho_snow_ext, tss_ext, tsoil2D_ext, tsoil3D_ext, z_ext, time_ext, &
                             svf_var, hlm_var, slope_var, slope_angle_var, aspect_angle_var, ridge_dist_var, valley_dist_var, &
-                            ridge_drop_var, factor_p_var !! MJ added
+                            ridge_drop_var, shd_var, factor_p_var !! MJ added
 
         ! no default values supplied for variable names
         hgtvar=""
@@ -809,6 +813,7 @@ contains
         ridge_dist_var = ""
         valley_dist_var = ""
         ridge_drop_var = ""
+        shd_var = ""
 
         !! MJ added
         svf_var = ""
@@ -989,10 +994,11 @@ contains
         options%slope_var             = slope_var
         options%slope_angle_var       = slope_angle_var
         options%aspect_angle_var      = aspect_angle_var
-        options%factor_p_var      = factor_p_var
+        options%factor_p_var          = factor_p_var
         options%ridge_dist_var        = ridge_dist_var
         options%valley_dist_var       = valley_dist_var
         options%ridge_drop_var        = ridge_drop_var
+        options%shd_var               = shd_var
 
     end subroutine var_namelist
 

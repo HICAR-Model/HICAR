@@ -264,14 +264,16 @@ module icar_constants
         integer :: cosine_zenith_angle
         integer :: tend_swrad
         integer :: runoff_tstep !! MJ added
-        integer :: snowdepth    !! MJ added
         integer :: Tsnow        !! MJ added
         integer :: Sice         !! MJ added
         integer :: Sliq         !! MJ added
-        integer :: albs         !! MJ added
         integer :: Ds           !! MJ added
         integer :: fsnow        !! MJ added
         integer :: Nsnow        !! MJ added
+        integer :: dm_salt      !! DR added
+        integer :: dm_susp      !! DR added
+        integer :: dm_subl      !! DR added
+        integer :: dm_slide     !! DR added
         integer :: rainfall_tstep     !! MJ added
         integer :: snowfall_tstep     !! MJ added
         integer :: meltflux_out_tstep !! MJ added
@@ -283,6 +285,7 @@ module icar_constants
         integer :: ridge_dist         !! DR added
         integer :: valley_dist        !! DR added
         integer :: ridge_drop         !! DR added
+        integer :: shd                !! DR added
         integer :: Sliq_out           !! MJ added
         integer :: hlm                !! MJ added
         integer :: kpbl
@@ -344,7 +347,7 @@ module icar_constants
                                                             241, 242, 243, 244, 245, 246, 247, 248, 249, 250,  &
                                                             251, 252, 253, 254, 255, 256, 257, 258, 259, 260,  &
                                                             261, 262, 263, 264, 265, 266, 267, 268, 269, 270,  &
-                                                            271, 272, 273, 274)
+                                                            271, 272, 273, 274, 275, 276, 277)
 
     integer, parameter :: kINTEGER_BITS     = storage_size(kINTEGER_BITS)
     integer, parameter :: kMAX_STORAGE_VARS = storage_size(kVARS) / kINTEGER_BITS
@@ -421,7 +424,8 @@ module icar_constants
     integer, parameter :: kLSM_SIMPLE    = 2
     integer, parameter :: kLSM_NOAH      = 3
     integer, parameter :: kLSM_NOAHMP    = 4
-    integer, parameter :: kLSM_FSM       = 5 !! MJ added
+    
+    integer, parameter :: kSM_FSM        = 1 !! MJ added
 
     integer, parameter :: kRA_BASIC      = 1
     integer, parameter :: kRA_SIMPLE     = 2

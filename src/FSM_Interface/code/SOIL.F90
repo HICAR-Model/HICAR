@@ -3,7 +3,7 @@
 !-----------------------------------------------------------------------
 subroutine SOIL(csoil,Gsoil,ksoil)
 
-use MODTILE, only: tthresh 
+use MODCONF, only: CANMOD
 
 use DRIVING, only: &
   dt                  ! Timestep (s)
@@ -13,11 +13,15 @@ use GRID, only: &
   Nsoil,             &! Number of soil layers
   Nx,Ny               ! Grid dimensions
 
+use PARAMETERS, only: &
+  fthresh             ! Forest fraction required for forest tile to be considered
+
 use STATE_VARIABLES, only: &
   Tsoil               ! Soil layer temperatures (K)
 
 use LANDUSE, only: &
-  tilefrac            ! Grid cell tile fraction
+  dem,               &! Terrain elevation (m)
+  forest              ! Grid cell forest fraction
   
 implicit none
 
@@ -41,7 +45,9 @@ real :: &
 do j = 1, Ny
 do i = 1, Nx
 
-  if (tilefrac(i,j) < tthresh) goto 1 ! exclude points outside tile of interest
+  if (isnan(dem(i,j))) goto 1 ! Exclude points outside of the domain
+
+  if (CANMOD == 1 .and. forest(i,j) < fthresh) goto 1 ! Exclude points that have no forest
 
   do k = 1, Nsoil - 1
     Gs(k) = 2 / (Dzsoil(k)/ksoil(k,i,j) + Dzsoil(k+1)/ksoil(k+1,i,j))

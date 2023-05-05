@@ -371,6 +371,7 @@ module domain_interface
     
     ! Neighboring images of this image
     integer, allocatable :: neighbors(:)
+    integer, allocatable :: corner_neighbors(:)
 
     real, allocatable :: south_in_3d(:,:,:,:)[:]
     real, allocatable :: north_in_3d(:,:,:,:)[:]
@@ -399,6 +400,7 @@ module domain_interface
     integer :: nx, ny, nz, nx_global, ny_global
     integer :: ximg, ximages, yimg, yimages
     integer :: north_neighbor, south_neighbor, east_neighbor, west_neighbor
+    integer :: northwest_neighbor, southwest_neighbor, northeast_neighbor, southeast_neighbor
 
 
     logical :: north_boundary = .True.
@@ -414,13 +416,15 @@ module domain_interface
     !! MJ added new vars needed for FSM
     !real,allocatable :: FSM_slopemu(:,:)
     type(variable_t) :: runoff_tstep 
-    type(variable_t) :: snowdepth
     type(variable_t) :: Tsnow
     type(variable_t) :: Sice
     type(variable_t) :: Sliq
-    type(variable_t) :: albs
     type(variable_t) :: Ds
     type(variable_t) :: fsnow
+    type(variable_t) :: dm_salt
+    type(variable_t) :: dm_susp
+    type(variable_t) :: dm_subl
+    type(variable_t) :: dm_slide
     type(variable_t) :: Nsnow
     type(variable_t) :: rainfall_tstep
     type(variable_t) :: snowfall_tstep
@@ -435,6 +439,7 @@ module domain_interface
     type(variable_t) :: ridge_dist
     type(variable_t) :: valley_dist
     type(variable_t) :: ridge_drop
+    type(variable_t) :: shd
 
 
   contains
@@ -527,22 +532,25 @@ module domain_interface
         type(timer_t),   intent(inout) :: send_timer, ret_timer, wait_timer
     end subroutine
 
-    module subroutine halo_3d_send_batch(this)
+    module subroutine halo_3d_send_batch(this, exch_var_only)
         implicit none
         class(domain_t), intent(inout) :: this
+        logical, intent(in) :: exch_var_only
     end subroutine
 
-    module subroutine halo_3d_retrieve_batch(this, wait_timer)
+    module subroutine halo_3d_retrieve_batch(this, exch_var_only, wait_timer)
         implicit none
         class(domain_t), intent(inout) :: this
-        type(timer_t),   intent(inout) :: wait_timer
+        logical, intent(in) :: exch_var_only
+        type(timer_t), optional,   intent(inout) :: wait_timer
     end subroutine
 
     ! Exchange subdomain boundary information as a batched exchange
-    module subroutine halo_3d_exchange_batch(this, send_timer, ret_timer, wait_timer)
+    module subroutine halo_3d_exchange_batch(this, send_timer, ret_timer, wait_timer, exch_var_only)
         implicit none
         class(domain_t), intent(inout) :: this
-        type(timer_t),   intent(inout) :: send_timer, ret_timer, wait_timer
+        type(timer_t),   optional, intent(inout) :: send_timer, ret_timer, wait_timer
+        logical, optional, intent(in) :: exch_var_only
     end subroutine
 
     module subroutine halo_2d_send_batch(this)
