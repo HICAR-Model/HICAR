@@ -1,0 +1,15 @@
+icar
+*_test
+docs/html
+docs/doxygen_sqlite3.db
+*.o
+*.a
+*.so
+*.mod
+*.smod
+*.i
+*.lst
+*~
+*.pyc
+*.ipynb
+*-checkpoint.f90
