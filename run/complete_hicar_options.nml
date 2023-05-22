@@ -4,9 +4,6 @@
 &model_version
     version = "2.1",                      ! This must match the version of the compiled code
     comment = "Add your comment here"     ! This will be stored in output files
-    phys_suite = ''                       ! Overrides certain namelist options to match a given physics suite
-					  ! Current options: 
-					  ! 'HICAR' -- Turns on recomended options for high-resolution runs
 /
 
 !---------------------------------------------------------
@@ -15,11 +12,14 @@
 &z_info
     ! use dz_levels as a guide but allow dz to vary in space so that z is constant in space at flat_z_height
     ! note spatially varying dz does not work well with linear_theory, use with wind=2 more options coming soon
-    space_varying = .True.
+    ! space_varying = .False.
     !   height at which the z coordinate value should be constant in space (if space_varying=True), if < 0 make the model top flat (computed as sum(dz_levels) + mean(terrain))
     ! flat_z_height = -1
 
 
+    !   compensate for varying dz in advection, effectively speeding up air through smaller dz windows. This should be true with the new advection scheme (as of 2020-10)
+
+    ! fixed_dz_advection = .True.
 
     ! Use a SLEVE vertical coordinate, where the decay of the large- and small-scale terrain influence towards model top is controlled by the
     !   decay_rate_L_topo and decay_rate_S_topo respectively (=H/s1 and H/s2), and the exponential factor n that controls compression across the z column.
@@ -45,7 +45,7 @@
 /
 
 !---------------------------------------------------------
-!   I/O Options
+!   Specify output and restart files and output frequencies
 !---------------------------------------------------------
 &io_list
     names = 'potential_temperature','qi','qr','qc','qv','u','v','w_grid','w','z','terrain','dz_i','precipitation'
@@ -106,6 +106,7 @@
     ! For a FASTER run (simpler physics), set mp=2
     ! If surface air temperature is important use pbl=2 lsm=4 rad=3 water=3 this requires Noah MP and lake data
     ! N/A = Not Available or Not fully implemented
+    ! Warning, convection can be unstable.
     ! wishlist = No Code Present yet
 
     ! Planetary Boundary Layer Scheme
@@ -131,6 +132,7 @@
 
     ! Wind field calculations
     wind = 0    ! 1=Linear Theory          2=Grid-deformed winds        3=O'Brien iterative winds    4=PETSc solver  5=Linear+O'brien iterative  6=Linear+PETSc solver
+
 /
 
 !---------------------------------------------------------
@@ -147,7 +149,7 @@
 &time_parameters
     !The CFL factor to use. Can be > 1.0 if RK3 time stepping is turned on. Limits when > 1.0 depend on order of advection scheme
     cfl_reduction_factor = 1.3 !The CFL factor to use. Can be > 1.0 if RK3 time stepping is turned on. Limits when > 1.0 depend on order of advection scheme
-    
+
     RK3 = .True. !Whether to use RK3 time-stepping for advection code
 
     !   CFL method/strictness settings:
@@ -198,6 +200,7 @@
     !   Calendar used by the forcing data "gregorian", "standard", "noleap", "365-day", "360-day"
     calendar = "standard",
 
+
     !   Limit output data to near surface variables
     !   WARNING if true it is impossible to restart the run (for now)
     ! surface_io_only = False,
@@ -229,22 +232,12 @@
     !   Specify that the height of the forcing data will change through the simulation (common for atmospheric model-level output)
     time_varying_z = True,
     !   Use height above ground layer to interpolate the wind field instead of height above sea level.
-    use_agl_height = .True.,
-    agl_cap = 800, !  height up to which AGL height is used for vertical interpolation (default = 300m)
+    use_agl_height = False,
+    agl_cap = 800, !  height up to which AGL height is used for vertical interpolation
 
     !   If the forcing data come from WRF, the temperature data probably have an offset applied
     !   t_offset will be added to the forcing temperature data.  Defaults to 0
     ! t_offset = 300, ! [K]
-
-    ! limit to impose on relative humidity in the forcing data in case some weird values (e.g. 200% RH) are present
-    rh_limit = 1.2    ! [ fractional ]
-
-    ! limit to impose on externally supplied convective precipitation in the forcing data in case bad values (e.g. 1e10 mm) are present
-    cp_limit = 500    ! [ mm/hr ]
-
-    ! limit to impose on minimum SST in the forcing data in case any non-sensical values (e.g. 200 K) are present
-    sst_min_limit = 273    ! [ k ]
-
 
     !   If the temperature field in the forcing data is not potential temperature, then set this flag to False
     ! t_is_potential = .True.
@@ -262,6 +255,10 @@
 
     !   To run an ideal simulation in which the boundary conditions are held constant
     ! ideal = false,
+    !   To use an externally supplied high-resolution wind field (ignore)
+    ! external_winds = false,
+    !   Number of external wind files (ignore)
+    ! n_ext_winds = 1,  ! [n-files]
     !   Run with a horizontally averaged wind field
     ! mean_winds = false,
     !   Run with a horizontally averaged boundary conditions
@@ -271,11 +268,11 @@
     restart = false,
 
     !   Use density in the advection step (violates linear theory assumptions)
-    advect_density = false,
+    advect_density = .True.,
 
-    ! batched_exch = .False.    ! Do halo_exchanges as a batched or piece-wise process. Piece-wise is generally faster, 
+    ! batched_exch = .True.    ! Do halo_exchanges as a batched or piece-wise process. batched is generally faster,    
                                 ! but some compiler/compute combinations may be faster
-                                ! with batched exchanges.
+                                ! with piece-wise exchanges.
 
     !   Increases output print at runtime and tests domain wide values for realistic values throughout the simulation.
     debug = false,
@@ -302,7 +299,6 @@
 
     use_cu_options = false
 /
-
 
 !---------------------------------------------------------
 !   Specification of variable names in input files
@@ -335,7 +331,7 @@
     i3mvar  = "ice3_mass",  ! ice_3 mixing ratio                       [kg/kg]  OPTIONAL
     i3avar  = "ice3_a",     ! ice_3 volume mixing ratio                [m^3/kg] OPTIONAL
     i3cvar  = "ice3_c",     ! ice_3 volume x aspect ratio mixing ratio [m^3/kg] OPTIONAL
-
+ 
     hgtvar  = "HGT",        ! surface elevation         [m]
     zvar    = "PH",         ! model level elevations    [m or m/s^2 if z_is_geopotential]
     zbvar   = "PHB",        ! base height state         [m or m/s^2] OPTIONAL
@@ -465,7 +461,7 @@
 /
 
 !---------------------------------------------------------
-!   Optionally specified advection parameters
+!   Optionally specified advection parameters (only used by MPDATA right now)
 !---------------------------------------------------------
 &adv_parameters
     MPDATA_FCT = true           ! Use a flux correction in the transport calculations to prevent ringing and overshoots
