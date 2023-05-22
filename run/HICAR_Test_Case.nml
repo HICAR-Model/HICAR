@@ -65,7 +65,7 @@
     !   primary inputs from this file are lat, lon, and terrain, optionally soil and veg types
     init_conditions_file="../static_data/Gaudergrat_250m.nc", !"/scratch/snx3000/dreynold/Domains/Davos_XL_250m_ridge.nc", !"geo_em.d01_250m.nc"
 
-    forcing_file_list = "file_list_Gaud_250m.txt  
+    forcing_file_list = "file_list_Gaud_250m.txt"  
 /
 
 !---------------------------------------------------------
