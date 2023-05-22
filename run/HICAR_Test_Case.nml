@@ -1,0 +1,303 @@
+!---------------------------------------------------------
+!   Model and run meta-data
+!---------------------------------------------------------
+&model_version
+    version = "2.1",                    ! This must match the version of the compiled code
+    comment = "This run is for testing HICAR Installs"     ! This will be stored in output files
+/
+
+!---------------------------------------------------------
+!   Specify physics options to use for the model run
+!---------------------------------------------------------
+&physics
+    ! N/A = Not Available or Not fully implemented
+    ! wishlist = No Code Present yet
+
+    ! Planetary Boundary Layer Scheme
+    pbl = 3,  ! 1=legacy (deprecated)      2=Simple (Local HP96)        3=YSU                        4=COSMO diagnostic PBL  
+
+    ! Land Surface Model
+    lsm = 3,   ! 1=use prescribed fluxes    2=Simple LSM (N/A)          3=Noah LSM                   4=NoahMP
+
+    ! Open water fluxes
+    water=2,  ! 1=use prescribed (w/lsm=1) 2=Simple sea surface fluxes
+
+    ! Microphysics Scheme
+    mp  = 3,  ! 1=Thompson                 2=Simple (SB04)              3=Morrison                   4=WSM6     5=Thompson Aerosol    6=WSM3  7=ISHMAEL
+
+    ! Radiation Scheme
+    rad = 3,  ! 1=use prescribed fluxes    2=Simple (empirical)         3=RRTMG
+
+    ! Convection / Cumulus Scheme
+    conv= 0,  ! 1=Tiedke Scheme            2=Simple Scheme (wishlist)   3=Kain-Fritsch
+
+    ! Advection Scheme
+    adv = 1,  ! 1=Standard                 2=MPDATA                     3=Adams-Bashforth (wishlist)
+
+    ! Wind field calculations
+    wind = 4    ! 1=Linear Theory          2=Grid-deformed winds        3=O'Brien iterative winds    4=PETSc solver
+    
+/
+
+!---------------------------------------------------------
+!   Specify wind solver and options for downscaling
+!---------------------------------------------------------
+&wind
+    Sx = .True. !Modify wind field using Sx Parameter
+    Sx_dmax = 600.0
+/
+
+!---------------------------------------------------------
+!   Specify options for time-stepping
+!---------------------------------------------------------
+&time_parameters
+    cfl_reduction_factor = 1.6 !The CFL factor to use. Can be > 1.0 if RK3 time stepping is turned on. Limits when > 1.0 depend on order of advection scheme
+    RK3 = .True. !Whether to use RK3 time-stepping for advection code
+    cfl_strictness = 4
+/
+
+
+!---------------------------------------------------------
+!   Files to be used by the run
+!---------------------------------------------------------
+&files_list
+    !   This is the high-resolution input filename
+    !   primary inputs from this file are lat, lon, and terrain, optionally soil and veg types
+    init_conditions_file="../static_data/Gaudergrat_250m.nc", !"/scratch/snx3000/dreynold/Domains/Davos_XL_250m_ridge.nc", !"geo_em.d01_250m.nc"
+
+    forcing_file_list = "file_list_Gaud_250m.txt  
+/
+
+!---------------------------------------------------------
+!   Main List of Parameters
+!---------------------------------------------------------
+&parameters
+    !   Set this to the starting date of the first low-resolution forcing file
+    forcing_start_date =  '2017-02-14 00:00:00',
+    !   Set this to the date to stop running the model
+    end_date =  "2017-02-14 02:00:00",
+
+    !   Calendar used by the forcing data "gregorian", "standard", "noleap", "365-day", "360-day"
+    calendar = "standard" , !"gregorian",
+
+    !   The grid spacing of the high-resolution data
+    dx = 250.0,        ! [m]
+
+    !   The number of vertical levels to run (suggest a model top around 4-8km)
+    !   if it is supplied it must be less than or equal to the number of levels specified below
+    !   but it can be used to subset the number of levels used.
+    nz = 40, 
+
+    !   Set this to true if the zvar in the input data is actually in units of geopotential height (m/s^2)
+    z_is_geopotential = False, ! True,
+
+    !   Set this to true if the zvar in the input data is specified on the interfaces between mass levels
+    z_is_on_interface = False,  ! See COSMO users guide VII sect 3.3
+
+    !   Specify that the height of the forcing data will change through the simulation (common for atmospheric model-level output)
+    time_varying_z = False,
+
+    !   Use height above ground level to interpolate the wind field instead of height above sea level.
+    !   This is option is recomended.
+    use_agl_height = True,
+
+    !   Height at which we switch from AGL-interpolation to using ASL-interpolation
+    !   The model is not particularly sensetive to this, but it should be somewhere between 500-1200
+    agl_cap = 800,
+
+    !   If the forcing data come from WRF, the temperature data probably have an offset applied
+    !   t_offset will be added to the forcing temperature data.  Defaults to 0
+    ! t_offset = 300, ! [K]
+
+    !   Distance to smooth winds over [m] ~dxlow is reasonable
+    !   This should be somewhere between dx_low and dx_high. 
+    !   It may not be needed at all, but HICAR has typically been run with a value around 500m
+    smooth_wind_distance = 500.0, ! [m]
+
+    !   Sets if the Qv variable in the forcing data is mixing ratio or specific humidity
+    qv_is_spec_humidity = .True.   ! for COSMO1
+
+    !   This should always be set to True
+    advect_density = .True.,  !   Use density in the advection step (violates linear theory assumptions)
+  
+    !   Enables some additional debugging output and checks
+    debug = .False.
+
+    !   Similar to qv_is_spec_humidity above -- if the temperature data in the forcing data is potential temperature, set this to true
+    t_is_potential = .False.
+    
+    !   Use this to restart the model restart_info must be supplied below
+    restart = .False.,
+
+    !   If the following are true, their respective namelists (below) will also be read in.
+    !   Read parameters for advection
+    use_adv_options = .True.
+    !   Read parameters for microphysics (primarily thompson only at this point)
+    use_mp_options = true
+    !   Read parameters for land surface model
+    use_lsm_options = true
+/
+
+!---------------------------------------------------------
+!   I/O Options
+!---------------------------------------------------------
+&io_list
+    names = 'qs','snow_height','ns','qg','ng','temperature','albedo','qi','ni','snowfall','ice1_a','lat','swtb','swtd','hfls','hfss','lwtr','lon','pressure','u','v','w_grid','w','z','terrain','dz_i','precipitation','qv','surface_roughness','u10m','v10m','hus2m','ta2m','psfc','qc','qr','nr'
+
+    output_file="../output/HICAR_Gaudergrat_250m/icar_out_",
+    restart_out_file = "../restart/Gaudergrat_250m/icar_rst_"
+
+
+    !   The length of an input forcing time step
+    inputinterval = 7200,   ! [s]
+    !   The output interval
+    outputinterval = 3600,  ! [s]
+
+    frames_per_outfile=24
+
+    restartinterval = 24  !In unit of outputintervals
+
+    ! Path to restart file generated by previous ICAR run with same physics settings. Omit date part of file name
+    restart_in_file = "../restart/Gaudergrat_250m/icar_rst" 
+
+    ! date to start from, used to calculate position in both restart file and forcing file
+    restart_date =  2022, 05, 09, 00, 0, 0
+/
+
+
+!---------------------------------------------------------
+!   Specification of variable names in input files
+!---------------------------------------------------------
+&var_list
+    ! These are the names of the variables in the forcing data files
+    ! variables on the mass / center grid
+    time_var= "time",       ! Time                      [defined in netcdf attributes] OPTIONAL
+    pvar    = "P",          ! pressure                  [Pa]
+    tvar    = "T",          ! temperature               [K] (with optional offset)
+    qvvar   = "QV", !"QVAPOR",     ! water vapor mixing ratio  [kg/kg]
+
+    hgtvar  = "HSURF",        ! surface elevation         [m]
+    zvar    = "HFL",         ! model level elevations    [m or m/s^2 if z_is_geopotential]
+    latvar  = "lat_1",       ! latitude                  [degrees]
+    lonvar  = "lon_1",      ! longitude                 [degrees]
+
+    uvar    = "U",          ! East-West wind speed      [m/s]
+    vvar    = "V",          ! North-South wind speed    [m/s]
+
+    ! NOTE, these variables should be in the high-resolution initial conditions netcdf file
+    lat_hi  = "lat",     ! latitude (mass grid)      [degrees]
+    lon_hi  = "lon",    ! longitude (mass grid)     [degrees]
+    hgt_hi  = "topo"       ! surface elevation         [m]
+
+    ! only required for some physics code (Noah LSM, water, Tiedke, KF(?))
+    landvar = "landmask",   ! land-water mask (as in WRF) 1=land, 0 or 2=water
+
+    ! to use the Noah LSM the following fields should also be specified on the high-res grid
+    vegtype_var    = "landuse",    ! vegetation type index (classification to match VEGPARM.TBL file)
+
+/
+
+!---------------------------------------------------------
+!   Optionally specified Microphysics parameters (mostly for Thompson)
+!---------------------------------------------------------
+&mp_parameters
+    update_interval = 0  ! maximum update interval allowed
+                         ! MP only updated when this interval will be exceeded in the next step
+
+    Nt_c  = 100.e6      !  50, 100,500,1000
+    TNO   = 5.0         !  0.5, 5, 50
+    am_s  = 0.069       ! 0.052 (Heymsfield), 0.02 (Mitchell), 0.01.
+                        ! Note that these values are converted to mks units. Was given as cgs units in Morrison p3 code
+    rho_g = 500.0       ! 800, 500, 200
+    av_s  = 40.0        ! 11.72 (Locatelli and Hobbs)
+    bv_s  = 0.55        ! 0.41
+    fv_s  = 100.0       ! 0
+    av_g  = 442.0       ! 19.3   from "Cloud-Resolving Modelling of Convective Processes, by Gao and Li,
+    bv_g  = 0.89        ! 0.37
+    av_i  = 1847.5      ! 700 (Ikawa and Saito)
+    Ef_si = 0.05
+    Ef_rs = 0.95        ! 1
+    Ef_rg = 0.75        ! 1
+    Ef_ri = 0.95        ! 1
+    C_cubes = 0.5       ! 0.25 Based on Thesis paper "Validation and Improvements of Simulated
+                        !      Cloud Microphysics and Orographic Precipitation over the Pacific Northwest"
+    C_sqrd  = 0.3
+    mu_r    = 0.        ! 1, 2, 5
+    t_adjust= 0.0       ! -5, 10, 15
+    Ef_rw_l = .False.   ! True sets ef_rw = 1, insted of max 0.95
+    Ef_sw_l = .False.   ! True sets ef_rw = 1, insted of max 0.95
+
+    top_mp_level = 0    ! if <=0 stop that many levels below the model top
+    local_precip_fraction = 1.0 ! Fraction of micrphysics derived precipitation to deposit in the local grid cell
+                                ! the remaining precip is distributed to the surrounding grid cells.
+/
+
+!---------------------------------------------------------
+!   Optionally specified advection parameters (only used by MPDATA right now)
+!---------------------------------------------------------
+&adv_parameters
+
+    flux_corr = 1               ! 1=WRF Monotonic flux-limiter
+    h_order = 3                 ! Horizontal order of advection. Only odd-numbered advection orders supported up to order=5
+    v_order = 3                 ! Vertical order of advection.   Only odd-numbered advection orders supported up to order=5 
+/
+
+!---------------------------------------------------------
+!   Optionally specified land surface model parameters (mostly for Noah)
+!---------------------------------------------------------
+&lsm_parameters
+    update_interval = 600             ! Int : Seconds to wait before updating land surface fluxes again (default=300)
+
+    LU_Categories = "USGS" ! "USGS" !   ! Land Use Category definitions ! BK: all snow modified USGS table
+                                    ! Note, this must match a category in VEGPARM.TBL and correspond to
+                                    ! the values stored in vegtype_var in the hi-res input var (default="MODIFIED_IGBP_MODIS_NOAH")
+                                    ! common values are USGS, USGS-RUC, MODI-RUC, and NLCD40
+
+    !monthly_vegfrac = true            ! read / use a 12 month phenology of vegetation fraction
+
+    ! These all default to values defined in common LU_Categories
+    urban_category = 1             ! Int: index that defines the urban category in LU_Categories
+    ice_category   = 24             ! Int: index that defines the ice category in LU_Categories
+    water_category = 16             ! Int: index that defines the water category in LU_Categories
+
+/
+
+!---------------------------------------------------------
+!   Optionally specified radiation parameters  (here only used for update_interval_rrtmg and tzone)
+!---------------------------------------------------------
+&rad_parameters
+
+    tzone = 1.0                 ! this is UTC Offset and 1 here for centeral Erupe
+
+    update_interval_rrtmg = 600  ! only for rrtmh 
+/
+
+
+!---------------------------------------------------------
+!   Model levels specification (may be optional, but should be specified)
+!   If compiled with gfortran put all levels on one line.
+!---------------------------------------------------------
+&z_info
+    ! use dz_levels as a guide but allow dz to vary in space so that z is
+    !   constant in space at flat_z_height
+    space_varying = .True.
+    
+    ! height at which the z coordinate value should be constant in space (if
+    !   space_varying=True), if < 0 make the model top flat (computed as
+    !   sum(dz_levels) + mean(terrain))
+    flat_z_height = -1
+
+! Use a SLEVE vertical coordinate, where the decay of the large- and small-scale terrain influence towards model top is controlled by the decay_rate_L_topo and decay_rate_S_topo respectively (=H/s1 and H/s2), and the exponential factor n that controls compression across the z column. For higher n values, the terrain compression happens more in the mid to upper z levels (but always below flat_z_height), whereas for n=1 it is mainly at the lower levels, which may cause numerical issues if these are very thin. By setting s1=s2 a standard hybrid coordinate is achieved. 
+    
+    sleve = .True.
+    terrain_smooth_windowsize = 5
+    terrain_smooth_cycles = 100
+    decay_rate_L_topo = 1
+    decay_rate_S_topo = 3
+    sleve_n = 1.35
+
+    dz_levels = 23.0793700550371, 25.4054789829865, 27.9546004029731, 30.7456617662627, 33.7986658963874, 37.13462986434, 40.7754878622213, 44.7439504647213, 49.0633117863096, 53.7571952388465, 58.8492279502517, 64.3626335260366, 70.3197328568148, 76.7413432615544, 83.6460676036046, 91.0494673453666, 98.9631170549111, 107.393542879556, 116.341054166015, 125.798485877882, 135.749879770318, 146.169144288172, 157.018746480945, 168.248503199185, 179.79455242322, 191.578597373964, 203.507524314657, 215.473497662955, 227.354631108753, 239.016318976301, 250.313286722599, 261.092382801852, 271.196087038084, 280.46665561911, 288.750764024197, 295.904452287969, 301.798128624738, 306.321354381736, 309.387121454553, 310.935346604612
+
+
+/
+

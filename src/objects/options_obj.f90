@@ -1055,7 +1055,7 @@ contains
         sst_min_limit       = 273.15
         cp_limit            = 500
         buffer              = 0
-        advect_density      = .False.
+        advect_density      = .True.
         t_is_potential      = .True.
         qv_is_spec_humidity = .False.
         qv_is_relative_humidity=.False.
