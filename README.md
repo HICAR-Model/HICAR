@@ -4,6 +4,10 @@
 [![develop](https://github.com/NCAR/icar/actions/workflows/icar-develop-commit.yml/badge.svg)](https://github.com/NCAR/icar/actions/workflows/icar-develop-commit.yml)
 [![Documentation Status](https://readthedocs.org/projects/icar/badge/)](http://icar.readthedocs.org/en/develop/)
 
+
+[![DOI](https://zenodo.org/badge/638935780.svg)](https://zenodo.org/badge/latestdoi/638935780)
+
+
 ICAR is a simplified atmospheric model designed primarily for climate downscaling, atmospheric sensitivity tests, and hopefully educational uses. ICAR combines an analytical solution for flow over mountains (linear mountain wave theory) with the large scale flow for a driving model to predict the high resolution wind field. It then advects and heat and moisture through the domain while computing cloud microphysical effects. ICAR has includes a land surface model as well for land atmosphere interactions; ICAR can simulate open water fluxes, PBL mixing, surface radiation, and even parameterized convection.
 
 In ICAR 2.0 (currently early alpha), ICAR supports parallelization across hundreds of computing nodes (the basic physics have been shown to scale up to nearly 100,000 processors) using coarray fortran. This version of the code has a significant overhaul of the original code base, and as a result not all functionality has been restored yet.
