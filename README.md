@@ -7,14 +7,12 @@ HICAR is a variant of the Intermediate Complexity Atmospheric Research (ICAR) mo
 
 More information about the model features enabling this can be found in Reynolds et al., 2023.
 
-#####Documentation is (slowly) being built on [readthedocs](http://icar.readthedocs.org/en/develop/) and doxygen based documentation can be built now by running "make doc", and is available through [github-pages](http://NCAR.github.io/icar).
-
 #### Compilation Requirements
 While being fast to run compared to traditional weather models, HICAR has still been developed and intended for use on High Performance Computing (HPC) machines, although it can also be run on a local machine. HICAR thus uses a few package requirements which are common to HPC environments. They are:
 
--Parallel NetCDF4
--FFTW
--PETSc
+- Parallel NetCDF4
+- FFTW
+- PETSc
 
 HICAR currently supports either the GNU Fortran or Cray compilers. The Cray compiler offers a better adoption of the Coarray-Fortran standard and faster optimization options, and is thus significantly faster than the GNU compiler. However, debugging is sometimes easier with the GNU compiler.
 
@@ -27,11 +25,11 @@ Example static data for running a 1-day simulation can be found under [HICAR-mod
 #### Forcing data requirements
 
 HICAR requires at least the following 5 fields to run, all of which are contained within one netCDF file:
--U winds
--V winds
--Pressure
--Temperature (potential or normal temperature)
--Humidity (mixing ratio or specific humidity)
+- U winds
+- V winds
+- Pressure
+- Temperature (potential or normal temperature)
+- Humidity (mixing ratio or specific humidity)
 
 When using the variational wind solver, providing W winds from forcing data can lead to better estimates of wind speeds.
 
