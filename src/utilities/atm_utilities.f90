@@ -433,13 +433,18 @@ contains
     !! Calculate the dry brunt vaisala frequency (Nd^2)
     !!
     !!----------------------------------------------------------
-    pure elemental function calc_dry_stability(th_top, th_bot, z_top, z_bot) result(BV_freq)
+    pure elemental function calc_dry_stability(th_top, th_bot, z_top, z_bot, th_surf) result(BV_freq)
         implicit none
         real, intent(in) :: th_top, th_bot, z_top, z_bot
+        real, optional, intent(in) :: th_surf
         real :: BV_freq
 
         !BV_freq = gravity * (log(th_top)-log(th_bot)) / (z_top - z_bot)
-        BV_freq = gravity * (th_top - th_bot) / ((z_top - z_bot) * (th_top+th_bot)/2)
+        if (present(th_surf)) then
+            BV_freq = gravity * (th_top - th_bot) / ((z_top - z_bot) * (th_surf))
+        else
+            BV_freq = gravity * (th_top - th_bot) / ((z_top - z_bot) * (th_top+th_bot)/2)
+        endif
     end function calc_dry_stability
 
     !>----------------------------------------------------------
@@ -813,14 +818,17 @@ contains
         DO k = kts,kte
 
             delz = MAX(100., dz(k))
-            RH_00L = 0.65 + SQRT(1./(25.0+gridkm*gridkm*delz*0.01))
-            RH_00O = 0.81 + SQRT(1./(50.0+gridkm*gridkm*delz*0.01))
+            RH_00L = 0.77 + MIN(0.22,SQRT(1./(50.0+gridkm*gridkm*delz*0.01)))
+            RH_00O = 0.85 + MIN(0.14,SQRT(1./(50.0+gridkm*gridkm*delz*0.01)))
             RHUM = rh(k)
 
-            if (qc(k).gt.1.E-7 .or. qi(k).ge.1.E-7                         &
+            if (qc(k).gt.1.E-6 .or. qi(k).ge.1.E-7                         &
         &                    .or. (qs(k).gt.1.E-6 .and. t(k).lt.273.)) then
                CLDFRA(K) = 1.0
                qvs(k) = qv(k)
+            else if (((qc(k)+qi(k)).gt.1.E-10) .and.                        &
+     &                                    ((qc(k)+qi(k)).lt.1.E-6)) then
+               CLDFRA(K) = MIN(0.99, 0.1*(11.0 + log10(qc(k)+qi(k))))
             else
 
                 IF ((XLAND-1.5).GT.0.) THEN                                  !--- Ocean
@@ -832,32 +840,32 @@ contains
                 tc = t(k) - 273.15
                 if (tc .lt. -12.0) RH_00 = RH_00L
 
-                if (tc .ge. 20.0) then
+                if (tc .ge. 25.0) then
                     CLDFRA(K) = 0.0
                 elseif (tc .ge. -12.0) then
                     RHUM = MIN(rh(k), 1.0)
-                    CLDFRA(K) = MAX(0., 1.0-SQRT((1.005-RHUM)/(1.005-RH_00)))
+                    CLDFRA(K) = MAX(0., 1.0-SQRT((1.001-RHUM)/(1.001-RH_00)))
                 else
                     if (max_relh.gt.1.12 .or. (.NOT.(modify_qvapor)) ) then
    !..For HRRR model, the following look OK.
                         RHUM = MIN(rh(k), 1.45)
-                        RH_00 = RH_00 + (1.45-RH_00)*(-12.0-tc)/(-12.0+100.)
+                        RH_00 = RH_00 + (1.45-RH_00)*(-12.0-tc)/(-12.0+85.)
                         if (RH_00 .ge. 1.5) then
                             WRITE (*,*) ' FATAL: RH_00 too large (1.5): ', RH_00, RH_00L, tc
                         endif
                         RH_00 = min(RH_00, 1.45)
-                        CLDFRA(K) = MAX(0., 1.0-SQRT((1.5-RHUM)/(1.5-RH_00)))
+                        CLDFRA(K) = MAX(0., 1.0-SQRT((1.46-RHUM)/(1.46-RH_00)))
                     else
    !..but for the GFS model, RH is way lower.
                         RHUM = MIN(rh(k), 1.05)
-                        RH_00 = RH_00 + (1.05-RH_00)*(-12.0-tc)/(-12.0+100.)
+                        RH_00 = RH_00 + (1.05-RH_00)*(-12.0-tc)/(-12.0+85.)
                         if (RH_00 .ge. 1.05) then
                             WRITE (*,*) ' FATAL: RH_00 too large (1.05): ', RH_00, RH_00L, tc
                         endif
-                        CLDFRA(K) = MAX(0., 1.0-SQRT((1.05-RHUM)/(1.05-RH_00)))
+                        CLDFRA(K) = MAX(0., 1.0-SQRT((1.06-RHUM)/(1.06-RH_00)))
                     endif
                 endif
-                if (CLDFRA(K).gt.0.) CLDFRA(K) = MAX(0.01, MIN(CLDFRA(K),0.9))
+                if (CLDFRA(K).gt.0.) CLDFRA(K) = MAX(0.01, MIN(CLDFRA(K),0.99))
             endif
         ENDDO
 
@@ -1054,12 +1062,15 @@ contains
         do k = k1, k2
             tdz = tdz + dz(k)
         enddo
-        max_iwc = ABS(qvs(k2)-qvs(k1))
+        
+        !     max_iwc = ABS(qvs(k2)-qvs(k1))
+        max_iwc = MAX(0.0, qvs(k1)-qvs(k2))
+        !     print*, ' max_iwc = ', max_iwc, ' over DZ=',tdz
 
         do k = k1, k2
             max_iwc = MAX(1.E-6, max_iwc - (qi(k)+qs(k)))
         enddo
-        max_iwc = MIN(1.E-3, max_iwc)
+        max_iwc = MIN(1.E-4, max_iwc)
 
         this_dz = 0.0
         do k = k1, k2
@@ -1094,12 +1105,15 @@ contains
         do k = k1, k2
             tdz = tdz + dz(k)
         enddo
-        max_lwc = ABS(qvs(k2)-qvs(k1))
-
+        
+        !     max_lwc = ABS(qvs(k2)-qvs(k1))
+        max_lwc = MAX(0.0, qvs(k1)-qvs(k2))
+        !     print*, ' max_lwc = ', max_lwc, ' over DZ=',tdz  
+        
         do k = k1, k2
             max_lwc = MAX(1.E-6, max_lwc - qc(k))
         enddo
-        max_lwc = MIN(1.E-3, max_lwc)
+        max_lwc = MIN(1.E-4, max_lwc)
         this_dz = 0.0
         do k = k1, k2
             if (k.eq.k1) then
@@ -1109,7 +1123,7 @@ contains
             endif
             this_lwc = max_lwc*this_dz/tdz
             lwc = MAX(1.E-6, this_lwc*(1.-entr))
-            if (cfr(k).gt.0.0.and.cfr(k).lt.1.0.and.T(k).ge.253.16) then
+            if (cfr(k).gt.0.0.and.cfr(k).lt.1.0.and.T(k).ge.258.16) then
                 qc(k) = qc(k) + cfr(k)*cfr(k)*lwc
             endif
         enddo
@@ -1140,8 +1154,8 @@ contains
             endif
         enddo
 
-        if (lwp .gt. 1.5) then
-            xfac = 1.5/lwp
+        if (lwp .gt. 1.0) then
+            xfac = 1.0/lwp
             do k = kts, kte
                 if (cfr(k).gt.0.0 .and. cfr(k).lt.1.0) then
                     qc(k) = qc(k)*xfac
@@ -1149,8 +1163,8 @@ contains
             enddo
         endif
 
-        if (iwp .gt. 1.5) then
-            xfac = 1.5/iwp
+        if (iwp .gt. 1.0) then
+            xfac = 1.0/iwp
                 do k = kts, kte
                     if (cfr(k).gt.0.0 .and. cfr(k).lt.1.0) then
                         qi(k) = qi(k)*xfac
