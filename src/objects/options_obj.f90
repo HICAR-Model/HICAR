@@ -55,11 +55,11 @@ contains
         if (this_image()==1) write(*,*) "Using options file = ", trim(options_filename)
 
         call version_check(         options_filename,   this%parameters)
+        call parameters_namelist(   options_filename,   this%parameters)
+        call io_namelist(           options_filename,   this)
         call physics_namelist(      options_filename,   this)
         call wind_namelist(         options_filename,   this)
         call var_namelist(          options_filename,   this%parameters)
-        call parameters_namelist(   options_filename,   this%parameters)
-        call io_namelist(           options_filename,   this)
         call model_levels_namelist( options_filename,   this%parameters)
 
         call time_parameters_namelist(         options_filename,   this)
@@ -438,6 +438,16 @@ contains
                 options%time_options%cfl_reduction_factor = min(1.4,options%time_options%cfl_reduction_factor)
             elseif (max(options%adv_options%h_order,options%adv_options%v_order)==3) then
                 options%time_options%cfl_reduction_factor = min(1.6,options%time_options%cfl_reduction_factor)
+            endif
+        endif
+        
+        if (options%wind%alpha_const > 0) then
+            if (options%wind%alpha_const > 5.0) then
+                if (this_image()==1) write(*,*) "Alpha currently limited to values between 0.1 and 5.0, setting to 5.0"
+                options%wind%alpha_const = 5.0
+            else if (options%wind%alpha_const < 0.1) then
+                if (this_image()==1) write(*,*) "Alpha currently limited to values between 0.1 and 5.0, setting to 0.1"
+                options%wind%alpha_const = 0.1
             endif
         endif
 
@@ -1065,7 +1075,7 @@ contains
         sst_min_limit       = 273.15
         cp_limit            = 500
         buffer              = 0
-        advect_density      = .False.
+        advect_density      = .True.
         t_is_potential      = .True.
         qv_is_spec_humidity = .False.
         qv_is_relative_humidity=.False.
@@ -1889,7 +1899,7 @@ contains
         
         sf_urban_phys = 1
         
-        nmp_dveg = 4
+        nmp_dveg = 3
         nmp_opt_crs = 1
         nmp_opt_sfc = 1
         nmp_opt_btr = 2
@@ -1898,7 +1908,7 @@ contains
         nmp_opt_frz = 1
         nmp_opt_inf = 1
         nmp_opt_rad = 3
-        nmp_opt_alb = 1
+        nmp_opt_alb = 2
         nmp_opt_snf = 1
         nmp_opt_tbot = 2
         nmp_opt_stc = 1
@@ -2251,14 +2261,14 @@ contains
         character(len=*),             intent(in)    :: filename
         type(options_t),    intent(inout) :: options
         
-        integer :: name_unit                            ! logical unit number for namelist
+        integer :: name_unit, update_frequency             ! logical unit number for namelist
         !Define parameters
         integer :: roughness
         logical :: terr_diff, Sx, wind_only, thermal
-        real    :: Sx_dmax, Sx_scale_ang, TPI_scale
+        real    :: Sx_dmax, Sx_scale_ang, TPI_scale, alpha_const
         
         !Make name-list
-        namelist /wind/ terr_diff, Sx, thermal, wind_only, Sx_dmax, Sx_scale_ang, TPI_scale, roughness
+        namelist /wind/ terr_diff, Sx, thermal, wind_only, Sx_dmax, Sx_scale_ang, TPI_scale, roughness, alpha_const, update_frequency
         
         !Set defaults
         terr_diff = .False.
@@ -2267,8 +2277,10 @@ contains
         roughness = 0 ! No roughness correction, the only one implemented so far
         Sx_dmax = 300.0
         Sx_scale_ang = 30.0
+        alpha_const = -1.0
         TPI_scale = 400.0
         wind_only = .False.
+        update_frequency = 1
         
         !Read namelist file
         open(io_newunit(name_unit), file=filename)
@@ -2285,9 +2297,11 @@ contains
         options%wind%Sx_dmax = Sx_dmax
         options%wind%TPI_scale = TPI_scale
         options%wind%Sx_scale_ang = Sx_scale_ang
+        options%wind%alpha_const = alpha_const
         options%wind%roughness = roughness
         options%wind%wind_only = wind_only
-    
+        call options%wind%update_dt%set(seconds=options%io_options%input_dt%seconds()/update_frequency)
+
     end subroutine wind_namelist
 
 

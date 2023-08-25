@@ -36,8 +36,10 @@ module options_types
         real    :: Sx_dmax
         real    :: TPI_scale
         real    :: Sx_scale_ang
+        real    :: alpha_const
         integer :: roughness
         logical :: wind_only
+        type(time_delta_t) :: update_dt  ! how often winds are updated
     end type wind_type
     
     type time_options_type
