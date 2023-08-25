@@ -294,6 +294,11 @@ module domain_interface
     type(variable_t) :: u_mass
     type(variable_t) :: v_mass
 
+    type(variable_t) :: alpha  !wind-alpha
+    type(variable_t) :: froude !Froude number
+    type(variable_t) :: Ri     !Bulk richardson number
+
+
     type(tendencies_type) :: tend
 
     type(var_dict_t) :: variables_to_force
@@ -353,8 +358,6 @@ module domain_interface
     real,                       allocatable :: ustar(:,:)
     real,                       allocatable :: znu(:)
     real,                       allocatable :: znw(:)
-    real,                       allocatable :: froude(:,:,:) !Froude number
-    real,                       allocatable :: Ri(:,:,:)     !Bulk richardson number
     
     ! these data are stored on the domain wide grid even if this process is only looking at a subgrid
     ! these variables are necessary with linear winds, especially with spatially variable dz, to compute the LUT

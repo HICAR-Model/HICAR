@@ -23,12 +23,11 @@ program icar
     use domain_interface,   only : domain_t
     use boundary_interface, only : boundary_t
     use output_interface,   only : output_t
-    use time_step,          only : step, update_dt, dt_reduce                ! Advance the model forward in time
+    use time_step,          only : step, dt_reduce                ! Advance the model forward in time
     use initialization,     only : init_model, init_physics, init_model_state
     use timer_interface,    only : timer_t
     use time_object,        only : Time_type
     use time_delta_object,  only : time_delta_t
-    use wind,               only : update_winds
     use icar_constants
     use wind_iterative,     only : finalize_iter_winds
     use ioserver_interface, only : ioserver_t
@@ -41,7 +40,7 @@ program icar
     type(options_t) :: options
     type(domain_t)  :: domain
     type(boundary_t):: boundary, add_cond
-    type(event_type)  :: written_ev[*], write_ev[*], read_ev[*]
+    type(event_type)  :: written_ev[*], write_ev[*], read_ev[*], child_read_ev[*], end_ev[*]
     type(output_t)  :: restart_dataset
     type(output_t)  :: output_dataset
     type(ioserver_t)  :: ioserver
@@ -50,12 +49,11 @@ program icar
 
     type(timer_t)   :: initialization_timer, total_timer, input_timer, output_timer, physics_timer, wind_timer, mp_timer, adv_timer, rad_timer, lsm_timer, pbl_timer, exch_timer, send_timer, ret_timer, wait_timer, forcing_timer, diagnostic_timer, wind_bal_timer
     type(Time_type) :: next_output, next_input
-    type(time_delta_t) :: small_time_delta, phys_dt
+    type(time_delta_t) :: small_time_delta
     
     integer :: i, ierr, exec_team
-    integer :: sleep_cnt, ev_cnt
+    integer :: sleep_cnt, ev_cnt, end_ev_cnt
     real :: t_val
-    double precision    :: future_dt_seconds
     logical :: init_flag
 
     !Initialize MPI if needed
@@ -92,7 +90,7 @@ program icar
     
         call EVENT_QUERY(read_ev,ev_cnt)
         sleep_cnt = 0
-        do while(.not.(ev_cnt == 1))
+        do while(ev_cnt == 0)
             call sleep(1)
             sleep_cnt = sleep_cnt + 1
             call EVENT_QUERY(read_ev,ev_cnt)
@@ -102,6 +100,8 @@ program icar
         EVENT WAIT (read_ev)
 
         call ioclient%receive(boundary, read_buffer)
+        EVENT POST (child_read_ev[ioclient%server])
+        
         call boundary%update_computed_vars(options, update=options%parameters%time_varying_z)
 
         call init_model_state(options, domain, boundary, add_cond) ! added boundary structure for external files (additional conditions)
@@ -110,7 +110,7 @@ program icar
             sync all !Matching IO sync call
             call EVENT_QUERY(read_ev,ev_cnt)
             sleep_cnt = 0
-            do while(.not.(ev_cnt == 1))
+            do while(ev_cnt == 0)
                 call sleep(1)
                 sleep_cnt = sleep_cnt + 1
                 call EVENT_QUERY(read_ev,ev_cnt)
@@ -124,11 +124,7 @@ program icar
         endif
         
         ! physics drivers need to be initialized after restart data are potentially read in.
-        call init_physics(options, domain)
-
-        future_dt_seconds = 0.0D0
-        !Now that we have winds initialized, calculate current time-step
-        call update_dt(phys_dt, future_dt_seconds, options, domain, update=.False.)
+        call init_physics(options, domain, boundary)
 
         call output_timer%start()
         call ioclient%push(domain, write_buffer)
@@ -149,12 +145,7 @@ program icar
                 EVENT POST (read_ev[ioserver%children(i)])
             enddo
         endif
-        
-        !Call dt_reduce to sync co_min call with compute processes. Pass a ridiculously large time step to ensure that it does not contribute to reduction.
-        ! This should be no problem since output time steps are likely to overlap with input time steps
-        future_dt_seconds = 3000.0D0
-        call dt_reduce(phys_dt, future_dt_seconds, 3000.0D0)
-        
+                
         !We do not do output here so that we can continue straight to reading the next input file and not block the compute processes
         next_output = options%parameters%start_time
     end select
@@ -183,7 +174,7 @@ program icar
 
                 call EVENT_QUERY(read_ev,ev_cnt)
                 sleep_cnt = 0
-                do while(.not.(ev_cnt == 1))
+                do while(ev_cnt == 0)
                     call sleep(1)
                     sleep_cnt = sleep_cnt + 1
                     call EVENT_QUERY(read_ev,ev_cnt)
@@ -193,6 +184,7 @@ program icar
                 EVENT WAIT (read_ev)
 
                 call ioclient%receive(boundary, read_buffer)
+                EVENT POST (child_read_ev[ioclient%server])
                 
                 ! after reading all variables that can be read, not compute any remaining variables (e.g. z from p+ps)
                 call boundary%update_computed_vars(options, update=.True.)
@@ -202,23 +194,13 @@ program icar
                     call boundary%interpolate_original_levels(options)
                 endif
                 call domain%interpolate_forcing(boundary, update=.True.)
-                call input_timer%stop()
-                call domain%diagnostic_update(options)
                 
-                call wind_timer%start()
-                call update_winds(domain, options)
-                call wind_timer%stop()
-            
-                !Now that new winds have been calculated, get new time step in seconds, and see if they require adapting the time step
-                !Because we are right after updating the winds and we want the information on the winds at the future time step, use the dqdt members of the winds
-                ! Note that there will currently be some discrepancy between using the current density and whatever density will be at 
-                ! the next time step, but we assume that it is negligable
-                ! and that using a CFL criterion < 1.0 will cover this
-                call update_dt(phys_dt, future_dt_seconds, options, domain, update=.True.)
                 ! Make the boundary condition dXdt values into units of [X]/s
-                call domain%update_delta_fields(next_input - domain%model_time)
                 call boundary%update_delta_fields(next_input - domain%model_time)
+                call domain%update_delta_fields(next_input - domain%model_time)
+                
                 next_input = next_input + options%io_options%input_dt
+                call input_timer%stop()
             endif
 
 
@@ -236,7 +218,9 @@ program icar
             ! this is the meat of the model physics, run all the physics for the current time step looping over internal timesteps
             if (.not.(options%wind%wind_only)) then
                 call physics_timer%start()
-                call step(domain, boundary, step_end(next_input, next_output), phys_dt, options, mp_timer, adv_timer, rad_timer, lsm_timer, pbl_timer, exch_timer, send_timer, ret_timer, wait_timer, forcing_timer, diagnostic_timer, wind_bal_timer)
+                call step(domain, boundary, step_end(next_input, next_output), options,           &
+                                mp_timer, adv_timer, rad_timer, lsm_timer, pbl_timer, exch_timer, &
+                                send_timer, ret_timer, wait_timer, forcing_timer, diagnostic_timer, wind_bal_timer, wind_timer)
                 call physics_timer%stop()
             elseif (options%wind%wind_only) then
                 call domain%apply_forcing(boundary, options, real(options%io_options%output_dt%seconds()))
@@ -251,7 +235,7 @@ program icar
                 call output_timer%start()
                 call EVENT_QUERY(written_ev,ev_cnt)
                 sleep_cnt = 0
-                do while(.not.(ev_cnt == 1))
+                do while(ev_cnt == 0)
                     call sleep(1)
                     sleep_cnt = sleep_cnt + 1
                     call EVENT_QUERY(written_ev,ev_cnt)
@@ -270,7 +254,7 @@ program icar
         !Wait for final write before ending program
         call EVENT_QUERY(written_ev,ev_cnt)
         sleep_cnt = 0
-        do while(.not.(ev_cnt == 1))
+        do while(ev_cnt == 0)
             call sleep(1)
             sleep_cnt = sleep_cnt + 1
             call EVENT_QUERY(written_ev,ev_cnt)
@@ -278,48 +262,45 @@ program icar
         enddo
         !Finally, do an event wait to decrement the event counter
         EVENT WAIT (written_ev)
+        
+        EVENT POST (end_ev[ioclient%server])
 
         if (options%physics%windtype==kITERATIVE_WINDS) call finalize_iter_winds() 
     case (kIO_TEAM)
-        do while (step_end(next_input,next_output) <= options%parameters%end_time)
-        
-            !If we have more time to the next output, do input now
-            if ((next_output + options%io_options%input_dt + small_time_delta) >= next_input .and. &
-                next_input <= options%parameters%end_time) then
-                
+    
+        call EVENT_QUERY(end_ev,end_ev_cnt)
+
+        do while (end_ev_cnt < ioserver%n_children)
+            !See of it is time to read
+            call EVENT_QUERY(child_read_ev,ev_cnt)
+            if (ev_cnt == ioserver%n_children .and. next_input<=options%parameters%end_time) then
+                !Do an event wait to decrement the event counter
+                EVENT WAIT (child_read_ev, UNTIL_COUNT=ioserver%n_children)
+            
                 call ioserver%read_file(read_buffer)
                 do i = 1,ioserver%n_children
                     EVENT POST (read_ev[ioserver%children(i)])
                 enddo
-                
-                !Call dt_reduce to sync co_min call with compute processes. 
-                ! Pass a ridiculously large time step to ensure that it does not contribute to reduction.
-                ! This should be no problem since output time steps are likely to overlap with input time steps
-                future_dt_seconds = 3000.0D0
-                call dt_reduce(phys_dt, future_dt_seconds, 3000.0D0)
-                
                 next_input = next_input + options%io_options%input_dt
             endif
-            !If we have more time to the next input, do output now
-            if (next_input + small_time_delta >= (next_output + options%io_options%input_dt)) then
+
             
-                call EVENT_QUERY(write_ev,ev_cnt)
-                sleep_cnt = 0
-                do while(.not.(ev_cnt == ioserver%n_children))
-                    call sleep(1)
-                    sleep_cnt = sleep_cnt + 1
-                    call EVENT_QUERY(write_ev,ev_cnt)
-                    if (sleep_cnt >= kTIMEOUT) stop 'Timeout on waiting for output data from compute processes'
-                enddo
-                !Finally, do an event wait to decrement the event counter
+            !See if all of our children are ready for a write
+            call EVENT_QUERY(write_ev,ev_cnt)
+            if (ev_cnt == ioserver%n_children .and. next_output<=options%parameters%end_time) then
+                !Do an event wait to decrement the event counter
                 EVENT WAIT (write_ev, UNTIL_COUNT=ioserver%n_children)
 
                 call ioserver%write_file(next_output, write_buffer)
                 do i = 1,ioserver%n_children
                     EVENT POST (written_ev[ioserver%children(i)])
-                enddo                
+                enddo 
                 next_output = next_output + options%io_options%output_dt
             endif
+            
+            !See if it is time to end
+            call EVENT_QUERY(end_ev,end_ev_cnt)
+
         enddo
         !If we are done with the program
         call ioserver%close_files()
@@ -430,7 +411,6 @@ contains
         enddo
         node_names(this_image()) = node_name_i
         call co_max(node_names)
-        
         
         kNUM_PROC_PER_NODE = count(node_names==node_names(1))
 

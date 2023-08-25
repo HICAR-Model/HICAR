@@ -34,6 +34,8 @@ module initialization
     use wind_iterative,             only : init_iter_winds
     use icar_constants,             only : kITERATIVE_WINDS, kWIND_LINEAR
     use ioclient_interface,         only : ioclient_t
+    use time_step,                  only : init_time_step
+
 
     ! use io_routines,                only : io_read, &
     !                                        io_write3d,io_write3di, io_write
@@ -79,6 +81,8 @@ contains
         if (this_image()==1) write(*,*) "Initializing boundary condition data structure"
         call boundary%init(options,domain%latitude%data_2d,domain%longitude%data_2d,domain%variables_to_force)
 
+        call init_time_step()
+        
         ! initialize the atmospheric helper utilities
         call init_atm_utilities(options)
         
@@ -96,13 +100,14 @@ contains
 
     end subroutine init_model
 
-    subroutine init_physics(options, domain)
+    subroutine init_physics(options, domain, forcing)
         implicit none
         type(options_t), intent(inout) :: options
         type(domain_t),  intent(inout) :: domain
+        type(boundary_t),intent(in)    :: forcing
 
         if (this_image()==1) write(*,*) "Updating initial winds"
-        call update_winds(domain, options)
+        call update_winds(domain, forcing, options)
 
         call setup_bias_correction(options,domain)
 

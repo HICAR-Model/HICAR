@@ -208,7 +208,7 @@ endif
 
 # Cray fortran
 ifeq ($(COMPILER), cray)
-	COMP= -h omp -O3 -c -hfp2 -eI
+	COMP= -h omp -O2 -c -hfp2 -eI
 	LINK= -fopenmp
 	PREPROC= -eZ
 	MODOUTPUT= -J $(BUILD) -em
@@ -777,7 +777,7 @@ $(BUILD)domain_obj.o: $(OBJECTS)domain_obj.f90 $(BUILD)domain_h.o $(BUILD)option
 ###################################################################
 
 $(BUILD)init.o:$(MAIN)init.f90 $(BUILD)data_structures.o $(BUILD)options_h.o $(BUILD)domain_h.o $(BUILD)boundary_h.o $(BUILD)icar_constants.o\
-	 				$(BUILD)mp_driver.o $(BUILD)advection_driver.o $(BUILD)atm_utilities.o $(BUILD)wind.o $(BUILD)ra_driver.o \
+	 				$(BUILD)mp_driver.o $(BUILD)time_step.o $(BUILD)advection_driver.o $(BUILD)atm_utilities.o $(BUILD)wind.o $(BUILD)ra_driver.o \
 					$(BUILD)pbl_driver.o $(BUILD)cu_driver.o $(BUILD)lsm_driver.o $(BUILD)io_routines.o $(BUILD)wind_iterative.o
 
 $(BUILD)time_step.o:$(MAIN)time_step.f90 $(BUILD)data_structures.o $(BUILD)wind.o $(BUILD)string.o 	\
@@ -971,8 +971,8 @@ $(BUILD)adv_mpdata.o:$(PHYS)adv_mpdata.f90 $(PHYS)adv_mpdata_FCT_core.f90 $(BUIL
 ###################################################################
 #	Wind related code
 ###################################################################
-$(BUILD)wind.o:$(PHYS)wind.f90  $(BUILD)atm_utilities.o $(BUILD)data_structures.o $(BUILD)exchangeable_h.o \
-				$(BUILD)domain_h.o $(BUILD)wind_iterative.o $(BUILD)options_h.o $(BUILD)linear_winds.o \
+$(BUILD)wind.o:$(PHYS)wind.f90  $(BUILD)atm_utilities.o $(BUILD)data_structures.o $(BUILD)boundary_h.o $(BUILD)exchangeable_h.o \
+				$(BUILD)domain_h.o $(BUILD)variable_h.o $(BUILD)wind_iterative.o $(BUILD)options_h.o $(BUILD)linear_winds.o \
 				$(BUILD)wind_surf.o $(BUILD)wind_thermal.o
 
 $(BUILD)wind_surf.o:$(PHYS)wind_surf.f90 $(BUILD)data_structures.o $(BUILD)atm_utilities.o $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)io_routines.o

@@ -326,6 +326,9 @@ contains
         if (0<var_list( kVARS%hlm) )                        call this%vars_to_out%add_var( trim( get_varname( kVARS%hlm                          )), this%hlm)        
         if (0<var_list( kVARS%hpbl) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%hpbl                         )), this%hpbl)
         if (0<var_list( kVARS%coeff_heat_exchange_3d) )     call this%vars_to_out%add_var( trim( get_varname( kVARS%coeff_heat_exchange_3d       )), this%coeff_heat_exchange_3d)
+        if (0<var_list( kVARS%wind_alpha) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%wind_alpha                   )), this%alpha)
+        if (0<var_list( kVARS%froude) )                     call this%vars_to_out%add_var( trim( get_varname( kVARS%froude                       )), this%froude)
+        if (0<var_list( kVARS%blk_ri) )                     call this%vars_to_out%add_var( trim( get_varname( kVARS%blk_ri                       )), this%Ri)
 
     end subroutine set_var_lists
 
@@ -556,21 +559,21 @@ contains
         ! temporary constant
         if (associated(this%roughness_z0%data_2d)) then
             ! use log-law of the wall to convert from first model level to surface
-            surf_temp_1 = karman / log((this%z%data_3d(its:ite,kms,jts:jte) - this%terrain%data_2d(its:ite,jts:jte)) / this%roughness_z0%data_2d(its:ite,jts:jte))
+            surf_temp_1 = karman / log((this%z%data_3d(ims:ime,kms,jms:jme) - this%terrain%data_2d(ims:ime,jms:jme)) / this%roughness_z0%data_2d(ims:ime,jms:jme))
             ! use log-law of the wall to convert from surface to 10m height
-            surf_temp_2 = log(10.0 / this%roughness_z0%data_2d(its:ite,jts:jte)) / karman
+            surf_temp_2 = log(10.0 / this%roughness_z0%data_2d(ims:ime,jms:jme)) / karman
         endif
 
         if (associated(this%u_10m%data_2d)) then
-            this%ustar        (its:ite,jts:jte) = u_mass      (its:ite,kms,jts:jte) * surf_temp_1
-            this%u_10m%data_2d(its:ite,jts:jte) = this%ustar(its:ite,jts:jte)     * surf_temp_2
-            this%ustar        (its:ite,jts:jte) = v_mass      (its:ite,kms,jts:jte) * surf_temp_1
-            this%v_10m%data_2d(its:ite,jts:jte) = this%ustar(its:ite,jts:jte)     * surf_temp_2
+            this%ustar        (ims:ime,jms:jme) = u_mass      (ims:ime,kms,jms:jme) * surf_temp_1
+            this%u_10m%data_2d(ims:ime,jms:jme) = this%ustar(ims:ime,jms:jme)     * surf_temp_2
+            this%ustar        (ims:ime,jms:jme) = v_mass      (ims:ime,kms,jms:jme) * surf_temp_1
+            this%v_10m%data_2d(ims:ime,jms:jme) = this%ustar(ims:ime,jms:jme)     * surf_temp_2
         endif
 
         if (allocated(this%ustar)) then
             ! now calculate master ustar based on U and V combined in quadrature
-            this%ustar(its:ite,jts:jte) = sqrt(u_mass(its:ite,kms,jts:jte)**2 + v_mass(its:ite,kms,jts:jte)**2) * surf_temp_1
+            this%ustar(its:ite,jts:jte) = sqrt(u_mass(its:ite,kms,jts:jte)**2 + v_mass(its:ite,kms,jts:jte)**2) * surf_temp_1(its:ite,jts:jte)
         endif
         
         
@@ -917,8 +920,8 @@ contains
         jme = this%grid%jme
 
         allocate( mod_temp_3d( ims:ime, kms:kme, jms:jme))
-        allocate( surf_temp_1( this%grid%its:this%grid%ite, this%grid%jts:this%grid%jte))
-        allocate( surf_temp_2( this%grid%its:this%grid%ite, this%grid%jts:this%grid%jte))
+        allocate( surf_temp_1( ims:ime, jms:jme))
+        allocate( surf_temp_2( ims:ime, jms:jme))
 
         if (this_image()==1) print *,"  Initializing variables"
 
@@ -1048,6 +1051,10 @@ contains
         if (0<opt%vars_to_allocate( kVARS%latent_heat) )                call setup(this%latent_heat,              this%grid2d,   forcing_var=opt%parameters%lhvar,     list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%u_10m) )                      call setup(this%u_10m,                    this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%v_10m) )                      call setup(this%v_10m,                    this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%blk_ri) )                     call setup(this%Ri,                       this%grid)
+        if (0<opt%vars_to_allocate( kVARS%froude) )                     call setup(this%froude,                   this%grid)
+        if (0<opt%vars_to_allocate( kVARS%wind_alpha) )                 call setup(this%alpha,                    this%grid)
+
         if (0<opt%vars_to_allocate( kVARS%windspd_10m) )                call setup(this%windspd_10m,              this%grid2d) !! MJ added
         if (0<opt%vars_to_allocate( kVARS%coeff_momentum_drag) )        call setup(this%coeff_momentum_drag,      this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%coeff_heat_exchange) )        call setup(this%coeff_heat_exchange,      this%grid2d)
@@ -2861,7 +2868,7 @@ contains
 
         else
             if (associated(this%vegetation_fraction%data_3d)) then
-                this%vegetation_fraction%data_3d = 0.6
+                this%vegetation_fraction%data_3d = 60.
             endif
         endif
 
@@ -2884,7 +2891,7 @@ contains
         else
             if (associated(this%vegetation_fraction_max%data_2d)) then
                 if (this_image()==1) write(*,*) "    VEGMAX not specified; using default value of 0.8"
-                this%vegetation_fraction_max%data_2d = 0.8
+                this%vegetation_fraction_max%data_2d = 80.
             endif
         endif
 
@@ -3755,7 +3762,7 @@ contains
         do while (this%variables_to_force%has_more_elements())
             ! get the next variable
             var_to_update = this%variables_to_force%next()
-
+            
             if (var_to_update%two_d) then
                 if (.not.(var_to_update%force_boundaries)) var_to_update%dqdt_2d = (var_to_update%dqdt_2d - var_to_update%data_2d) / dt%seconds()
             else if (var_to_update%three_d) then
@@ -3768,7 +3775,6 @@ contains
         ! actually read from disk. Note that if we move to balancing winds every timestep, then it doesn't matter.
         var_to_update = this%w%meta_data
         var_to_update%dqdt_3d = (var_to_update%dqdt_3d - var_to_update%data_3d) / dt%seconds()
-
 
     end subroutine
 
@@ -3840,6 +3846,7 @@ contains
                     do j = this%jms,this%jme
                         do k = this%kms,this%kme
                             do i = this%ims,this%ime
+                                forcing_hi%data_3d(i,k,j) = forcing_hi%data_3d(i,k,j) + (forcing_hi%dqdt_3d(i,k,j) * dt)
                                 var_to_update%data_3d(i,k,j) = var_to_update%data_3d(i,k,j) + &
                                                               (var_to_update%dqdt_3d(i,k,j) * dt)
                             enddo

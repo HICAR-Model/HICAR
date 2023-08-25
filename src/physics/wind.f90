@@ -14,8 +14,10 @@ module wind
     !use mod_blocking,        only : update_froude_number, initialize_blocking
     use data_structures
     use exchangeable_interface,   only : exchangeable_t
+    use variable_interface,       only : variable_t
 
     use domain_interface,  only : domain_t
+    use boundary_interface,only : boundary_t
     use options_interface, only : options_t
     use grid_interface,    only : grid_t
     use wind_surf, only         : apply_Sx
@@ -25,13 +27,12 @@ module wind
     
     implicit none
     private
-    public:: balance_uvw, update_winds, init_winds, calc_w_real, wind_var_request
+    public:: balance_uvw, update_winds, init_winds, calc_w_real, wind_var_request, update_wind_dqdt
 
     real, parameter::deg2rad=0.017453293 !2*pi/360
     real, parameter :: rad2deg=57.2957779371
     real, parameter :: DEFAULT_FR_L = 1000.0
 contains
-
 
 
         subroutine wind_linear_var_request(options)
@@ -70,9 +71,14 @@ contains
                 call wind_linear_var_request(options)
             endif
 
+            call options%alloc_vars([kVARS%blk_ri, kVARS%froude])
+
             if (options%physics%windtype == kITERATIVE_WINDS .or. options%physics%windtype == kLINEAR_ITERATIVE_WINDS) then
+                call options%alloc_vars([kVARS%wind_alpha])
+
                 call options%restart_vars([kVARS%w_real])
             endif
+            
             
             if (options%wind%thermal) then
                 call options%alloc_vars([kVARS%sensible_heat, kVARS%ridge_dist, kVARS%valley_dist, kVARS%ridge_drop, kVARS%roughness_z0])
@@ -343,15 +349,17 @@ contains
     !! This should ONLY be called once for each forcing step, otherwise effects will be additive.
     !!
     !!------------------------------------------------------------
-    subroutine update_winds(domain, options)
+    subroutine update_winds(domain, forcing, options)
         implicit none
         type(domain_t), intent(inout) :: domain
+        type(boundary_t), intent(in)  :: forcing
         type(options_t),intent(in)    :: options
 
-        real, allocatable, dimension(:,:,:) :: alpha, div
+        real, allocatable, dimension(:,:,:) :: div
         integer :: nx, ny, nz, i, j
         integer :: ims, ime, jms, jme, kms, kme, its, ite, jts, jte
-
+        logical :: update
+        type(variable_t) :: forcing_var
 
         ims = lbound(domain%w%data_3d,1)
         ime = ubound(domain%w%data_3d,1)
@@ -366,172 +374,80 @@ contains
         jte = domain%grid%jte
         
         if (.not.associated(domain%w%meta_data%dqdt_3d)) then
-
+            update = .False.
+            
             call init_winds(domain, options)
-            !call initialize_blocking(domain, options)
-            call update_stability(domain)
+            !Compute the forcing wind field at the current step
+            forcing_var = forcing%variables_hi%get_var(options%parameters%uvar)
+            domain%u%meta_data%dqdt_3d = forcing_var%data_3d
 
-            ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
-            call make_winds_grid_relative(domain%u%data_3d, domain%v%data_3d, domain%sintheta, domain%costheta,ims, ime, kms, kme, jms, jme)
+            forcing_var = forcing%variables_hi%get_var(options%parameters%vvar)
+            domain%v%meta_data%dqdt_3d = forcing_var%data_3d
 
-            call domain%u%exchange_x()
-            call domain%v%exchange_y()
-
-            ! flow blocking parameterization
-            ! if (options%block_options%block_flow) then
-            !     call add_blocked_flow(domain, options)
-            ! endif
-
-            if (options%wind%thermal) then
-                call apply_thermal_winds(domain%sensible_heat%data_2d,domain%density%data_3d,domain%temperature%data_3d,  &
-                                         domain%ridge_dist%data_2d, domain%valley_dist%data_2d,domain%ridge_drop%data_2d, &
-                                         domain%u%data_3d, domain%v%data_3d,domain%dzdx,domain%dzdy,  &
-                                         domain%z%data_3d,domain%roughness_z0%data_2d)
-                
-                call domain%u%exchange_x()
-                call domain%v%exchange_y()
-            endif 
-                        
-            if (options%wind%Sx) then
-                call apply_Sx(domain%Sx,domain%TPI,domain%u%data_3d, domain%v%data_3d, domain%w%data_3d,domain%Ri,domain%dzdx,domain%dzdy)
-                
-                call domain%u%exchange_x()
-                call domain%v%exchange_y()
-            endif 
-
-            ! linear winds
-            if (options%physics%windtype==kWIND_LINEAR) then
-                call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.False.)
-            ! simple acceleration over topography
-            elseif (options%physics%windtype==kCONSERVE_MASS) then
-                if (options%parameters%use_terrain_difference) then  !
-                !! use the ratio between hi-res and lo-res grid deformation (i.e. due to 'additional' terrain) for speedup
-                    call mass_conservative_acceleration(domain%u%data_3d, domain%v%data_3d, domain%zfr_u, domain%zfr_v)
-                else
-                    call mass_conservative_acceleration(domain%u%data_3d, domain%v%data_3d, domain%zr_u, domain%zr_v)
-                endif
-            elseif (options%physics%windtype==kOBRIEN_WINDS) then
-                call Obrien_winds(domain, options)
-            elseif (options%physics%windtype==kITERATIVE_WINDS) then
-            
-                allocate(alpha(ims:ime,kms:kme,jms:jme))
-                allocate(div(ims:ime,kms:kme,jms:jme))
-                
-                call calc_alpha(alpha, domain%froude, ims, ime,  kms, kme, jms, jme, &
-                            domain%ids, domain%ide, domain%jds, domain%jde)
-
-                !Call this, passing 0 for w_grid, to get vertical components of vertical motion
-                call calc_w_real(domain% u %data_3d,      &
-                             domain% v %data_3d,      &
-                             domain%w%data_3d*0.0,      &
-                             domain%w%data_3d,      &
-                             domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
-
-                !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
-                if (options%parameters%wvar=="") domain%w_real%data_3d = 0.0  
-                domain%w%data_3d = (domain%w_real%data_3d-domain%w%data_3d)/domain%jacobian
-                call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
-                                domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
-                                domain%density%data_3d,options,horz_only=.False.)
-
-                call calc_iter_winds(domain,alpha,div,options%parameters%advect_density)
-
-
-            elseif (options%physics%windtype==kLINEAR_OBRIEN_WINDS) then
-                call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.False.)
-                call Obrien_winds(domain, options)
-            elseif (options%physics%windtype==kLINEAR_ITERATIVE_WINDS) then
-                call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.False.)
-            
-                allocate(alpha(ims:ime,kms:kme,jms:jme))
-                allocate(div(ims:ime,kms:kme,jms:jme))
-                
-                call calc_alpha(alpha, domain%froude, ims, ime,  kms, kme, jms, jme, &
-                            domain%ids, domain%ide, domain%jds, domain%jde)
-
-                !Call this, passing 0 for w_grid, to get vertical components of vertical motion
-                call calc_w_real(domain% u %data_3d,      &
-                             domain% v %data_3d,      &
-                             domain%w%data_3d*0.0,      &
-                             domain%w%data_3d,      &
-                             domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
-
-                !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
-                if (options%parameters%wvar=="") domain%w_real%data_3d = 0.0  
-                domain%w%data_3d = (domain%w_real%data_3d-domain%w%data_3d)/domain%jacobian
-                
-                domain%w%data_3d(:,kms:kme-1,:) = 0.5*(domain%w%data_3d(:,kms:kme-1,:)+domain%w%data_3d(:,kms+1:kme,:))
-                
-                call calc_divergence(div,domain%u%data_3d,domain%v%data_3d,domain%w%data_3d, &
-                                domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
-                                domain%density%data_3d,options,horz_only=.False.)
-                                
-                call calc_iter_winds(domain,alpha,div,options%parameters%advect_density)
+            if (.not.(options%parameters%wvar=="")) then
+                forcing_var = forcing%variables_hi%get_var(options%parameters%wvar)
+                domain%w_real%dqdt_3d = forcing_var%data_3d
             endif
-            ! else assumes even flow over the mountains
-
-            ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
-
-            call balance_uvw(domain,options)
-            
-            call calc_w_real(domain% u %data_3d,      &
-                             domain% v %data_3d,      &
-                             domain% w %data_3d,      &
-                             domain% w_real %data_3d,      &
-                             domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
         else
-
-            call update_stability(domain)
-
-            ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
-            call make_winds_grid_relative(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%sintheta, domain%costheta,ims, ime, kms, kme, jms, jme)
+            update = .True.
             
+            !Compute the forcing wind field at the next update step, assuming a linear interpolation through time
+            forcing_var = forcing%variables_hi%get_var(options%parameters%uvar)
+            domain%u%meta_data%dqdt_3d = forcing_var%data_3d+forcing_var%dqdt_3d*options%wind%update_dt%seconds()
+
+            forcing_var = forcing%variables_hi%get_var(options%parameters%vvar)
+            domain%v%meta_data%dqdt_3d = forcing_var%data_3d+forcing_var%dqdt_3d*options%wind%update_dt%seconds()
+
+            if (.not.(options%parameters%wvar=="")) then
+                forcing_var = forcing%variables_hi%get_var(options%parameters%wvar)
+                domain%w_real%dqdt_3d = forcing_var%data_3d+forcing_var%dqdt_3d*options%wind%update_dt%seconds()
+            endif
+        endif
+        
+        
+        call update_stability(domain)
+
+        ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
+        call make_winds_grid_relative(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%sintheta, domain%costheta, ims, ime, kms, kme, jms, jme)
+
+        call domain%u%exchange_x(do_metadata=.True.)
+        call domain%v%exchange_y(do_metadata=.True.)
+
+        if (options%wind%thermal) then
+            !Since this is an update call and the sensible heat fluxes can now be quite variable/patch, exchange sensible heat so that corrections are consistent
+            call domain%halo_2d_exchange_batch()
+
+            call apply_thermal_winds(domain%sensible_heat%data_2d,domain%density%data_3d,domain%temperature%data_3d,  &
+                                     domain%ridge_dist%data_2d, domain%valley_dist%data_2d,domain%ridge_drop%data_2d, &
+                                     domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d,domain%dzdx,domain%dzdy,  &
+                                     domain%roughness_z0%data_2d)
+
             call domain%u%exchange_x(do_metadata=.True.)
             call domain%v%exchange_y(do_metadata=.True.)
-            
-            if (options%wind%thermal) then
-                !Since this is an update call and the sensible heat fluxes can now be quite variable/patch, exchange sensible heat so that corrections are consistent
-                call domain%halo_2d_exchange_batch()
-                
-                call apply_thermal_winds(domain%sensible_heat%data_2d,domain%density%data_3d,domain%temperature%data_3d,  &
-                                         domain%ridge_dist%data_2d, domain%valley_dist%data_2d,domain%ridge_drop%data_2d, &
-                                         domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d,domain%dzdx,domain%dzdy,  &
-                                         domain%z%data_3d,domain%roughness_z0%data_2d)
-                
-                call domain%u%exchange_x(do_metadata=.True.)
-                call domain%v%exchange_y(do_metadata=.True.)
-            endif 
+        endif 
 
-            if (options%wind%Sx) then
-                call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d, domain%w%meta_data%dqdt_3d,domain%Ri,domain%dzdx,domain%dzdy)
-                
-                call domain%u%exchange_x(do_metadata=.True.)
-                call domain%v%exchange_y(do_metadata=.True.)
-            endif 
+        if (options%wind%Sx) then
+            call apply_Sx(domain%Sx,domain%TPI,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%Ri%data_3d,domain%dzdx,domain%dzdy)
 
-            ! linear winds
-            if (options%physics%windtype==kWIND_LINEAR) then
+            call domain%u%exchange_x(do_metadata=.True.)
+            call domain%v%exchange_y(do_metadata=.True.)
+        endif 
+
+        ! linear winds
+        if (options%physics%windtype==kWIND_LINEAR .or. options%physics%windtype==kLINEAR_ITERATIVE_WINDS .or. options%physics%windtype==kITERATIVE_WINDS) then
+            if (options%physics%windtype==kWIND_LINEAR .or. options%physics%windtype==kLINEAR_ITERATIVE_WINDS) then
                 call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.True.)
-            ! simple acceleration over topography
-            elseif (options%physics%windtype==kCONSERVE_MASS) then
-                if (options%parameters%use_terrain_difference) then  !
-                !! use the ratio between hi-res and lo-res grid deformation (i.e. due to 'addtional' terrain) for speedup
-                    call mass_conservative_acceleration(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%zfr_u, domain%zfr_v)
-                else
-                    call mass_conservative_acceleration(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%zr_u, domain%zr_v)
-                endif
-            elseif (options%physics%windtype==kOBRIEN_WINDS) then
-                call Obrien_winds(domain, options, update_in=.True.)
-            elseif (options%physics%windtype==kITERATIVE_WINDS) then
+            endif
             
-                allocate(alpha(ims:ime,kms:kme,jms:jme))
+            if (options%physics%windtype==kLINEAR_ITERATIVE_WINDS .or. options%physics%windtype==kITERATIVE_WINDS) then
                 allocate(div(ims:ime,kms:kme,jms:jme))
 
-                call calc_alpha(alpha, domain%froude, ims, ime,  kms, kme, jms, jme, &
+                if (options%wind%alpha_const>0) then
+                    domain%alpha%data_3d = options%wind%alpha_const
+                else
+                    call calc_alpha(domain%alpha%data_3d, domain%froude%data_3d, ims, ime,  kms, kme, jms, jme, &
                             domain%ids, domain%ide, domain%jds, domain%jde)
+                endif
 
                 !Call this, passing 0 for w_grid, to get vertical components of vertical motion
                 call calc_w_real(domain% u %meta_data%dqdt_3d,      &
@@ -540,40 +456,7 @@ contains
                              domain%w%meta_data%dqdt_3d,      &
                              domain%dzdx_u, domain%dzdy_v,    &
                              domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
-                             
-                !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
-                if (options%parameters%wvar=="") then
-                    domain%w%meta_data%dqdt_3d = (0.0-domain%w%meta_data%dqdt_3d)/domain%jacobian
-                else
-                    domain%w%meta_data%dqdt_3d = (domain%w_real%dqdt_3d-domain%w%meta_data%dqdt_3d)/domain%jacobian
-                endif
 
-                call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
-                                domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
-                                domain%density%data_3d,options,horz_only=.False.)
-                                
-                call calc_iter_winds(domain,alpha,div,options%parameters%advect_density,update_in=.True.)
-
-            elseif (options%physics%windtype==kLINEAR_OBRIEN_WINDS) then
-                call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.True.)
-                call Obrien_winds(domain, options, update_in=.True.)
-            elseif (options%physics%windtype==kLINEAR_ITERATIVE_WINDS) then
-                call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.True.)
-            
-                allocate(alpha(ims:ime,kms:kme,jms:jme))
-                allocate(div(ims:ime,kms:kme,jms:jme))
-
-                call calc_alpha(alpha, domain%froude, ims, ime,  kms, kme, jms, jme, &
-                            domain%ids, domain%ide, domain%jds, domain%jde)
-
-                !Call this, passing 0 for w_grid, to get vertical components of vertical motion
-                call calc_w_real(domain% u %meta_data%dqdt_3d,      &
-                             domain% v %meta_data%dqdt_3d,      &
-                             domain%w%meta_data%dqdt_3d*0.0,      &
-                             domain%w%meta_data%dqdt_3d,      &
-                             domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
-                             
                 !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
                 if (options%parameters%wvar=="") then
                     domain%w%meta_data%dqdt_3d = (0.0-domain%w%meta_data%dqdt_3d)/domain%jacobian
@@ -581,27 +464,65 @@ contains
                     domain%w%meta_data%dqdt_3d = (domain%w_real%dqdt_3d-domain%w%meta_data%dqdt_3d)/domain%jacobian
                 endif
                 
+                !stagger w, which was just calculated at the mass points, to the vertical k-levels, so that we can calculate divergence with it
                 domain%w%meta_data%dqdt_3d(:,kms:kme-1,:) = 0.5*(domain%w%meta_data%dqdt_3d(:,kms:kme-1,:)+domain%w%meta_data%dqdt_3d(:,kms+1:kme,:))
 
                 call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
                                 domain%density%data_3d,options,horz_only=.False.)
 
-                call calc_iter_winds(domain,alpha,div,options%parameters%advect_density,update_in=.True.)
+                call calc_iter_winds(domain,domain%alpha%data_3d,div,options%parameters%advect_density,update_in=.True.)
             endif
+        ! simple acceleration over topography
+        elseif (options%physics%windtype==kCONSERVE_MASS) then
+            if (options%parameters%use_terrain_difference) then  !
+            !! use the ratio between hi-res and lo-res grid deformation (i.e. due to 'addtional' terrain) for speedup
+                call mass_conservative_acceleration(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%zfr_u, domain%zfr_v)
+            else
+                call mass_conservative_acceleration(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%zr_u, domain%zr_v)
+            endif
+        elseif (options%physics%windtype==kOBRIEN_WINDS) then
+            call Obrien_winds(domain, options, update_in=.True.)
+        elseif (options%physics%windtype==kLINEAR_OBRIEN_WINDS) then
+            call linear_perturb(domain,options,options%lt_options%vert_smooth,.False.,options%parameters%advect_density, update=.True.)
+            call Obrien_winds(domain, options, update_in=.True.)
+        endif
+        
+        call balance_uvw(domain,options,update_in=.True.)
 
-            call balance_uvw(domain,options,update_in=.True.)
-                             
-            call calc_w_real(domain% u %meta_data%dqdt_3d,      &
-                             domain% v %meta_data%dqdt_3d,      &
-                             domain% w %meta_data%dqdt_3d,      &
-                             domain% w_real %data_3d,           &
-                             domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
+        call calc_w_real(domain% u %meta_data%dqdt_3d,      &
+                         domain% v %meta_data%dqdt_3d,      &
+                         domain% w %meta_data%dqdt_3d,      &
+                         domain% w_real %data_3d,           &
+                         domain%dzdx_u, domain%dzdy_v,    &
+                         domain%jacobian_w,ims,ime,kms,kme,jms,jme,its, ite, jts, jte)
+             
+        !If not an update, then transfer the dqdt fields to data_3d
+        if (.not.(update)) then
+            domain%u%data_3d = domain%u%meta_data%dqdt_3d
+            domain%v%data_3d = domain%v%meta_data%dqdt_3d
+            domain%w%data_3d = domain%w%meta_data%dqdt_3d        
+        endif
+        
+        !Reset to 0.0, this was only used as a placeholder variable
+        domain% w_real %dqdt_3d = 0.0
+        
+    end subroutine update_winds
+    
+    subroutine update_wind_dqdt(domain, options)
+        implicit none
+        type(domain_t), intent(inout)  :: domain
+        type(options_t), intent(in)    :: options
+
+        domain%u%meta_data%dqdt_3d = (domain%u%meta_data%dqdt_3d-domain%u%data_3d)/options%wind%update_dt%seconds()
+        domain%v%meta_data%dqdt_3d = (domain%v%meta_data%dqdt_3d-domain%v%data_3d)/options%wind%update_dt%seconds()
+        
+        !If we are not using advect density, then balance_uvw will not be called every physics step, so compute a tendancy here
+        if (.not.(options%parameters%advect_density)) then
+            domain%w%meta_data%dqdt_3d = (domain%w%meta_data%dqdt_3d-domain%w%data_3d)/options%wind%update_dt%seconds()
         endif
 
-
-    end subroutine update_winds
+    end subroutine
     
     subroutine calc_alpha(alpha, froude, ims, ime, kms, kme, jms, jme, ids, ide, jds, jde)
         implicit none
@@ -609,11 +530,10 @@ contains
         real,    intent(in)    :: froude(ims:ime,kms:kme,jms:jme)
         real,    intent(inout) :: alpha(ims:ime,kms:kme,jms:jme)
         
-        alpha = 1.0
         !Following Moussiopoulos, et al. (1988). Bounding low Fr to avoid /0 error and negative Fr
         alpha = 1.0 - 0.5*(1./max(froude**4,0.00001))*(sqrt(1.0+4.0*max(froude**4,0.00001)) - 1.0) 
-        alpha = sqrt(max(alpha,0.0))
-        alpha = min(max(alpha,0.1),1.0)
+        alpha = sqrt(max(alpha,0.01))
+        !alpha = max(alpha,0.01)
 
         ! Ensure that there are no sharp transitions in alpha at boundary, 
         ! which can leak boundary effects into model (very high w_grid values result)
@@ -890,15 +810,12 @@ contains
         jme = ubound(domain%w%data_3d,3)
 
         !If it is our first time calculating Fr, allocate and populate froude_terrain array
-        if (.not.allocated(domain%froude)) then
-            allocate(domain%froude(ims:ime,kms:kme,jms:jme))            
+        if (.not.allocated(domain%froude_terrain)) then
             allocate(domain%froude_terrain(1:72,ims:ime,kms:kme,jms:jme))
 
             call compute_terrain_blocking_heights(domain)
         endif
-       
-        if (.not.allocated(domain%Ri)) allocate(domain%Ri(ims:ime,kms:kme,jms:jme))
-       
+              
         allocate(u_m(ims:ime,kms:kme,jms:jme))
         allocate(v_m(ims:ime,kms:kme,jms:jme))
         allocate(u_shear(ims:ime,kms:kme,jms:jme))
@@ -935,10 +852,10 @@ contains
         wind_speed = sqrt( (u_m)**2 + (v_m)**2 )
         
         !Since we will loop up to nz-1, we set all Fr to 0.1, which will leave the upper layer as very stable
-        domain%froude = 0.1
+        domain%froude%data_3d = 0.1
         
         !Since we will loop up to nz-1, we set all Ri here to 10
-        domain%Ri = 10.0
+        domain%Ri%data_3d = 10.0
 
 
         do k = kms,kme
@@ -956,35 +873,32 @@ contains
                     z_top  = domain%z%data_3d(i,Ri_k_max,j)
                     stability(i,k,j) = calc_dry_stability(th_top, th_bot, z_top, z_bot) 
                     
-                    domain%Ri(i,k,j) =  calc_Ri(stability(i,k,j), u_shear(i,kms,j), v_shear(i,kms,j), (z_top-z_bot))
+                    domain%Ri%data_3d(i,k,j) =  calc_Ri(stability(i,k,j), u_shear(i,kms,j), v_shear(i,kms,j), (z_top-z_bot))
                     
                     th_bot = domain%potential_temperature%data_3d(i,k,j)
                     th_top = domain%potential_temperature%data_3d(i,k+1,j)
                     z_bot  = domain%z%data_3d(i,k,j)
                     z_top  = domain%z%data_3d(i,k+1,j)
-                    stability(i,k,j) = calc_dry_stability(th_top, th_bot, z_top, z_bot) 
                     
                     ! If we have an upwind obstacle, use the obstacle height to calculate a bulk Froude Number over the column
                     ! If there is nothing blocking, we calculate a local bulk Froude Number, using the local th and z indexed 
                     ! above
-                    if (.not.(temp_froude(i,k,j) == DEFAULT_FR_L)) then
+                    !if (.not.(temp_froude(i,k,j) == DEFAULT_FR_L)) then
                     !The height of the obstacle is calculated from the blocking terrain height (z_obst-z_loc+1000)
-                        obstacle_height = temp_froude(i,k,j)-DEFAULT_FR_L+z_bot
-
-                        do ob_k = k+1,kme
-                            if (domain%z%data_3d(i,ob_k,j) > obstacle_height) exit
-                        enddo
-                        ob_k = min(ob_k,kme)
-                        th_top = domain%potential_temperature%data_3d(i,ob_k,j)
-                        z_top  = domain%z%data_3d(i,ob_k,j)
-
-                        stability(i,k,j) = calc_dry_stability(th_top, th_bot, z_top, z_bot) 
-
-                    endif
+                    !    obstacle_height = temp_froude(i,k,j)-DEFAULT_FR_L+z_bot
+                    !
+                    !    do ob_k = k+1,kme
+                    !        if (domain%z%data_3d(i,ob_k,j) > obstacle_height) exit
+                    !    enddo
+                    !    ob_k = min(ob_k,kme)
+                    !    th_top = domain%potential_temperature%data_3d(i,ob_k,j)
+                    !    z_top  = domain%z%data_3d(i,ob_k,j)
+                    !endif
+                    stability(i,k,j) = calc_dry_stability(th_top, th_bot, z_top, z_bot, domain%potential_temperature%data_3d(i,kms,j)) 
 
                     !Above function calculates N^2, but froude number wants just N
                     stability(i,k,j) = sqrt(max(stability(i,k,j), 0.0))
-                    domain%froude(i,k,j) = calc_froude(stability(i,k,j), temp_froude(i,k,j), wind_speed(i,k,j))
+                    domain%froude%data_3d(i,k,j) = calc_froude(stability(i,k,j), temp_froude(i,k,j), wind_speed(i,k,j))
                 enddo
             enddo
         enddo
@@ -1078,7 +992,7 @@ contains
                     do i_s = 1+i_start_buffer, (search_max*2+1)+i_end_buffer
                         do j_s = 1+j_start_buffer, (search_max*2+1)+j_end_buffer
                         
-                            temp_ft = DEFAULT_FR_L + domain%global_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1))) - pt_height
+                            temp_ft = domain%global_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1))) - pt_height
                             
                             if (temp_ft > temp_ft_array(azm_indices(i_s,j_s),i,k,j)) then
                                                         
@@ -1174,7 +1088,7 @@ contains
 
                     else
                         !IF we only have -100000 for all entries, set to dz
-                        domain%froude_terrain(:,i,k,j) = DEFAULT_FR_L
+                        domain%froude_terrain(:,i,k,j) = domain%dz_interface%data_3d(i,k,j)
                     end if
                 enddo
 

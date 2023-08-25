@@ -1022,6 +1022,48 @@ contains
         end associate
 
         !>------------------------------------------------------------
+        !!  Alpha weighting factor in variational wind solver
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%wind_alpha))
+            var%name        = "wind_alpha"
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "Alpha weighting factor in variational wind solver"), &
+                               attribute_t("units",         "-"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
+        !>------------------------------------------------------------
+        !!  Number-weighted aspect ratio of ice3 category
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%froude))
+            var%name        = "froude"
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "Froude number used to calculate wind_alpha"), &
+                               attribute_t("units",         "-"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
+        !>------------------------------------------------------------
+        !!  Number-weighted aspect ratio of ice3 category
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%blk_ri))
+            var%name        = "blk_ri"
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "Bulk richardson number used to calculate Sx sheltering"), &
+                               attribute_t("units",         "-"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
+        !>------------------------------------------------------------
         !!  Outgoing longwave radiation
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%out_longwave_rad))
