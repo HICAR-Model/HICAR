@@ -8,8 +8,12 @@ docs/doxygen_sqlite3.db
 *.mod
 *.smod
 *.i
+*.stamp
 *.lst
 *~
 *.pyc
 *.ipynb
 *-checkpoint.f90
+*-checkpoint.F90
+*.stamp
+*/.ipynb_checkpoints/*
