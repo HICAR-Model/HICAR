@@ -80,15 +80,14 @@ contains
         z0 = 8e-6 / max(ustar,1e-7)
     end function ocean_roughness
 
-    module subroutine water_simple(options, sst, psfc, wind, ustar, qv, temperature,  &
+    subroutine water_simple(options, sst, psfc, wind, ustar, qv, temperature,  &
                             sensible_heat, latent_heat, &
                             z_atm, Z0, landmask, &
                             qv_surf, evap_flux, tskin, coef_heat_exch, vegtype, its, ite, kts, kte, jts, jte)
         implicit none
         type(options_t),intent(in)    :: options        
-        real,    dimension(its:ite,kts:kte,jts:jte),intent(in)    :: qv, temperature
         real,    dimension(its:ite,jts:jte),  intent(inout) :: sensible_heat, latent_heat, Z0, qv_surf, evap_flux, tskin, coef_heat_exch
-        real,    dimension(its:ite,jts:jte),  intent(in)    :: sst, psfc, wind, ustar, z_atm
+        real,    dimension(its:ite,jts:jte),  intent(in)    :: sst, psfc, wind, ustar, z_atm, qv, temperature
         integer, dimension(its:ite,jts:jte),  intent(in)    :: landmask
         integer, dimension(its:ite,jts:jte),  optional, intent(in)    :: vegtype
         integer, intent(in)                     :: its, ite, kts, kte, jts, jte
@@ -117,11 +116,11 @@ contains
                     base_exchange_term=(75*karman**2 * sqrt((z+Z0(i,j))/Z0(i,j))) / (lnz_atm_term**2)
                     lnz_atm_term=(karman/lnz_atm_term)**2
 
-                    call calc_exchange_coefficient(wind(i,j),sst(i,j),temperature(i,1,j),&
+                    call calc_exchange_coefficient(wind(i,j),sst(i,j),temperature(i,j),&
                                                    z,lnz_atm_term,base_exchange_term,exchange_C)
                     coef_heat_exch(i,j) = exchange_C
-                    sensible_heat(i,j) = exchange_C * wind(i,j) * (sst(i,j)-temperature(i,1,j))
-                    evap_flux(i,j)     = exchange_C * wind(i,j) * (qv_surf(i,j)-qv(i,1,j))
+                    sensible_heat(i,j) = exchange_C * wind(i,j) * (sst(i,j)-temperature(i,j))
+                    evap_flux(i,j)     = exchange_C * wind(i,j) * (qv_surf(i,j)-qv(i,j))
                     latent_heat(i,j)   = evap_flux(i,j) * LH_vaporization
                     tskin(i,j)   = sst(i,j)
 
