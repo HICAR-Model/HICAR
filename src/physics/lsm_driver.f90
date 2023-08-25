@@ -1233,21 +1233,21 @@ contains
             if((options%physics%watersurface==kWATER_SIMPLE) .or.      &
                 (options%physics%watersurface==kWATER_LAKE) ) then
                     call water_simple(options,                              &
-                                      domain%sst%data_2d,                   &
-                                      domain%surface_pressure%data_2d,      &
-                                      windspd,                              &
-                                      domain%ustar,                         &
-                                      domain%water_vapor%data_3d,           &
-                                      domain%temperature%data_3d,           &
-                                      domain%sensible_heat%data_2d,         &
-                                      domain%latent_heat%data_2d,           &
-                                      z_atm, domain%roughness_z0%data_2d,   &
-                                      domain%land_mask,                     &
-                                      QSFC,                                 &
-                                      QFX,                                  &
-                                      domain%skin_temperature%data_2d,      &
-                                      domain%coeff_heat_exchange%data_2d,   &
-                                      domain%veg_type,                      &
+                                      domain%sst%data_2d(its:ite,jts:jte),                   &
+                                      domain%surface_pressure%data_2d(its:ite,jts:jte),      &
+                                      windspd(its:ite,jts:jte),                              &
+                                      domain%ustar(its:ite,jts:jte),                         &
+                                      domain%water_vapor%data_3d(its:ite,kms,jts:jte),       &
+                                      domain%temperature%data_3d(its:ite,kms,jts:jte),       &
+                                      domain%sensible_heat%data_2d(its:ite,jts:jte),         &
+                                      domain%latent_heat%data_2d(its:ite,jts:jte),           &
+                                      z_atm, domain%roughness_z0%data_2d(its:ite,jts:jte),   &
+                                      domain%land_mask(its:ite,jts:jte),                     &
+                                      QSFC(its:ite,jts:jte),                                 &
+                                      QFX(its:ite,jts:jte),                                  &
+                                      domain%skin_temperature%data_2d(its:ite,jts:jte),      &
+                                      domain%coeff_heat_exchange%data_2d(its:ite,jts:jte),   &
+                                      domain%veg_type(its:ite,jts:jte),                      &
                                       its, ite, kts, kte, jts, jte)
                                 !   ,domain%terrain%data_2d               & ! terrain height [m] if ht(i,j)>=lake_min_elev -> lake (in case no lake category is provided, but lake model is selected, we need to not run the simple water as well - left comment in for future reference)
             endif
@@ -1694,6 +1694,7 @@ contains
                              its,ite,  jts,jte,  kts,kte)
 
                 domain%albedo%data_3d(:, domain%model_time%month, :) = ALBEDO
+                VEGFRAC = domain%vegetation_fraction_out%data_2d(:, :)*100.0
 
                 if ( .not.(options%physics%snowmodel==kSM_FSM)) then
                     domain%snow_height%data_2d = nmp_snowh
@@ -1760,7 +1761,7 @@ contains
                                          domain%temperature_2m%data_2d,         &
                                          domain%humidity_2m%data_2d,            &
                                          domain%surface_pressure%data_2d,       &
-                                         VEGFRAC,                               &
+                                         (VEGFRAC/100.0),                       &
                                          domain%veg_type,                       &
                                          domain%land_mask,                      &
                                          domain%temperature_2m_veg%data_2d,     &
@@ -1772,8 +1773,11 @@ contains
             !!
         endif
         
+        ! PBL scheme should handle the distribution of sensible and latent heat fluxes. If we are
+        ! running the LSM without a PBL scheme, as may be done for High-resolution runs, then 
+        ! run apply fluxes to still apply heat fluxes calculated by LSM
         if ( (options%physics%landsurface>0 .or. options%physics%watersurface>0 ).and. &
-            .not.(options%physics%boundarylayer==kPBL_DIAGNOSTIC)) then
+            .not.(options%physics%boundarylayer==0)) then
             call apply_fluxes(domain, dt)
         endif
 
