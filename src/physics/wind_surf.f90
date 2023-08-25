@@ -373,10 +373,10 @@ contains
     
     
 
-    subroutine apply_Sx(Sx, TPI, u, v, w, Ri, dzdx, dzdy)
+    subroutine apply_Sx(Sx, TPI, u, v, Ri, dzdx, dzdy)
         implicit none
         real, intent(in)                       :: Sx(:,:,:,:), TPI(:,:), Ri(:,:,:), dzdx(:,:,:), dzdy(:,:,:)
-        real, intent(inout),  dimension(:,:,:) :: u, v, w
+        real, intent(inout),  dimension(:,:,:) :: u, v
         
         real, allocatable, dimension(:,:)   :: winddir, x_norm, y_norm, thresh_ang
         real, allocatable, dimension(:,:,:) :: Sx_U_corr, Sx_V_corr, Sx_curr, Sx_corr, TPI_corr
@@ -384,11 +384,11 @@ contains
         integer ::  i, j, k, ims, ime, jms, jme, kms
         real    ::  Ri_num, WS, max_spd
                 
-        ims = lbound(w,1)
-        ime = ubound(w,1)
-        kms = lbound(w,2)
-        jms = lbound(w,3)
-        jme = ubound(w,3)
+        ims = lbound(dzdx,1)
+        ime = ubound(dzdx,1)
+        kms = lbound(dzdx,2)
+        jms = lbound(dzdx,3)
+        jme = ubound(dzdx,3)
         
         allocate(x_norm(ims:ime,jms:jme))
         allocate(y_norm(ims:ime,jms:jme))
