@@ -12077,14 +12077,17 @@ endif
 !        IF ( mp_physics == FER_MP_HIRES .OR. &
 !             mp_physics == FER_MP_HIRES_ADVECT) THEN
 !#endif
-                  DO K=kts,kte
-                     qi1d(k) = qi3d(i,k,j)
-                     qs1d(k) = 0.0
-                     qc1d(k) = qc3d(i,k,j)
-                     qi1d(k) = max(0.,qi1d(k))
-                     qc1d(k) = max(0.,qc1d(k))
-                  ENDDO
+! ++ DR, following the lead of trude's comment in rrtmg_sw, also commenting this out in lw
+! ++ trude, remove this test, we will not use mp option 5 or 85. 
+!                  DO K=kts,kte
+!                     qi1d(k) = qi3d(i,k,j)
+!                     qs1d(k) = 0.0
+!                     qc1d(k) = qc3d(i,k,j)
+!                     qi1d(k) = max(0.,qi1d(k))
+!                     qc1d(k) = max(0.,qc1d(k))
+!                  ENDDO
 !        ENDIF
+!-- Trude
 
 !         EMISS0=EMISS(I,J)
 !         GLW0=0.

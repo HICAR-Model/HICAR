@@ -160,7 +160,7 @@ contains
         ! List the variables that are required to be allocated for the simple radiation code
         call options%alloc_vars( &
                      [kVARS%pressure,     kVARS%pressure_interface,    kVARS%potential_temperature,   kVARS%exner,            &
-                      kVARS%shortwave,    kVARS%longwave,                                                                     &
+                      kVARS%shortwave, kVARS%shortwave_direct, kVARS%shortwave_diffuse,   kVARS%longwave,                                                                     &
                       kVARS%re_cloud,     kVARS%re_ice,                kVARS%re_snow,                 kVARS%out_longwave_rad, &
                       kVARS%land_mask,    kVARS%snow_water_equivalent,                                                        &
                       kVARS%dz_interface, kVARS%skin_temperature,      kVARS%temperature,             kVARS%density,          &
@@ -172,7 +172,7 @@ contains
         ! List the variables that are required when restarting for the simple radiation code
         call options%restart_vars( &
                      [kVARS%pressure,     kVARS%pressure_interface,    kVARS%potential_temperature,   kVARS%exner,            &
-                      kVARS%water_vapor,  kVARS%shortwave,    kVARS%longwave,                                                 &          
+                      kVARS%water_vapor,  kVARS%shortwave, kVARS%shortwave_direct, kVARS%shortwave_diffuse,    kVARS%longwave,                                                 &          
                       kVARS%re_cloud,     kVARS%re_ice,                kVARS%re_snow,                 kVARS%out_longwave_rad, &
                       kVARS%snow_water_equivalent,                                                                            &
                       kVARS%dz_interface, kVARS%skin_temperature,      kVARS%temperature,             kVARS%density,          &
@@ -196,7 +196,7 @@ contains
 
         real, dimension(:,:,:,:), pointer :: tauaer_sw=>null(), ssaaer_sw=>null(), asyaer_sw=>null()
         real, allocatable :: day_frac(:), solar_elevation(:)
-        real, allocatable :: solar_azimuth(:), cos_project_angle(:,:), solar_elevation_store(:,:), solar_azimuth_store(:,:), SW_dif(:,:), SW_dir(:,:) !! MJ added
+        real, allocatable :: solar_azimuth(:), cos_project_angle(:,:), solar_elevation_store(:,:), solar_azimuth_store(:,:)
         real, allocatable :: solar_elevation_test(:), solar_elevation_store_test(:,:)!! MJ added
         real, allocatable:: albedo(:,:),gsw(:,:)
         integer :: j
@@ -265,8 +265,6 @@ contains
         allocate(solar_elevation_store(ims:ime,jms:jme)) !! MJ added
         allocate(solar_elevation_store_test(ims:ime,jms:jme)) !! MJ added
         allocate(solar_azimuth_store(ims:ime,jms:jme)) !! MJ added
-        allocate(SW_dif(ims:ime,jms:jme)) !! MJ added
-        allocate(SW_dir(ims:ime,jms:jme)) !! MJ added
 
 
         ! Note, need to link NoahMP to update albedo
@@ -464,9 +462,9 @@ contains
                     tauaer3d_sw=tauaer_sw,                                & ! jararias 2013/11
                     ssaaer3d_sw=ssaaer_sw,                                & ! jararias 2013/11
                     asyaer3d_sw=asyaer_sw,                                &
-!                   swddir = domain%skin_temperature%data_2d,             &
+                    swddir = domain%shortwave_direct%data_2d,             &
 !                   swddni = domain%skin_temperature%data_2d,             &
-!                   swddif = domain%skin_temperature%data_2d,             & ! jararias 2013/08
+                    swddif = domain%shortwave_diffuse%data_2d,             & ! jararias 2013/08
 !                   swdownc = domain%skin_temperature%data_2d,            &
 !                   swddnic = domain%skin_temperature%data_2d,            &
 !                   swddirc = domain%skin_temperature%data_2d,            &   ! PAJ
@@ -546,12 +544,14 @@ contains
         !! MJ: note that radiation down scaling works only for simple and rrtmg schemes as they provide the above-topography radiation per horizontal plane
         !! MJ corrected, as calc_solar_elevation has largley understimated the zenith angle in Switzerland
         !! MJ added: this is Tobias Jonas (TJ) scheme based on swr function in metDataWizard/PROCESS_COSMO_DATA_1E2E.m and also https://github.com/Tobias-Jonas-SLF/HPEval
-        if (options%physics%radiation_downScaling==1 .and. options%physics%radiation>1) then
+        if (options%physics%radiation_downScaling==1) then
             do j = jms,jme
                 solar_elevation  = calc_solar_elevation_corr(date=domain%model_time, lon=domain%longitude%data_2d,&
-                                j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac, solar_azimuth=solar_azimuth)
-                cos_project_angle(its:ite,j)= cos(domain%slope_angle%data_2d(its:ite,j)) * sin(solar_elevation(its:ite)) + &
-                                          sin(domain%slope_angle%data_2d(its:ite,j))* cos(solar_elevation(its:ite)) *cos(solar_azimuth(its:ite)-domain%aspect_angle%data_2d(its:ite,j))
+                                           j=j,ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac, & 
+                                           solar_azimuth=solar_azimuth)
+                cos_project_angle(its:ite,j)= cos(domain%slope_angle%data_2d(its:ite,j))*sin(solar_elevation(its:ite)) + &
+                                              sin(domain%slope_angle%data_2d(its:ite,j))*cos(solar_elevation(its:ite))   &
+                                              *cos(solar_azimuth(its:ite)-domain%aspect_angle%data_2d(its:ite,j))
 
                 solar_elevation_store(its:ite,j) = solar_elevation(its:ite)
                 solar_azimuth_store(its:ite,j) = solar_azimuth(its:ite)
@@ -559,35 +559,33 @@ contains
                 domain%cosine_zenith_angle%data_2d(its:ite,j)=sin(solar_elevation(its:ite))
             enddo 
             
-            !! due to float precision errors, it is possible to exceed (-1 - 1) in which case asin will break
-            !where(cos_project_angle < -1)
-            !   cos_project_angle = -1
-            !elsewhere(cos_project_angle > 1)
-            !   cos_project_angle = 1
-            !endwhere       
-                        
             !! partitioning the total radiation per horizontal plane into the diffusive and direct ones based on https://www.sciencedirect.com/science/article/pii/S0168192320300058, HPEval
-            ratio_dif=0.            
-            do j = jts,jte
-                do i = its,ite
-                    trans_atm = max(min(domain%shortwave%data_2d(i,j)/( 1367* (sin(solar_elevation_store(i,j)+1.e-4)) ),1.),0.)   ! atmospheric transmissivity
-                    if (trans_atm<=0.22) then
-                        ratio_dif=1.-0.09*trans_atm  
-                    elseif (0.22<trans_atm .and. trans_atm<=0.8) then
-                        ratio_dif=0.95-0.16*trans_atm+4.39*trans_atm**2.-16.64*trans_atm**3.+12.34*trans_atm**4.   
-                    elseif (trans_atm>0.8) then
-                        ratio_dif=0.165
-                    endif
-                    SW_dif(i,j)=ratio_dif*domain%shortwave%data_2d(i,j)
-                    SW_dir(i,j)=max(domain%shortwave%data_2d(i,j)-SW_dif(i,j),0.0)
-                enddo
-            enddo        
+            if (.not.(options%physics%radiation==kRA_RRTMG)) then
+                ratio_dif=0.            
+                do j = jts,jte
+                    do i = its,ite
+                        trans_atm = max(min(domain%shortwave%data_2d(i,j)/&
+                                ( 1367* (sin(solar_elevation_store(i,j)+1.e-4)) ),1.),0.)   ! atmospheric transmissivity
+                        if (trans_atm<=0.22) then
+                            ratio_dif=1.-0.09*trans_atm  
+                        elseif (0.22<trans_atm .and. trans_atm<=0.8) then
+                            ratio_dif=0.95-0.16*trans_atm+4.39*trans_atm**2.-16.64*trans_atm**3.+12.34*trans_atm**4.   
+                        elseif (trans_atm>0.8) then
+                            ratio_dif=0.165
+                        endif
+                        domain%shortwave_diffuse%data_2d(i,j)=ratio_dif*domain%shortwave%data_2d(i,j)
+                        domain%shortwave_direct%data_2d(i,j) = max( domain%shortwave%data_2d(i,j) - &
+                                                                    domain%shortwave_diffuse%data_2d(i,j),0.0)
+                    enddo
+                enddo        
+            endif
             !!
             zdx_max = ubound(domain%hlm%data_3d,1)
             do j = jts,jte
                 do i = its,ite
                     ! determin maximum allowed direct swr
-                    trans_atm_dir = max(min(SW_dir(i,j)/(1367*sin(solar_elevation_store(i,j)+1.e-4)),1.),0.)  ! atmospheric transmissivity for direct sw radiation
+                    trans_atm_dir = max(min(domain%shortwave_direct%data_2d(i,j)/&
+                                    (1367*sin(solar_elevation_store(i,j)+1.e-4)),1.),0.)  ! atmospheric transmissivity for direct sw radiation
                     max_dir_1     = 1367.*exp(log(1.-0.165)/max(sin(solar_elevation_store(i,j)),1.e-4))            
                     max_dir_2     = 1367.*trans_atm_dir                          
                     max_dir       = min(max_dir_1,max_dir_2)                     ! applying both above criteria 1 and 2                    
@@ -598,14 +596,17 @@ contains
                     zdx = max(min(zdx,zdx_max),1)
                     elev_th=(90.-domain%hlm%data_3d(i,zdx,j))*pi/180. !! MJ added: it is the solar elevation threshold above which we see the sun from the pixel  
                     if (solar_elevation_store(i,j)>=elev_th) then
-                        domain%shortwave_direct_above%data_2d(i,j)=min(SW_dir(i,j),max_dir)
-                        domain%shortwave_direct%data_2d(i,j)=min(SW_dir(i,j)/max(sin(solar_elevation_store(i,j)),0.01),max_dir)*max(cos_project_angle(i,j),0.)
+                        domain%shortwave_direct_above%data_2d(i,j)=min(domain%shortwave_direct%data_2d(i,j),max_dir)
+                        domain%shortwave_direct%data_2d(i,j) = min(domain%shortwave_direct%data_2d(i,j)/            &
+                                                               max(sin(solar_elevation_store(i,j)),0.01),max_dir) * &
+                                                               max(cos_project_angle(i,j),0.)
                     else
                         domain%shortwave_direct_above%data_2d(i,j)=0.
                         domain%shortwave_direct%data_2d(i,j)=0.
                     endif
-                    domain%shortwave_diffuse%data_2d(i,j)=SW_dif(i,j)*domain%svf%data_2d(i,j)
-                    domain%shortwave_total%data_2d(i,j)=domain%shortwave_diffuse%data_2d(i,j)+domain%shortwave_direct%data_2d(i,j)
+                    domain%shortwave_diffuse%data_2d(i,j)=domain%shortwave_diffuse%data_2d(i,j)*domain%svf%data_2d(i,j)
+                    domain%shortwave_total%data_2d(i,j) = domain%shortwave_diffuse%data_2d(i,j) + &
+                                                          domain%shortwave_direct%data_2d(i,j)
                     !if (this_image()==2) write(*,*),"1-- ele,ele_TJ,elev_th,azim, proj ", trim(domain%model_time%as_string()),solar_elevation_store(i,j)*180./pi, solar_elevation_store_test(i,j), elev_th*180./pi, solar_azimuth_store(i,j)*180./pi, acos(cos_project_angle(i,j))*180./pi 
                     !if (this_image()==2) write(*,*), trim(domain%model_time%as_string()),solar_elevation_store(i,j)*180./pi, solar_elevation_store_test(i,j)
                     !if (this_image()==3 ) write(*,*),"2--dif, dir ", trim(domain%model_time%as_string()), SW_dif(i,j), SW_dir(i,j), domain%shortwave%data_2d(i,j)!, solar_azimuth_store(i,j)*180./pi
