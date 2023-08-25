@@ -345,6 +345,8 @@ CONTAINS
     REAL                                :: U_ML         ! U wind component [m/s]
     REAL                                :: V_ML         ! V wind component [m/s]
     REAL                                :: SWDN         ! solar down at surface [W m-2]
+    REAL                                :: SWDIR        ! solar direct down at surface [W m-2]
+    REAL                                :: SWDIF        ! solar diffuse down at surface [W m-2]
     REAL                                :: LWDN         ! longwave down at surface [W m-2]
     REAL                                :: P_ML         ! pressure, valid at interface [Pa]
     REAL                                :: PSFC         ! surface pressure [Pa]
@@ -617,6 +619,8 @@ CONTAINS
        U_ML   = U_PHY(I,1,J)                          ! u-wind at interface [m/s]
        V_ML   = V_PHY(I,1,J)                          ! v-wind at interface [m/s]
        SWDN   = SWDOWN(I,J)                           ! shortwave down from SW scheme [W/m2]
+       SWDIR  = SWDDIR(I,J)                           ! shortwave direct down from SW scheme [W/m2]
+       SWDIF  = SWDDIF(I,J)                           ! shortwave diffuse down from SW scheme [W/m2]
        LWDN   = GLW(I,J)                              ! total longwave down from LW scheme [W/m2]
        P_ML   =(P8W3D(I,KTS+1,J)+P8W3D(I,KTS,J))*0.5  ! surface pressure defined at intermediate level [Pa]
 	                                              !    consistent with temperature, mixing ratio
@@ -962,7 +966,7 @@ CONTAINS
             FVEG    , FVGMAX  , VEGTYP  , ICE     , IST     , CROPTYPE, & ! IN : Vegetation/Soil characteristics
             SMCEQ   ,                                                   & ! IN : Vegetation/Soil characteristics
             T_ML    , P_ML    , PSFC    , U_ML    , V_ML    , Q_ML    , & ! IN : Forcing
-            QC      , SWDN    , LWDN    ,                               & ! IN : Forcing
+            QC      , SWDN    , SWDIR   , SWDIF   , LWDN    ,           & ! IN : Forcing
 	    PRCPCONV, PRCPNONC, PRCPSHCV, PRCPSNOW, PRCPGRPL, PRCPHAIL, & ! IN : Forcing
             TBOT    , CO2PP   , O2PP    , FOLN    , FICEOLD , Z_ML    , & ! IN : Forcing
             IRRFRA  , SIFAC   , MIFAC   , FIFAC   , LLANDUSE,           & ! IN : Irrigation: fractions

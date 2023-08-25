@@ -420,7 +420,7 @@ contains
                    SHDFAC  , SHDMAX  , VEGTYP  , ICE     , IST     , CROPTYPE, & ! IN : Vegetation/Soil characteristics
                    SMCEQ   ,                                                   & ! IN : Vegetation/Soil characteristics
                    SFCTMP  , SFCPRS  , PSFC    , UU      , VV      , Q2      , & ! IN : Forcing
-                   QC      , SOLDN   , LWDN    ,                               & ! IN : Forcing
+                   QC      , SOLDN   , SWDDIR  , SWDDIF  , LWDN    ,           & ! IN : Forcing
 	           PRCPCONV, PRCPNONC, PRCPSHCV, PRCPSNOW, PRCPGRPL, PRCPHAIL, & ! IN : Forcing
                    TBOT    , CO2AIR  , O2AIR   , FOLN    , FICEOLD , ZLVL    , & ! IN : Forcing
                    IRRFRA  , SIFRA   , MIFRA   , FIFRA   , LLANDUSE,           & ! IN : Irrigation: fractions
@@ -478,7 +478,9 @@ contains
   REAL                           , INTENT(IN)    :: SFCTMP !surface air temperature [K]
   REAL                           , INTENT(IN)    :: UU     !wind speed in eastward dir (m/s)
   REAL                           , INTENT(IN)    :: VV     !wind speed in northward dir (m/s)
-  REAL                           , INTENT(IN)    :: SOLDN  !downward shortwave radiation (w/m2)
+  REAL                           , INTENT(IN)    :: SOLDN  !downward total shortwave radiation (w/m2)
+  REAL                           , INTENT(IN)    :: SWDDIR !downward direct shortwave radiation (w/m2)
+  REAL                           , INTENT(IN)    :: SWDDIF !downward diffuse shortwave radiation (w/m2)
   REAL                           , INTENT(IN)    :: LWDN   !downward longwave radiation (w/m2)
   REAL                           , INTENT(IN)    :: SFCPRS !pressure (pa)
   REAL                           , INTENT(INOUT) :: ZLVL   !reference height (m)
@@ -752,7 +754,7 @@ contains
    CALL ATM (parameters,SFCPRS  ,SFCTMP   ,Q2      ,                            &
              PRCPCONV, PRCPNONC,PRCPSHCV,PRCPSNOW,PRCPGRPL,PRCPHAIL, &
              SOLDN   ,COSZ     ,THAIR   ,QAIR    ,                   &
-             EAIR    ,RHOAIR   ,QPRECC  ,QPRECL  ,SOLAD   ,SOLAI   , &
+             EAIR    ,RHOAIR   ,QPRECC  ,QPRECL  ,SOLAD   ,SWDDIR  , SWDDIF, SOLAI, &
              SWDOWN  ,BDFALL   ,RAIN    ,SNOW    ,FP      ,FPICE   , PRCP )
 
 ! snow/soil layer thickness (m)
@@ -1025,8 +1027,8 @@ END IF
   SUBROUTINE ATM (parameters,SFCPRS  ,SFCTMP   ,Q2      ,                             &
                   PRCPCONV,PRCPNONC ,PRCPSHCV,PRCPSNOW,PRCPGRPL,PRCPHAIL , &
                   SOLDN   ,COSZ     ,THAIR   ,QAIR    ,                    &
-                  EAIR    ,RHOAIR   ,QPRECC  ,QPRECL  ,SOLAD   , SOLAI   , &
-		  SWDOWN  ,BDFALL   ,RAIN    ,SNOW    ,FP      , FPICE   ,PRCP )
+                  EAIR    ,RHOAIR   ,QPRECC  ,QPRECL  ,SOLAD   , SWDDIR  , SWDDIF, SOLAI, &
+		  SWDOWN  ,BDFALL   ,RAIN    ,SNOW    ,FP     , FPICE  ,PRCP )
 ! --------------------------------------------------------------------------------------------------
 ! re-process atmospheric forcing
 ! ----------------------------------------------------------------------
@@ -1045,6 +1047,8 @@ END IF
   REAL                          , INTENT(IN)  :: PRCPGRPL ! graupel entering land model [mm/s]           ! MB/AN : v3.7
   REAL                          , INTENT(IN)  :: PRCPHAIL ! hail entering land model [mm/s]              ! MB/AN : v3.7
   REAL                          , INTENT(IN)  :: SOLDN  !downward shortwave radiation (w/m2)
+  REAL                          , INTENT(IN)  :: SWDDIR  !downward direct shortwave radiation (w/m2)
+  REAL                          , INTENT(IN)  :: SWDDIF  !downward diffuse shortwave radiation (w/m2)
   REAL                          , INTENT(IN)  :: COSZ   !cosine solar zenith angle [0-1]
 
 ! outputs
@@ -1093,14 +1097,25 @@ END IF
 
        IF(COSZ <= 0.) THEN
           SWDOWN = 0.
+          SOLAD(1) = 0.     ! direct  vis
+          SOLAD(2) = 0.     ! direct  nir
+          SOLAI(1) = 0.     ! diffuse vis
+          SOLAI(2) = 0.     ! diffuse nir
        ELSE
-          SWDOWN = SOLDN
+          if ((SWDDIR+SWDDIF)==0.0) then     
+              SWDOWN = SOLDN
+              SOLAD(1) = SWDOWN*0.7*0.5     ! direct  vis
+              SOLAD(2) = SWDOWN*0.7*0.5     ! direct  nir
+              SOLAI(1) = SWDOWN*0.3*0.5     ! diffuse vis
+              SOLAI(2) = SWDOWN*0.3*0.5     ! diffuse nir
+          else
+              SWDOWN = SWDDIR+SWDDIF
+              SOLAD(1) = SWDDIR*0.5     ! direct  vis
+              SOLAD(2) = SWDDIR*0.5     ! direct  nir
+              SOLAI(1) = SWDDIF*0.5     ! diffuse vis
+              SOLAI(2) = SWDDIF*0.5     ! diffuse nir
+          end if
        END IF
-
-       SOLAD(1) = SWDOWN*0.7*0.5     ! direct  vis
-       SOLAD(2) = SWDOWN*0.7*0.5     ! direct  nir
-       SOLAI(1) = SWDOWN*0.3*0.5     ! diffuse vis
-       SOLAI(2) = SWDOWN*0.3*0.5     ! diffuse nir
 
        PRCP = PRCPCONV + PRCPNONC + PRCPSHCV
 
@@ -1603,32 +1618,33 @@ ENDIF   ! CROPTYPE == 0
    ERRSW   = SWDOWN - (FSA + FSR)
 !   ERRSW   = SWDOWN - (SAV+SAG + FSRV+FSRG)
    IF (ABS(ERRSW) > 0.1) THEN            ! w/m2  ! BK 2022/10/14: modified to prevent error when running with cray-compiled icar
-    WRITE(*,*) "ERRSW =",ERRSW
-   write(*,*) "SWDOWN=", SWDOWN 
-   write(*,*) "(FSA + FSR)=", (FSA + FSR)
-   write(*,*) "FSA =", (FSA)
-   write(*,*) "FSR=", FSR
-   WRITE(*,*) "VEGETATION!"
-   WRITE(*,*) "SWDOWN*FVEG =",SWDOWN*FVEG
-   WRITE(*,*) "FVEG*(SAV+SAG) =",FVEG*SAV + SAG
-   WRITE(*,*) "FVEG*(FSRV +FSRG)=",FVEG*FSRV + FSRG
-   WRITE(*,*) "GROUND!"
-   WRITE(*,*) "(1-.FVEG)*SWDOWN =",(1.-FVEG)*SWDOWN
-   WRITE(*,*) "(1.-FVEG)*SAG =",(1.-FVEG)*SAG
-   WRITE(*,*) "(1.-FVEG)*FSRG=",(1.-FVEG)*FSRG
-   WRITE(*,*) "FSRV   =",FSRV
-   WRITE(*,*) "FSRG   =",FSRG
-   WRITE(*,*) "FSR    =",FSR
-   WRITE(*,*) "SAV    =",SAV
-   WRITE(*,*) "SAG    =",SAG
-   WRITE(*,*) "FSA    =",FSA
-   WRITE(*,*) "IST    =",IST
-   WRITE(*,*) "ILOC    =",ILOC
-   WRITE(*,*) "JLOC    =",JLOC
+   !WRITE(*,*) "ERRSW =",ERRSW
+   !write(*,*) "SWDOWN=", SWDOWN 
+   !write(*,*) "(FSA + FSR)=", (FSA + FSR)
+   !write(*,*) "FSA =", (FSA)
+   !write(*,*) "FSR=", FSR
+   !WRITE(*,*) "VEGETATION!"
+   !WRITE(*,*) "SWDOWN*FVEG =",SWDOWN*FVEG
+   !WRITE(*,*) "FVEG*(SAV+SAG) =",FVEG*SAV + SAG
+   !WRITE(*,*) "FVEG*(FSRV +FSRG)=",FVEG*FSRV + FSRG
+   !WRITE(*,*) "GROUND!"
+   !WRITE(*,*) "(1-.FVEG)*SWDOWN =",(1.-FVEG)*SWDOWN
+   !WRITE(*,*) "(1.-FVEG)*SAG =",(1.-FVEG)*SAG
+   !WRITE(*,*) "(1.-FVEG)*FSRG=",(1.-FVEG)*FSRG
+   !WRITE(*,*) "FSRV   =",FSRV
+   !WRITE(*,*) "FSRG   =",FSRG
+   !WRITE(*,*) "FSR    =",FSR
+   !WRITE(*,*) "SAV    =",SAV
+   !WRITE(*,*) "SAG    =",SAG
+   !WRITE(*,*) "FSA    =",FSA
+   !WRITE(*,*) "IST    =",IST
+   !WRITE(*,*) "ILOC    =",ILOC
+   !WRITE(*,*) "JLOC    =",JLOC
+   
 !jref:end
-      WRITE(message,*) 'ERRSW =',ERRSW
-      WRITE(*,*) "Stop in Noah-MP"
-      STOP
+      !WRITE(message,*) 'ERRSW =',ERRSW
+      !WRITE(*,*) "Stop in Noah-MP"
+      !STOP
 !      call wrf_message(trim(message))
 !      call wrf_error_fatal("Stop in Noah-MP")
    END IF
@@ -3399,6 +3415,7 @@ ENDIF   ! CROPTYPE == 0
            GAP     = 1.0-FVEG
            KOPEN   = 1.0-FVEG
          END IF
+         
      end if
 
 ! calculate two-stream parameters OMEGA, BETAD, BETAI, AVMU, GDIR, EXT.
@@ -3417,7 +3434,7 @@ ENDIF   ! CROPTYPE == 0
      EXT    = GDIR/COSZI
      AVMU   = ( 1. - PHI1/PHI2 * LOG((PHI1+PHI2)/PHI1) ) / PHI2
      OMEGAL = RHO(IB) + TAU(IB)
-     TMP0   = GDIR + PHI2*COSZI
+     TMP0   = MAX(GDIR + PHI2*COSZI,1e-6)
      TMP1   = PHI1*COSZI
      ASU    = 0.5*OMEGAL*GDIR/TMP0 * ( 1.-TMP1/TMP0*LOG((TMP1+TMP0)/TMP1) )
      BETADL = (1.+AVMU*EXT)/(OMEGAL*AVMU*EXT)*ASU
@@ -3442,21 +3459,24 @@ ENDIF   ! CROPTYPE == 0
 
 ! absorbed, reflected, transmitted fluxes per unit incoming radiation
 
-     B = 1. - OMEGA + OMEGA*BETAI
+     B = 1.0 - OMEGA + OMEGA*BETAI
      C = OMEGA*BETAI
      TMP0 = AVMU*EXT
      D = TMP0 * OMEGA*BETAD
-     F = TMP0 * OMEGA*(1.-BETAD)
+     F = TMP0 * OMEGA*(1.0-BETAD)
      TMP1 = B*B - C*C
      H = SQRT(TMP1) / AVMU
      SIGMA = TMP0*TMP0 - TMP1
-     if ( ABS (SIGMA) < 1.e-6 ) SIGMA = SIGN(1.e-6,SIGMA)
+     if ( ABS (SIGMA) < 1.0e-6 ) SIGMA = SIGN(1.0e-6,SIGMA)
      P1 = B + AVMU*H
      P2 = B - AVMU*H
      P3 = B + TMP0
      P4 = B - TMP0
-     S1 = EXP(-H*VAI)
-     S2 = EXP(-EXT*VAI)
+     
+     !Limits on S1 and S2 coming from CLM documentation
+     S1 = EXP(-MIN(H*VAI,40.))
+     S2 = EXP(-MIN(EXT*VAI,40.))
+          
      IF (IC .EQ. 0) THEN
         U1 = B - C/ALBGRD(IB)
         U2 = B - C*ALBGRD(IB)
@@ -3486,7 +3506,6 @@ ENDIF   ! CROPTYPE == 0
      H8 = (-C*TMP3*S1) / D1
      H9 = TMP4 / (D2*S1)
      H10 = (-TMP5*S1) / D2
-
 ! downward direct and diffuse fluxes below vegetation
 ! Niu and Yang (2004), JGR.
 
@@ -3501,7 +3520,6 @@ ENDIF   ! CROPTYPE == 0
      FTI(IB) = FTIS
 
 ! flux reflected by the surface (veg. and ground)
-
      IF (IC .EQ. 0) THEN
         FRES   = (H1/SIGMA + H2 + H3)*(1.0-GAP  ) + ALBGRD(IB)*GAP
         FREVEG = (H1/SIGMA + H2 + H3)*(1.0-GAP  )
@@ -4567,12 +4585,12 @@ ENDIF   ! CROPTYPE == 0
     REAL,              INTENT(INOUT) :: FH     !sen heat stability correction, weighted by prior iters
     REAL,              INTENT(INOUT) :: FM2    !sen heat stability correction, weighted by prior iters
     REAL,              INTENT(INOUT) :: FH2    !sen heat stability correction, weighted by prior iters
+    REAL,              INTENT(INOUT) :: FV     !friction velocity (m/s)
 
 ! outputs
 
     REAL,                INTENT(OUT) :: CM     !drag coefficient for momentum
     REAL,                INTENT(OUT) :: CH     !drag coefficient for heat
-    REAL,                INTENT(OUT) :: FV     !friction velocity (m/s)
     REAL,                INTENT(OUT) :: CH2    !drag coefficient for heat
 
 ! locals
