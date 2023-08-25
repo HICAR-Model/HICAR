@@ -114,10 +114,7 @@ do tt = 1, Nt
 
 end do
 
-call CUMULATE_interface(Roff, meltflux_out,Sbsrf,Sdirt,Sdift,LWt,asrf_out,Melt, &
-              Esrf,Eveg,Gsoil,Hsrf,intcpt,KH,KHa,Khg,KHv,KWg,KWv,  &
-              LE,LEsrf,LWsci,LWveg,Rnet,Rsrf,Sbveg,H,Swsci,SWsrf,  &
-              SWveg,Usc,unload)
+call CUMULATE_interface(Roff,meltflux_out,Esrf,Gsoil,KH,LE,Melt,Rnet,H)
 
 if (CHECKS /= 0) then
   call CHECK_SNOWPACK

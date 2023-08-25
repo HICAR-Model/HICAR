@@ -62,7 +62,9 @@ do i = 1,Nx
   Rf(i,j) = Rf(i,j)/dt
   Tc(i,j) = Ta(i,j) - Tm
   es(i,j) = e0*exp(17.5043*Tc(i,j)/(241.3 + Tc(i,j)))
-  Qa(i,j) = (RH(i,j)/100)*eps*es(i,j)/Ps(i,j)
+  RH(i,j) = 100*Qa(i,j)*Ps(i,j)/(eps*es(i,j))
+  
+  !Qa(i,j) = (RH(i,j)/100)*eps*es(i,j)/Ps(i,j)
   
   ! Fix for Udir: in WindNinja outputs, if Ua=0, then Udir=NaN, which creates an error in SNOWTRAN3D
   if (SNTRAN == 1) then

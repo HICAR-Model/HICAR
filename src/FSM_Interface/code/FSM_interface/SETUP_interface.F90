@@ -506,7 +506,6 @@ else ! CANMOD == 1
   hcan(:,:)    =0.0   !!!!!!!!---->read(1135) hcan
   lai(:,:)     =0.0   !!!!!!!!---->read(1136) lai
   vfhp(:,:)    =1.0   !!!!!!!!---->read(1137) vfhp
-  pmultf(:,:)  =1.0   !!!!!!!!---->read(1140) pmultf
 
   ! derived canopy properties 
   VAI(:,:) = lai(:,:) 
@@ -540,4 +539,4 @@ if (SNSLID == 1) then
   !!!!!! read(1143) index_grid_dem_sorted
 endif
 
-end subroutine SETUP
+end subroutine SETUP_interface

@@ -29,11 +29,14 @@ module FSM_interface
       Ua,                &! Wind speed (m/s)
       Udir                ! Wind direction
 
+    use PARAMETERS, only : &
+      z0sn              ! Snow roughness length (m)
 
 !-----------------------------------------------------------------------
 ! Model state variables  
 !-----------------------------------------------------------------------
     use STATE_VARIABLES, only: &
+      firstit,           &
       Tsrf,              &! Surface skin temperature (K)
       Tsnow,             &! Snow layer temperatures (K)
       Sice,              &! Ice content of snow layers (kg/m^2)
@@ -49,13 +52,13 @@ module FSM_interface
 !-----------------------------------------------------------------------
     use MODULES_interface
            
-    use SNOWTRAN3D, only : SNOWTRAN3D_setup,SNOWTRAN3D_fluxes,SNOWTRAN3D_accum, STRAN_NORTH, STRAN_SOUTH, STRAN_EAST, STRAN_WEST, Utau, Utau_t, Ds_soft
+    use SNOWTRAN3D_interface, only : SNOWTRAN3D_setup,SNOWTRAN3D_fluxes,SNOWTRAN3D_accum, STRAN_NORTH, STRAN_SOUTH, STRAN_EAST, STRAN_WEST
 
     implicit none
     
     private
     !!
-    public :: FSM_SETUP,FSM_DRIVE,FSM_PHYSICS,FSM_SNOWSLIDE, FSM_CUMULATE_SD, FSM_SNOWTRAN_SETUP, FSM_SNOWTRAN_FLUXES, FSM_SNOWTRAN_ACCUM
+    public :: FSM_SETUP,FSM_DRIVE,FSM_PHYSICS,FSM_SNOWSLIDE, FSM_SNOWSLIDE_END, FSM_CUMULATE_SD, FSM_SNOWTRAN_SETUP, FSM_SNOWTRAN_FLUXES, FSM_SNOWTRAN_ACCUM
     
     public :: Nx_HICAR, Ny_HICAR,lat_HICAR,lon_HICAR,terrain_HICAR,dx_HICAR,slope_HICAR,shd_HICAR, STRAN_NORTH, STRAN_SOUTH, STRAN_EAST, STRAN_WEST, SNTRAN, SNSLID
     !!
@@ -74,7 +77,8 @@ module FSM_interface
       Sf,                &
       Sf24h,             &
       Ta,                &
-      Ua           
+      Ua,                &
+      Udir
     public ::  	&
       firstit,           &
       Tsrf,              &
@@ -86,7 +90,8 @@ module FSM_interface
       Nsnow,             &
       Tsoil,             &
       albs,              &
-      theta
+      theta,             &
+      z0sn
     public ::  	&
       Esrf_,       &
       Gsoil_,      &
@@ -146,38 +151,56 @@ module FSM_interface
     end subroutine FSM_CUMULATE_SD
 
 
-    subroutine FSM_SNOWSLIDE(aval,frame_in)
+    subroutine FSM_SNOWSLIDE(snowdepth0,Sice0,snowdepth0_buff,Sice0_buff,aval,first_it,dm_slide)
         implicit none
         
-        logical, intent(in) :: &
-          aval(Nx,Ny)
-          
-        logical, optional, intent(in) :: &
-          frame_in
-        
-        real :: &
-          snowdepth0(Nx,Ny), &
-          Sice0(Nx,Ny), &
-          dm_slide(Nx,Ny)
-          
-        logical :: FRAME
-        
-        if (SNSLID==1) then
-            snowdepth0(:,:) = 0.
-            Sice0(:,:) = 0.
-            dm_slide(:,:) = 0.
+        real, intent(inout) :: &
+          snowdepth0(Nx_HICAR,Ny_HICAR), &
+          Sice0(Nx_HICAR,Ny_HICAR),      &
+          dm_slide(Nx_HICAR,Ny_HICAR)
+        real, intent(out) :: &
+          snowdepth0_buff(Nx_HICAR,Ny_HICAR), &
+          Sice0_buff(Nx_HICAR,Ny_HICAR)
 
-            FRAME = .False.
-            if (present(frame_in)) FRAME = frame_in
+        logical, intent(inout) :: &
+          first_it,               &
+          aval(Nx_HICAR,Ny_HICAR)
+          
+        real :: &
+          snowdepth0_temp(Nx_HICAR,Ny_HICAR), &
+          Sice0_temp(Nx_HICAR,Ny_HICAR)
+          
+
+        if (SNSLID==1) then
+        
             
-            call SNOWSLIDE_interface(snowdepth0,Sice0,dm_slide,FRAME,aval)
-        
-            ! Accumulation of new snow, calculation of snow cover fraction and relayering
-            call SNOW_LAYERING(snowdepth0,Sice0)
-        
-            call CUMULATE_SNOWSLIDE_interface(dm_slide)
+            !Run over all cells, not removing snow from image border
+            call SNOWSLIDE_interface(snowdepth0,Sice0,dm_slide,first_it,.False.,aval)
+
+            !Save Sice0 and snowdepth0 to output buffers to hand to HICAR for exchange
+            snowdepth0_buff = snowdepth0
+            Sice0_buff = Sice0
+            first_it = .False.
+            !Run over image border cells to adjust snowdepth0 and sice0
+            call SNOWSLIDE_interface(snowdepth0,Sice0,dm_slide,first_it,.True.,aval)
         endif
+        
     end subroutine FSM_SNOWSLIDE
+    
+    subroutine FSM_SNOWSLIDE_END(snowdepth0,Sice0)
+        implicit none
+        
+        real, intent(in) :: &
+          snowdepth0(Nx_HICAR,Ny_HICAR), &
+          Sice0(Nx_HICAR,Ny_HICAR)
+          
+        ! Accumulation of new snow, calculation of snow cover fraction and relayering
+        call SNOW_LAYERING(snowdepth0,Sice0)
+
+        call CUMULATE_SD_interface()
+
+    end subroutine FSM_SNOWSLIDE_END
+
 
     subroutine FSM_SNOWTRAN_SETUP()
         implicit none
@@ -189,7 +212,7 @@ module FSM_interface
     subroutine FSM_SNOWTRAN_FLUXES(DIR)
         implicit none
         
-        integer, intent(in) :: DIR
+        integer, optional, intent(in) :: DIR
         
         if (SNTRAN==1) then
             if (present(DIR)) then
@@ -208,12 +231,12 @@ module FSM_interface
         implicit none
         
         real :: &
-          snowdepth0(Nx,Ny), &
-          Sice0(Nx,Ny), &
-          dm_salt(Nx,Ny), &
-          dm_susp(Nx,Ny), &
-          dm_subl(Nx,Ny), &
-          dm_subgrid(Nx,Ny)
+          snowdepth0(Nx_HICAR,Ny_HICAR), &
+          Sice0(Nx_HICAR,Ny_HICAR), &
+          dm_salt(Nx_HICAR,Ny_HICAR), &
+          dm_susp(Nx_HICAR,Ny_HICAR), &
+          dm_subl(Nx_HICAR,Ny_HICAR), &
+          dm_subgrid(Nx_HICAR,Ny_HICAR)
 
         if (SNTRAN==1) then
             snowdepth0(:,:) = 0.

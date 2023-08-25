@@ -8,7 +8,7 @@
 ! West of (i,j): (i,j-1)
 ! East of (i,j): (i,j+1)
 !-----------------------------------------------------------------------
-subroutine SNOWSLIDE_interface(snowdepth0,Sice0,dm_slide,frame_in,snow_depo_in)
+subroutine SNOWSLIDE_interface(snowdepth0,Sice0,dm_slide,first_it,FRAME,snow_depo)
 
 use GRID, only: &
   Nx,Ny                     ! Grid dimensions
@@ -38,9 +38,10 @@ real, intent(inout) :: &
   Sice0(Nx,Ny),            &! Ice content of deposited snow (kg/m^2)
   dm_slide(Nx,Ny)           ! SWE change due to snow slides (kg/m^2)
 
-logical, optional, intent(in) :: &
-  frame_in,                &! Controls if this is a "frame" call
-  snow_depo_in(Nx,Ny)       ! If supplied, boundary values of this array are passed to snow_depo after init
+logical, intent(inout) :: &
+  first_it,                &! Controls if minimum slope angle should triger initial avalanches
+  FRAME,                   &! Controls if this is a "frame" call
+  snow_depo(Nx,Ny)          ! If supplied, boundary values of this array are passed to snow_depo after init
   
 integer :: &
   !is_sorted,               &! Boolean indicating if the DEM vector is sorted by decreasing elevations
@@ -48,8 +49,6 @@ integer :: &
   n                         ! Vector point counter
 
 logical :: &
-  FRAME,                   &!Conditional controlling if a frame run. Default is False
-  snow_depo(Nx,Ny),        &! Boolean to identify pixels where snow is deposited
   frame_indx,              &! Boolean to identify if we are on an image frame index
   n_edge,                  &! Index is on north edge
   s_edge,                  &! Index is on south edge
@@ -87,25 +86,6 @@ real :: &
   Shd_corr(Nx,Ny),         &! Snow holding depth, thresholded (m)
   snowdepth(Nx,Ny)          ! Snow depth averaged over the grid cell before slides (m)
 
-! Initialize snow_depo array
-snow_depo(:,:) = .FALSE.
-
-FRAME = .False.
-if (present(frame_in)) FRAME = frame_in
-
-if (present(snow_depo_in)) then
-  if (FRAME) then
-    snow_depo(2,:) = snow_depo_in(2,:)
-    snow_depo(Nx-1,:) = snow_depo_in(Nx-1,:)
-    snow_depo(:,2) = snow_depo_in(:,2)
-    snow_depo(:,Ny-1) = snow_depo_in(:,Ny-1)
-  else
-    snow_depo(1,:) = snow_depo_in(1,:)
-    snow_depo(Nx,:) = snow_depo_in(Nx,:)
-    snow_depo(:,1) = snow_depo_in(:,1)
-    snow_depo(:,Ny) = snow_depo_in(:,Ny)
-  endif
-endif
 
 ! Compute snowdepth before snow slides, and threshold the snow holding depth with Shd_min
 do j = 1, Ny
@@ -154,7 +134,7 @@ do n = 1, Nx*Ny
 
   ! Start slide processes only if slope higher than the defined minimum. 
   ! If it is a pixel receiving avalanche snow, no slope threshold.
-  if (slope(i,j) >= slope_min .or. snow_depo(i,j)) then
+  if ((slope(i,j) >= slope_min .and. first_it) .or. snow_depo(i,j)) then
 
     ! Update snowdepth in case snow has been transported to this pixel earlier in the loop
     snowdepth_updated = sum(Ds(:,i,j)) * fsnow(i,j) + snowdepth0(i,j)
