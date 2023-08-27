@@ -1476,9 +1476,9 @@ contains
                     enddo
                 enddo
                 if (options%lsm_options%monthly_albedo) then
-                    if (cur_vegmonth /= domain%model_time%month) then
-                        ALBEDO = domain%albedo%data_3d(:, domain%model_time%month, :)
-                    endif
+                    ALBEDO = domain%albedo%data_3d(:, domain%model_time%month, :)
+                else
+                    ALBEDO = domain%albedo%data_3d(:, 1, :)
                 endif
                 if (options%lsm_options%monthly_vegfrac) then
                     if (cur_vegmonth /= domain%model_time%month) then
@@ -1693,7 +1693,12 @@ contains
                              ims,ime,  jms,jme,  kms,kme,              &
                              its,ite,  jts,jte,  kts,kte)
 
-                domain%albedo%data_3d(:, domain%model_time%month, :) = ALBEDO
+                if (options%lsm_options%monthly_albedo) then
+                    domain%albedo%data_3d(:, domain%model_time%month, :) = ALBEDO
+                else
+                    domain%albedo%data_3d(:, 1, :) = ALBEDO
+                endif
+
                 VEGFRAC = domain%vegetation_fraction_out%data_2d(:, :)*100.0
 
                 if ( .not.(options%physics%snowmodel==kSM_FSM)) then

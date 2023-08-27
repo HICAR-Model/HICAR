@@ -161,7 +161,7 @@ contains
         call options%alloc_vars( &
                      [kVARS%pressure,     kVARS%pressure_interface,    kVARS%potential_temperature,   kVARS%exner,            &
                       kVARS%shortwave, kVARS%shortwave_direct, kVARS%shortwave_diffuse,   kVARS%longwave,                                                                     &
-                      kVARS%re_cloud,     kVARS%re_ice,                kVARS%re_snow,                 kVARS%out_longwave_rad, &
+                      kVARS%out_longwave_rad, &
                       kVARS%land_mask,    kVARS%snow_water_equivalent,                                                        &
                       kVARS%dz_interface, kVARS%skin_temperature,      kVARS%temperature,             kVARS%density,          &
                       kVARS%longwave_cloud_forcing,                    kVARS%land_emissivity,         kVARS%temperature_interface,  &
@@ -173,7 +173,7 @@ contains
         call options%restart_vars( &
                      [kVARS%pressure,     kVARS%pressure_interface,    kVARS%potential_temperature,   kVARS%exner,            &
                       kVARS%water_vapor,  kVARS%shortwave, kVARS%shortwave_direct, kVARS%shortwave_diffuse,    kVARS%longwave,                                                 &          
-                      kVARS%re_cloud,     kVARS%re_ice,                kVARS%re_snow,                 kVARS%out_longwave_rad, &
+                      kVARS%out_longwave_rad, &
                       kVARS%snow_water_equivalent,                                                                            &
                       kVARS%dz_interface, kVARS%skin_temperature,      kVARS%temperature,             kVARS%density,          &
                       kVARS%longwave_cloud_forcing,                    kVARS%land_emissivity, kVARS%temperature_interface,    &
@@ -206,10 +206,12 @@ contains
         integer :: i, k
         real, allocatable:: t_1d(:), p_1d(:), Dz_1d(:), qv_1d(:), qc_1d(:), qi_1d(:), qs_1d(:), cf_1d(:)
         real, allocatable :: qc(:,:,:),qi(:,:,:), qs(:,:,:), qg(:,:,:), qr(:,:,:), cldfra(:,:,:)
+        real, allocatable :: re_c(:,:,:),re_i(:,:,:), re_s(:,:,:)
+
         real, allocatable :: xland(:,:)
 
         logical :: f_qr, f_qc, f_qi, F_QI2, F_QI3, f_qs, f_qg, f_qv, f_qndrop
-        integer :: mp_options
+        integer :: mp_options, F_REC, F_REI, F_RES
         
         
         !! MJ added
@@ -251,6 +253,11 @@ contains
         allocate(qs(ims:ime,kms:kme,jms:jme))
         allocate(qg(ims:ime,kms:kme,jms:jme))
         allocate(qr(ims:ime,kms:kme,jms:jme))
+        
+        allocate(re_c(ims:ime,kms:kme,jms:jme))
+        allocate(re_i(ims:ime,kms:kme,jms:jme))
+        allocate(re_s(ims:ime,kms:kme,jms:jme))
+
         allocate(cldfra(ims:ime,kms:kme,jms:jme))
         allocate(xland(ims:ime,jms:jme))
 
@@ -275,6 +282,10 @@ contains
         qg = 0
         qr = 0
         
+        re_c = 0
+        re_i = 0
+        re_s = 0
+        
         cldfra=0
 
         F_QI=.false.
@@ -287,6 +298,10 @@ contains
         f_qndrop=.false.
         F_QV=.false.
         
+        F_REC=0
+        F_REI=0
+        F_RES=0
+
         F_QI=associated(domain%cloud_ice_mass%data_3d )
         F_QC=associated(domain%cloud_water_mass%data_3d )
         F_QR=associated(domain%rain_mass%data_3d )
@@ -296,6 +311,11 @@ contains
         F_QNDROP=associated(domain%cloud_number%data_3d)
         F_QI2=associated(domain%ice2_mass%data_3d)
         F_QI3=associated(domain%ice3_mass%data_3d)
+        
+        if(associated(domain%re_cloud%data_3d)) F_REC = 1
+        if(associated(domain%re_ice%data_3d)) F_REI = 1
+        if(associated(domain%re_snow%data_3d)) F_RES = 1
+        
 
         if (F_QG) qg(:,:,:) = domain%graupel_mass%data_3d
         if (F_QC) qc(:,:,:) = domain%cloud_water_mass%data_3d
@@ -304,6 +324,10 @@ contains
         if (F_QI3) qi(:,:,:) = qi + domain%ice3_mass%data_3d
         if (F_QS) qs(:,:,:) = domain%snow_mass%data_3d
         if (F_QR) qr(:,:,:) = domain%rain_mass%data_3d
+
+        if (F_REC > 0) re_c(:,:,:) = domain%re_cloud%data_3d
+        if (F_REI > 0) re_i(:,:,:) = domain%re_ice%data_3d
+        if (F_RES > 0) re_s(:,:,:) = domain%re_snow%data_3d
 
         mp_options=0
 
@@ -415,12 +439,12 @@ contains
                     is_cammgmp_used = .False.,                            &
                     r = Rd,                                               &
                     g = gravity,                                          &
-                    re_cloud = domain%re_cloud%data_3d,                   &
-                    re_ice   = domain%re_ice%data_3d,                     &
-                    re_snow  = domain%re_snow%data_3d,                    &
-                    has_reqc=1,                                           & ! use with icloud > 0
-                    has_reqi=1,                                           & ! use with icloud > 0
-                    has_reqs=1,                                           & ! use with icloud > 0 ! G. Thompson
+                    re_cloud = re_c,                   &
+                    re_ice   = re_i,                     &
+                    re_snow  = re_s,                    &
+                    has_reqc=F_REC,                                           & ! use with icloud > 0
+                    has_reqi=F_REI,                                           & ! use with icloud > 0
+                    has_reqs=F_RES,                                           & ! use with icloud > 0 ! G. Thompson
                     icloud = options%rad_options%icloud,                  & ! set to nonzero if effective radius is available from microphysics
                     warm_rain = .False.,                                  & ! when a dding WSM3scheme, add option for .True.
                     cldovrlp=1,                                           & ! J. Henderson AER: cldovrlp namelist value
@@ -508,12 +532,12 @@ contains
 !                           o3input, o33d,                                        &
                             f_qv=f_qv, f_qc=f_qc, f_qr=f_qr,                      &
                             f_qi=f_qi, f_qs=f_qs, f_qg=f_qg,                      &
-                            re_cloud = domain%re_cloud%data_3d,                   &
-                            re_ice   = domain%re_ice%data_3d,                     &
-                            re_snow  = domain%re_snow%data_3d,                    &
-                            has_reqc=1,                                           & ! use with icloud > 0
-                            has_reqi=1,                                           & ! use with icloud > 0
-                            has_reqs=1,                                           & ! use with icloud > 0 ! G. Thompson
+                            re_cloud = re_c,                   &
+                            re_ice   = re_i,                     &
+                            re_snow  = re_s,                    &
+                            has_reqc=F_REC,                                       & ! use with icloud > 0
+                            has_reqi=F_REI,                                       & ! use with icloud > 0
+                            has_reqs=F_RES,                                       & ! use with icloud > 0 ! G. Thompson
 !                           tauaerlw1,tauaerlw2,tauaerlw3,tauaerlw4,              & ! czhao
 !                           tauaerlw5,tauaerlw6,tauaerlw7,tauaerlw8,              & ! czhao
 !                           tauaerlw9,tauaerlw10,tauaerlw11,tauaerlw12,           & ! czhao
@@ -534,6 +558,13 @@ contains
 !                           lwupflx, lwupflxc, lwdnflx, lwdnflxc,                  &
                             read_ghg=options%rad_options%read_ghg                  &
                             )
+                            
+                ! If the user has provided sky view fraction, then apply this to the diffuse SW now, 
+                ! since svf is time-invariant
+                if (associated(domain%svf%data_2d)) then
+                    domain%shortwave_diffuse%data_2d=domain%shortwave_diffuse%data_2d*domain%svf%data_2d
+                endif
+                
                 domain%tend_swrad%data_3d = domain%tend%th_swrad
             endif
             domain%potential_temperature%data_3d = domain%potential_temperature%data_3d+domain%tend%th_lwrad*dt+domain%tend%th_swrad*dt
@@ -573,16 +604,18 @@ contains
                         elseif (trans_atm>0.8) then
                             ratio_dif=0.165
                         endif
-                        domain%shortwave_diffuse%data_2d(i,j)=ratio_dif*domain%shortwave%data_2d(i,j)
-                        domain%shortwave_direct%data_2d(i,j) = max( domain%shortwave%data_2d(i,j) - &
-                                                                    domain%shortwave_diffuse%data_2d(i,j),0.0)
+                        domain%shortwave_diffuse%data_2d(i,j)= &
+                                ratio_dif*domain%shortwave%data_2d(i,j)*domain%svf%data_2d(i,j)
                     enddo
-                enddo        
+                enddo                
             endif
             !!
             zdx_max = ubound(domain%hlm%data_3d,1)
             do j = jts,jte
                 do i = its,ite
+                    domain%shortwave_direct%data_2d(i,j) = max( domain%shortwave%data_2d(i,j) - &
+                                                                    domain%shortwave_diffuse%data_2d(i,j),0.0)
+
                     ! determin maximum allowed direct swr
                     trans_atm_dir = max(min(domain%shortwave_direct%data_2d(i,j)/&
                                     (1367*sin(solar_elevation_store(i,j)+1.e-4)),1.),0.)  ! atmospheric transmissivity for direct sw radiation
@@ -604,7 +637,6 @@ contains
                         domain%shortwave_direct_above%data_2d(i,j)=0.
                         domain%shortwave_direct%data_2d(i,j)=0.
                     endif
-                    domain%shortwave_diffuse%data_2d(i,j)=domain%shortwave_diffuse%data_2d(i,j)*domain%svf%data_2d(i,j)
                     domain%shortwave_total%data_2d(i,j) = domain%shortwave_diffuse%data_2d(i,j) + &
                                                           domain%shortwave_direct%data_2d(i,j)
                     !if (this_image()==2) write(*,*),"1-- ele,ele_TJ,elev_th,azim, proj ", trim(domain%model_time%as_string()),solar_elevation_store(i,j)*180./pi, solar_elevation_store_test(i,j), elev_th*180./pi, solar_azimuth_store(i,j)*180./pi, acos(cos_project_angle(i,j))*180./pi 

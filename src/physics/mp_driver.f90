@@ -210,7 +210,7 @@ contains
                        kVARS%cloud_ice,   kVARS%rain_in_air,           kVARS%ice_number_concentration, kVARS%ice1_a, &
                        kVARS%ice1_c, kVARS%ice2_mass, kVARS%ice2_number, kVARS%ice2_a, kVARS%ice2_c, &
                        kVARS%ice3_mass, kVARS%ice3_number, kVARS%ice3_a, kVARS%ice3_c, &
-                       kVARS%snowfall,    kVARS%precipitation,  kVARS%dz,   kVARS%re_cloud, kVARS%re_ice, kVARS%re_snow, &
+                       kVARS%snowfall,    kVARS%precipitation,  kVARS%dz,   kVARS%re_cloud, kVARS%re_ice, &
                        kVARS%ice1_rho, kVARS%ice1_phi, kVARS%ice2_rho, kVARS%ice2_phi, kVARS%ice3_rho, kVARS%ice3_phi  ])
 
         ! List the variables that are required to be advected for the simple microphysics
@@ -227,7 +227,7 @@ contains
                        kVARS%cloud_ice,   kVARS%rain_in_air,           kVARS%ice_number_concentration, kVARS%ice1_a, &
                        kVARS%ice1_c, kVARS%ice2_mass, kVARS%ice2_number, kVARS%ice2_a, kVARS%ice2_c, &
                        kVARS%ice3_mass, kVARS%ice3_number, kVARS%ice3_a, kVARS%ice3_c, &
-                       kVARS%snowfall,    kVARS%precipitation,  kVARS%dz,   kVARS%re_cloud, kVARS%re_ice, kVARS%re_snow    ])
+                       kVARS%snowfall,    kVARS%precipitation,  kVARS%dz,   kVARS%re_cloud, kVARS%re_ice    ])
 
 
 
