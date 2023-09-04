@@ -3786,11 +3786,7 @@ contains
 
         ! temporary to hold the variable to be interpolated to
         type(variable_t) :: var_to_update
-        
-        
-        !Ensure that input data for hydrometeors after interpolation have been forced to 0-minimum
-        call this%enforce_limits(update_in=.True.)
-
+                
         ! make sure the dictionary is reset to point to the first variable
         call this%variables_to_force%reset_iterator()
 
@@ -4132,6 +4128,8 @@ contains
             !this%w_real%data_3d = 0
         endif
         
+        !Ensure that input data for hydrometeors after interpolation have been forced to 0-minimum
+        call this%enforce_limits(update_in=update_only)
 
     end subroutine
 
@@ -4281,9 +4279,8 @@ contains
                 call vinterp(var_data, temp_3d, forcing%geo_agl%vert_lut)
             else
                 call vinterp(var_data, temp_3d, forcing%geo%vert_lut)
-
             endif
-
+            
         ! Interpolate to the u staggered grid
         else if (uvar) then
 
