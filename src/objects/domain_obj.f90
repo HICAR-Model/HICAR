@@ -1346,9 +1346,15 @@ contains
                        options%parameters%hgt_hi,                 &
                        temporary_data, this%grid)
         this%terrain%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
-        this%global_terrain = temporary_data ! save the global terrain map for the linear wind solution
-
-
+        
+        allocate(this%neighbor_terrain(this%ihs:this%ihe, this%jhs:this%jhe), &
+                    source=temporary_data(this%ihs:this%ihe, this%jhs:this%jhe))
+        
+        if ( (options%physics%windtype == kWIND_LINEAR) .or. (options%physics%windtype == kLINEAR_OBRIEN_WINDS) .or. &
+             (options%physics%windtype == kLINEAR_ITERATIVE_WINDS) ) then
+            this%global_terrain = temporary_data ! save the global terrain map for the linear wind solution
+        end if
+        
         ! here we just initialize the first level of geo_u and geo_v with the terrain height.  3D Z will be defined later
         associate(g => this%u_grid2d_ext, geo => this%geo_u)
             call array_offset_x(temporary_data, temp_offset)
@@ -1373,7 +1379,7 @@ contains
 
         call make_2d_y(temporary_data, this%grid%ims, this%grid%ime)
         this%latitude%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
-        allocate(this%latitude_global, source=temporary_data)
+        ! allocate(this%latitude_global, source=temporary_data)
 
         ! Read the longitude data
         call load_data(options%parameters%init_conditions_file,   &
@@ -1381,7 +1387,7 @@ contains
                        temporary_data, this%grid)
         call make_2d_x(temporary_data, this%grid%jms, this%grid%jme)
         this%longitude%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
-        allocate(this%longitude_global, source=temporary_data)
+        ! allocate(this%longitude_global, source=temporary_data)
 
         !-----------------------------------------
         !
@@ -1395,7 +1401,7 @@ contains
                            options%parameters%ulon_hi,                &
                            temporary_data, this%u_grid)
 
-            call make_2d_y(temporary_data, 1, size(this%global_terrain,2))
+            call make_2d_y(temporary_data, 1, this%jde)
             call subset_array(temporary_data, this%u_longitude%data_2d, this%u_grid)
 
             associate(g=>this%u_grid2d_ext, var=>this%geo_u%lon)
@@ -1408,7 +1414,7 @@ contains
                            options%parameters%lon_hi,                 &
                            temporary_data, this%grid)
 
-            call make_2d_y(temporary_data, 1, size(this%global_terrain,2))
+            call make_2d_y(temporary_data, 1, this%jde)
             call array_offset_x(temporary_data, temp_offset)
             call subset_array(temp_offset, this%u_longitude%data_2d, this%u_grid)
             associate(g=>this%u_grid2d_ext, var=>this%geo_u%lon)
@@ -1423,7 +1429,7 @@ contains
                            options%parameters%ulat_hi,                &
                            temporary_data, this%u_grid)
 
-            call make_2d_x(temporary_data, 1, size(this%global_terrain,1)+1)
+            call make_2d_x(temporary_data, 1, this%ide+1)
             call subset_array(temporary_data, this%u_latitude%data_2d, this%u_grid)
             associate(g=>this%u_grid2d_ext, var=>this%geo_u%lat)
                 allocate(this%geo_u%lat(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
@@ -1435,7 +1441,7 @@ contains
                            options%parameters%lat_hi,                 &
                            temporary_data, this%grid)
 
-            call make_2d_x(temporary_data, 1, size(this%global_terrain,1)+1)
+            call make_2d_x(temporary_data, 1, this%ide+1)
             call array_offset_x(temporary_data, temp_offset)
             call subset_array(temp_offset, this%u_latitude%data_2d, this%u_grid)
             associate(g=>this%u_grid2d_ext, var=>this%geo_u%lat)
@@ -1451,7 +1457,7 @@ contains
                            options%parameters%vlon_hi,                &
                            temporary_data, this%v_grid)
 
-            call make_2d_y(temporary_data, 1, size(this%global_terrain,2)+1)
+            call make_2d_y(temporary_data, 1, this%jde+1)
             call subset_array(temporary_data, this%v_longitude%data_2d, this%v_grid)
             associate(g=>this%v_grid2d_ext, var=>this%geo_v%lon)
                 allocate(this%geo_v%lon(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
@@ -1463,7 +1469,7 @@ contains
                            options%parameters%lon_hi,                 &
                            temporary_data, this%grid)
 
-            call make_2d_y(temporary_data, 1, size(this%global_terrain,2)+1)
+            call make_2d_y(temporary_data, 1, this%jde+1)
             call array_offset_y(temporary_data, temp_offset)
             call subset_array(temp_offset, this%v_longitude%data_2d, this%v_grid)
             associate(g=>this%v_grid2d_ext, var=>this%geo_v%lon)
@@ -1478,7 +1484,7 @@ contains
                            options%parameters%vlat_hi,                &
                            temporary_data, this%v_grid)
 
-            call make_2d_x(temporary_data, 1, size(this%global_terrain,1))
+            call make_2d_x(temporary_data, 1, this%ide)
             call subset_array(temporary_data, this%v_latitude%data_2d, this%v_grid)
             associate(g=>this%v_grid2d_ext, var=>this%geo_v%lat)
                 allocate(this%geo_v%lat(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
@@ -1491,7 +1497,7 @@ contains
                            options%parameters%lat_hi,                 &
                            temporary_data, this%grid)
 
-            call make_2d_x(temporary_data, 1, size(this%global_terrain,1))
+            call make_2d_x(temporary_data, 1, this%ide)
             call array_offset_y(temporary_data, temp_offset)
             call subset_array(temp_offset, this%v_latitude%data_2d, this%v_grid)
             associate(g=>this%v_grid2d_ext, var=>this%geo_v%lat)
@@ -1675,9 +1681,10 @@ contains
 
 
 
-    subroutine allocate_z_arrays(this)
+    subroutine allocate_z_arrays(this, options)
         implicit none
-        class(domain_t), intent(inout)  :: this
+        class(domain_t),  intent(inout)  :: this
+        class(options_t), intent(in)     :: options
 
         allocate(this%jacobian(this% ims : this% ime, &
                                     this% kms : this% kme, &
@@ -1721,17 +1728,27 @@ contains
                             this%v_grid%       kms : this%v_grid%       kme,   &
                             this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
 
-        allocate(this%global_jacobian( this% ids : this% ide, &
-                                            this% kds : this% kde, &
-                                            this% jds : this% jde) )
 
-        allocate(this%global_z_interface(this% ids : this% ide,   &
-                                         this% kds : this% kde+1, &
-                                         this% jds : this% jde)   )
+        if ( (options%physics%windtype == kWIND_LINEAR) .or. (options%physics%windtype == kLINEAR_OBRIEN_WINDS) .or. &
+             (options%physics%windtype == kLINEAR_ITERATIVE_WINDS) ) then
+             
+            allocate(this%global_z_interface(this% ids : this% ide,   &
+                                             this% kds : this% kde+1, &
+                                             this% jds : this% jde)   )
 
-        allocate(this%global_dz_interface(this% ids : this% ide,   &
-                                          this% kds : this% kde,   &
-                                          this% jds : this% jde)   )
+            allocate(this%global_dz_interface(this% ids : this% ide,   &
+                                              this% kds : this% kde,   &
+                                              this% jds : this% jde)   )
+        else
+            allocate(this%global_z_interface(this% ihs : this% ihe,   &
+                                             this% khs : this% khe+1, &
+                                             this% jhs : this% jhe)   )
+
+            allocate(this%global_dz_interface(this% ihs : this% ihe,   &
+                                              this% khs : this% khe,   &
+                                              this% jhs : this% jhe)   )
+        endif
+
 
         allocate(this%delta_dzdx( this% ims+1 : this% ime,    &    ! can go to calculate delta terrain ?
                                   this% kms : this% kme,      &
@@ -1778,7 +1795,7 @@ contains
         class(domain_t), intent(inout)  :: this
         type(options_t), intent(in)     :: options
 
-        real, allocatable :: temp(:,:,:), gamma_n(:)
+        real, allocatable :: temp(:,:,:), gamma_n(:), neighbor_jacobian(:,:,:)
         integer :: i, max_level
         real :: s, n, s1, s2, gamma, gamma_min
         logical :: SLEVE
@@ -1805,8 +1822,10 @@ contains
             h2_v                  => this%h2_v,                &
             global_z_interface    => this%global_z_interface,             &
             global_dz_interface   => this%global_dz_interface,            &
-            global_terrain        => this%global_terrain,                 &
-            global_jacobian       => this%global_jacobian,                &
+            neighbor_terrain      => this%neighbor_terrain,               &
+            jacobian_u            => this%jacobian_u,                     &
+            jacobian_v            => this%jacobian_v,                     &
+            jacobian_w            => this%jacobian_w,                     &
             dzdy                  => this%dzdy,                           &
             jacobian              => this%jacobian,                       &
             smooth_height         => this%smooth_height,                  &
@@ -1817,7 +1836,7 @@ contains
             ! Still not 100% convinced this works well in cases other than flat_z_height = 0 (w sleve). So for now best to keep at 0 when using sleve?
             max_level = find_flat_model_level(options, nz, dz)
 
-            smooth_height = sum(dz(1:max_level)) !sum(global_terrain) / size(global_terrain) + sum(dz(1:max_level))
+            smooth_height = sum(dz(1:max_level))
 
             ! Terminology from Schär et al 2002, Leuenberger 2009: (can be simpliied later on, but for clarity)
             s1 = smooth_height / options%parameters%decay_rate_L_topo
@@ -1878,17 +1897,26 @@ contains
             i=kms
 
             ! use temp to store global z-interface so that global-jacobian can be calculated
-            allocate(temp(this%ids:this%ide, this%kds:this%kde, this%jds:this%jde))
 
-            temp(:,i,:)   = global_terrain
-
+            if ( (options%physics%windtype == kWIND_LINEAR) .or. (options%physics%windtype == kLINEAR_OBRIEN_WINDS) .or. &
+                 (options%physics%windtype == kLINEAR_ITERATIVE_WINDS) ) then
+                 
+                allocate(temp(this%ids:this%ide, this%kds:this%kde, this%jds:this%jde))
+                temp(:,i,:)   = this%global_terrain
+            else
+                allocate(temp(this%ihs:this%ihe, this%khs:this%khe, this%jhs:this%jhe))
+                temp(:,i,:)   = neighbor_terrain
+            endif
+            
+            allocate(neighbor_jacobian(this%ihs:this%ihe, this%khs:this%khe, this%jhs:this%jhe))
+            
             temp(:,i+1,:)  = dz_scl(i)   &
                                     + h1  *  SINH( (smooth_height/s1)**n - (dz_scl(i)/s1)**n ) / SINH((smooth_height/s1)**n)  &! large-scale terrain
                                     + h2  *  SINH( (smooth_height/s2)**n - (dz_scl(i)/s2)**n ) / SINH((smooth_height/s2)**n)   ! small terrain features
 
             global_dz_interface(:,i,:)  =  temp(:,i+1,:) - temp(:,i,:)  ! same for higher k
-            global_z_interface(:,i,:)  = global_terrain
-            global_jacobian(:,i,:) = global_dz_interface(:,i,:)/dz_scl(i)
+            global_z_interface(:,i,:)  = temp(:,i,:)
+            neighbor_jacobian(:,i,:) = global_dz_interface(this%ihs:this%ihe,i,this%jhs:this%jhe)/dz_scl(i)
 
             ! this is on the subset grid:
             z_interface(:,i,:) = temp(ims:ime,i,jms:jme)
@@ -1951,8 +1979,8 @@ contains
                         write(*,*)  "min max dz_interface: ",MINVAL(dz_interface(:,i,:)),MAXVAL(dz_interface(:,i,:))
                         error stop
                     endif
-                    else if ( ANY(global_dz_interface(:,i,:)<=0.01) ) then
-                    if (this_image()==1)  write(*,*) "WARNING: dz_interface very low (at level ",i,")"
+                    else if ( ANY(dz_interface(:,i,:)<=0.01) ) then
+                        write(*,*) "WARNING: dz_interface very low (at level ",i,")"
                     endif
 
                     ! - - - - -   u/v grid calculations - - - - -
@@ -1987,17 +2015,34 @@ contains
                 z(:,i,:)         =  z(:,i-1,:)           + dz_mass(:,i,:)
 
                 jacobian(:,i,:) = dz_interface(:,i,:)/dz_scl(i)
-                global_jacobian(:,i,:) = global_dz_interface(:,i,:)/dz_scl(i)
+                neighbor_jacobian(:,i,:) = global_dz_interface(this%ihs:this%ihe,i,this%jhs:this%jhe)/dz_scl(i)
 
             enddo
 
             i=kme+1
             global_z_interface(:,i,:)  = global_z_interface(:,i-1,:) + global_dz_interface(:,i-1,:)
 
-            ! if ((this_image()==1).and.(options%parameters%debug)) then
-            !     call io_write("global_jacobian.nc", "global_jacobian", global_jacobian(:,:,:) )
-            !     write(*,*) "  global jacobian minmax: ", MINVAL(global_jacobian) , MAXVAL(global_jacobian)
-            ! endif
+            if (allocated(temp)) deallocate(temp)
+            allocate(temp(this%ihs:this%ihe+1, this%khs:this%khe, this%jhs:this%jhe+1))
+
+            temp(this%ihs,:,this%jhs:this%jhe) = neighbor_jacobian(this%ihs,:,this%jhs:this%jhe)
+            temp(this%ihe+1,:,this%jhs:this%jhe) = neighbor_jacobian(this%ihe,:,this%jhs:this%jhe)
+            temp(this%ihs+1:this%ihe,:,this%jhs:this%jhe) = (neighbor_jacobian(this%ihs+1:this%ihe,:,this%jhs:this%jhe) + &
+                                                                neighbor_jacobian(this%ihs:this%ihe-1,:,this%jhs:this%jhe))/2
+            jacobian_u = temp(ims:ime+1,:,jms:jme)
+
+            temp(this%ihs:this%ihe,:,this%jhs) = neighbor_jacobian(this%ihs:this%ihe,:,this%jhs)
+            temp(this%ihs:this%ihe,:,this%jhe+1) = neighbor_jacobian(this%ihs:this%ihe,:,this%jhe)
+            temp(this%ihs:this%ihe,:,this%jhs+1:this%jhe) = (neighbor_jacobian(this%ihs:this%ihe,:,this%jhs+1:this%jhe) + &
+                                                neighbor_jacobian(this%ihs:this%ihe,:,this%jhs:this%jhe-1))/2
+            jacobian_v = temp(ims:ime,:,jms:jme+1)
+
+            jacobian_w(:,this%kme,:) = jacobian(:,this%kme,:)
+            jacobian_w(:,this%kms:this%kme-1,:) = (dz_interface(:,this%kms:this%kme-1,:)* jacobian(:,this%kms:this%kme-1,:) + &
+                                                   dz_interface(:,this%kms+1:this%kme,:)* jacobian(:,this%kms+1:this%kme,:))/ &
+                                                                                (dz_interface(:,this%kms:this%kme-1,:)+dz_interface(:,this%kms+1:this%kme,:))
+            call setup_dzdxy(this, options, neighbor_jacobian)
+
 
         end associate
 
@@ -2015,7 +2060,7 @@ contains
         class(domain_t), intent(inout)  :: this
         type(options_t), intent(in)     :: options
 
-        real, allocatable :: temp(:,:,:)
+        real, allocatable :: temp(:,:,:), global_jacobian(:,:,:)
         integer :: i, max_level
 
         associate(  ims => this%ims,      ime => this%ime,                        &
@@ -2032,16 +2077,12 @@ contains
                     terrain               => this%terrain%data_2d,                &
                     terrain_u             => this%terrain_u,                      &
                     terrain_v             => this%terrain_v,                      &
-                    h1                    => this%h1,                             &
-                    h2                    => this%h2,                             &
-                    h1_u                  => this%h1_u,                           &
-                    h2_u                  => this%h2_u,                           &
-                    h1_v                  => this%h1_v,                           &
-                    h2_v                  => this%h2_v,                           &
                     global_z_interface    => this%global_z_interface,             &
                     global_dz_interface   => this%global_dz_interface,            &
-                    global_terrain        => this%global_terrain,                 &
-                    global_jacobian       => this%global_jacobian,                &
+                    neighbor_terrain      => this%neighbor_terrain,               &
+                    jacobian_u            => this%jacobian_u,                     &
+                    jacobian_v            => this%jacobian_v,                     &
+                    jacobian_w            => this%jacobian_w,                     &
                     dzdy                  => this%dzdy,                           &
                     jacobian              => this%jacobian,                       &
                     smooth_height         => this%smooth_height,                  &
@@ -2053,14 +2094,25 @@ contains
             i = this%grid%kms
 
             max_level = nz
+            
+            
+            if ( (options%physics%windtype == kWIND_LINEAR) .or. (options%physics%windtype == kLINEAR_OBRIEN_WINDS) .or. &
+                 (options%physics%windtype == kLINEAR_ITERATIVE_WINDS) ) then
+                global_z_interface(:,i,:)   = this%global_terrain
+                allocate(global_jacobian(this%ids:this%ide, this%kds:this%kde, this%jds:this%jde))
+            else
+                global_z_interface(:,i,:)   = neighbor_terrain
+                allocate(global_jacobian(this%ihs:this%ihe, this%khs:this%khe, this%jhs:this%jhe))
+            endif
+
 
             if (options%parameters%space_varying_dz) then
                 max_level = find_flat_model_level(options, nz, dz)
 
-                smooth_height = sum(dz(1:max_level)) !sum(global_terrain) / size(global_terrain) + sum(dz(1:max_level))
+                smooth_height = sum(dz(1:max_level))
 
                 jacobian(:,i,:) = (smooth_height - terrain) / smooth_height ! sum(dz(1:max_level))
-                global_jacobian(:,i,:) = (smooth_height - global_terrain) /smooth_height !sum(dz(1:max_level))
+                global_jacobian(:,i,:) = (smooth_height - global_z_interface(:,i,:) ) /smooth_height !sum(dz(1:max_level))
 
                 zr_u(:,i,:) = (smooth_height - z_u(:,i,:)) / smooth_height !sum(dz(1:max_level))
                 zr_v(:,i,:) = (smooth_height - z_v(:,i,:)) / smooth_height !sum(dz(1:max_level))
@@ -2077,8 +2129,7 @@ contains
             z_interface(:,i,:)  = terrain
 
             global_dz_interface(:,i,:) = dz(i) * global_jacobian(:,i,:)
-            global_z_interface(:,i,:)  = global_terrain
-
+            
 
             terrain_u =  z_u(:,i,:)  ! save for later on.
             terrain_v =  z_v(:,i,:)  ! save for later on
@@ -2123,6 +2174,28 @@ contains
 
             i = this%grid%kme + 1
             global_z_interface(:,i,:) = global_z_interface(:,i-1,:) + global_dz_interface(:,i-1,:)
+            
+            if (allocated(temp)) deallocate(temp)
+            allocate(temp(this%ihs:this%ihe+1, this%khs:this%khe, this%jhs:this%jhe+1))
+
+            temp(this%ihs,:,this%jhs:this%jhe) = global_jacobian(this%ihs,:,this%jhs:this%jhe)
+            temp(this%ihe+1,:,this%jhs:this%jhe) = global_jacobian(this%ihe,:,this%jhs:this%jhe)
+            temp(this%ihs+1:this%ihe,:,this%jhs:this%jhe) = (global_jacobian(this%ihs+1:this%ihe,:,this%jhs:this%jhe) + &
+                                                                global_jacobian(this%ihs:this%ihe-1,:,this%jhs:this%jhe))/2
+            jacobian_u = temp(ims:ime+1,:,jms:jme)
+
+            temp(this%ihs:this%ihe,:,this%jhs) = global_jacobian(this%ihs:this%ihe,:,this%jhs)
+            temp(this%ihs:this%ihe,:,this%jhe+1) = global_jacobian(this%ihs:this%ihe,:,this%jhe)
+            temp(this%ihs:this%ihe,:,this%jhs+1:this%jhe) = (global_jacobian(this%ihs:this%ihe,:,this%jhs+1:this%jhe) + &
+                                                global_jacobian(this%ihs:this%ihe,:,this%jhs:this%jhe-1))/2
+            jacobian_v = temp(ims:ime,:,jms:jme+1)
+
+            jacobian_w(:,this%kme,:) = jacobian(:,this%kme,:)
+            jacobian_w(:,this%kms:this%kme-1,:) = (dz_interface(:,this%kms:this%kme-1,:)* jacobian(:,this%kms:this%kme-1,:) + &
+                                                   dz_interface(:,this%kms+1:this%kme,:)* jacobian(:,this%kms+1:this%kme,:))/ &
+                                                                                (dz_interface(:,this%kms:this%kme-1,:)+dz_interface(:,this%kms+1:this%kme,:))
+            call setup_dzdxy(this, options, global_jacobian)
+
         end associate
 
     end subroutine setup_simple_z
@@ -2143,7 +2216,7 @@ contains
 
         call read_core_variables(this, options)
 
-        call allocate_z_arrays(this)
+        call allocate_z_arrays(this, options)
 
         ! Setup the vertical grid structure, either as a SLEVE coordinate, or a more 'simple' vertical structure:
         if (options%parameters%sleve) then
@@ -2157,53 +2230,6 @@ contains
 
         endif
 
-        !! To allow for development and debugging of coordinate transformations:
-        ! if ((this_image()==1).and.(options%parameters%debug)) then
-        !     ! call io_write("global_jacobian.nc", "global_jacobian", this%global_jacobian(:,:,:) )
-        !     write(*,*) "    global jacobian minmax: ", MINVAL(this%global_jacobian) , MAXVAL(this%global_jacobian)
-        !     write(*,*) ""
-        ! endif
-
-
-        associate(ims => this%ims,      ime => this%ime,                        &
-                  jms => this%jms,      jme => this%jme,                        &
-                  kms => this%kms,      kme => this%kme,                        &
-                  z                     => this%z%data_3d,                      &
-                  dz                    => options%parameters%dz_levels,        &
-                  dz_i                  => this%dz_interface%data_3d,           &
-                  global_jacobian       => this%global_jacobian,                &
-                  jacobian              => this%jacobian,                       &
-                  jacobian_u            => this%jacobian_u,                     &
-                  jacobian_v            => this%jacobian_v,                     &
-                  jacobian_w            => this%jacobian_w,                     &
-                  zr_u                  => this%zr_u,                           &
-                  zr_v                  => this%zr_v)
-
-
-            if (allocated(temp)) deallocate(temp)
-            allocate(temp(this%ids:this%ide+1, this%kds:this%kde, this%jds:this%jde+1))
-
-            temp(this%ids,:,this%jds:this%jde) = global_jacobian(this%ids,:,this%jds:this%jde)
-            temp(this%ide+1,:,this%jds:this%jde) = global_jacobian(this%ide,:,this%jds:this%jde)
-            temp(this%ids+1:this%ide,:,this%jds:this%jde) = (global_jacobian(this%ids+1:this%ide,:,this%jds:this%jde) + &
-                                                                global_jacobian(this%ids:this%ide-1,:,this%jds:this%jde))/2
-            jacobian_u = temp(ims:ime+1,:,jms:jme)
-
-            temp(this%ids:this%ide,:,this%jds) = global_jacobian(this%ids:this%ide,:,this%jds)
-            temp(this%ids:this%ide,:,this%jde+1) = global_jacobian(this%ids:this%ide,:,this%jde)
-            temp(this%ids:this%ide,:,this%jds+1:this%jde) = (global_jacobian(this%ids:this%ide,:,this%jds+1:this%jde) + &
-                                                global_jacobian(this%ids:this%ide,:,this%jds:this%jde-1))/2
-            jacobian_v = temp(ims:ime,:,jms:jme+1)
-
-            jacobian_w(:,this%kme,:) = jacobian(:,this%kme,:)
-            jacobian_w(:,this%kms:this%kme-1,:) = (dz_i(:,this%kms:this%kme-1,:)* jacobian(:,this%kms:this%kme-1,:) + &
-                                                   dz_i(:,this%kms+1:this%kme,:)* jacobian(:,this%kms+1:this%kme,:))/ &
-                                                                                (dz_i(:,this%kms:this%kme-1,:)+dz_i(:,this%kms+1:this%kme,:))
-            call setup_dzdxy(this, options)
-
-                ! technically these should probably be defined to the k+1 model top as well bu not used at present.
-                ! z_interface(:,i,:) = z_interface(:,i-1,:) + dz_interface(:,i-1,:)
-        end associate
 
         ! z_u and zr_u are on the v/u_grid2d_ext; move to vu_grid2d
         temp =  this%zr_u
@@ -2331,68 +2357,69 @@ contains
 
     end subroutine setup_grid_rotations
 
-    subroutine setup_dzdxy(this,options)
+    subroutine setup_dzdxy(this, options, neighbor_jacobian)
         implicit none
         class(domain_t), intent(inout)  :: this
         type(options_t), intent(in)     :: options
-
-        real, allocatable :: global_z(:,:,:)
-        real, allocatable :: global_dzdx(:,:,:)
-        real, allocatable :: global_dzdy(:,:,:)
+        real, allocatable, intent(in)   :: neighbor_jacobian(:,:,:)
+        
+        real, allocatable :: neighbor_z(:,:,:)
+        real, allocatable :: neighbor_dzdx(:,:,:)
+        real, allocatable :: neighbor_dzdy(:,:,:)
         integer :: i
 
-        allocate(global_z( this% ids : this% ide, this% kds : this% kde, this% jds : this% jde) )
-        allocate(global_dzdx( this% ids : this% ide+1, this% kds : this% kde, this% jds : this% jde) )
-        allocate(global_dzdy( this% ids : this% ide, this% kds : this% kde, this% jds : this% jde+1) )
+        allocate(neighbor_z( this% ihs : this% ihe, this% khs : this% khe, this% jhs : this% jhe) )
+        allocate(neighbor_dzdx( this% ihs : this% ihe+1, this% khs : this% khe, this% jhs : this% jhe) )
+        allocate(neighbor_dzdy( this% ihs : this% ihe, this% khs : this% khe, this% jhs : this% jhe+1) )
 
-        global_z(:,1,:) = this%global_terrain + (options%parameters%dz_levels(1)/2)*this%global_jacobian(:,1,:)
+        neighbor_z(:,1,:) = this%neighbor_terrain + (options%parameters%dz_levels(1)/2)*neighbor_jacobian(:,1,:)
 
-        do i=2,this%kme
-            global_z(:,i,:) = global_z(:,i-1,:) + (((options%parameters%dz_levels(i)) / 2)*this%global_jacobian(:,i,:)) + &
-                                                  (((options%parameters%dz_levels(i-1)) / 2)*this%global_jacobian(:,i-1,:))
+        do i=2,this%khe
+            neighbor_z(:,i,:) = neighbor_z(:,i-1,:) + (((options%parameters%dz_levels(i)) / 2)*neighbor_jacobian(:,i,:)) + &
+                                                  (((options%parameters%dz_levels(i-1)) / 2)*neighbor_jacobian(:,i-1,:))
         enddo
 
-        global_dzdx = 0
-        global_dzdy = 0
+        neighbor_dzdx = 0
+        neighbor_dzdy = 0
 
         !For dzdx
-        global_dzdx(this%ids+1:this%ide-1,:,:) = (global_z(this%ids+2:this%ide,:,:) - &
-                                                           global_z(this%ids:this%ide-2,:,:))/(2*this%dx)
+        neighbor_dzdx(this%ihs+1:this%ihe-1,:,:) = (neighbor_z(this%ihs+2:this%ihe,:,:) - &
+                                                           neighbor_z(this%ihs:this%ihe-2,:,:))/(2*this%dx)
                                                                                                           
-        global_dzdx(this%ids,:,:) = (-3*global_z(this%ids,:,:) + &
-                                          4*global_z(this%ids+1,:,:) - global_z(this%ids+2,:,:)) / (2*this%dx)
+        neighbor_dzdx(this%ihs,:,:) = (-3*neighbor_z(this%ihs,:,:) + &
+                                          4*neighbor_z(this%ihs+1,:,:) - neighbor_z(this%ihs+2,:,:)) / (2*this%dx)
                                           
-        global_dzdx(this%ide,:,:) = (3*global_z(this%ide,:,:) - &
-                                         4*global_z(this%ide-1,:,:) + global_z(this%ide-2,:,:)) / (2*this%dx)
-        this%dzdx(:,:,:) = global_dzdx(this%ims:this%ime,:,this%jms:this%jme)
+        neighbor_dzdx(this%ihe,:,:) = (3*neighbor_z(this%ihe,:,:) - &
+                                         4*neighbor_z(this%ihe-1,:,:) + neighbor_z(this%ihe-2,:,:)) / (2*this%dx)
+        this%dzdx(:,:,:) = neighbor_dzdx(this%ims:this%ime,:,this%jms:this%jme)
                   
         
-        global_dzdx(this%ids+1:this%ide,:,:) = (global_dzdx(this%ids+1:this%ide,:,:) + global_dzdx(this%ids:this%ide-1,:,:))/2.0
-        global_dzdx(this%ids,:,:) = global_dzdx(this%ids+1,:,:) 
-        global_dzdx(this%ide+1,:,:) = global_dzdx(this%ide,:,:)
+        neighbor_dzdx(this%ihs+1:this%ihe,:,:) = (neighbor_dzdx(this%ihs+1:this%ihe,:,:) + neighbor_dzdx(this%ihs:this%ihe-1,:,:))/2.0
+        neighbor_dzdx(this%ihs,:,:) = neighbor_dzdx(this%ihs+1,:,:) 
+        neighbor_dzdx(this%ihe+1,:,:) = neighbor_dzdx(this%ihe,:,:)
                 
-        this%dzdx_u(:,:,:) = global_dzdx(this%ims:this%ime+1,:,this%jms:this%jme)
+        this%dzdx_u(:,:,:) = neighbor_dzdx(this%ims:this%ime+1,:,this%jms:this%jme)
 
         !For dzdy
-        global_dzdy(:,:,this%jds+1:this%jde-1) = (global_z(:,:,this%jds+2:this%jde) - &
-                                                           global_z(:,:,this%jds:this%jde-2))/(2*this%dx)
-        global_dzdy(:,:,this%jds) = (-3*global_z(:,:,this%jms) + &
-                                          4*global_z(:,:,this%jms+1) - global_z(:,:,this%jms+2)) / (2*this%dx)
+        neighbor_dzdy(:,:,this%jhs+1:this%jhe-1) = (neighbor_z(:,:,this%jhs+2:this%jhe) - &
+                                                           neighbor_z(:,:,this%jhs:this%jhe-2))/(2*this%dx)
+        neighbor_dzdy(:,:,this%jhs) = (-3*neighbor_z(:,:,this%jms) + &
+                                          4*neighbor_z(:,:,this%jms+1) - neighbor_z(:,:,this%jms+2)) / (2*this%dx)
                                           
-        global_dzdy(:,:,this%jde) = (3*global_z(:,:,this%jde) - &
-                                         4*global_z(:,:,this%jde-1) + global_z(:,:,this%jde-2)) / (2*this%dx)
-        this%dzdy(:,:,:) = global_dzdy(this%ims:this%ime,:,this%jms:this%jme)
+        neighbor_dzdy(:,:,this%jhe) = (3*neighbor_z(:,:,this%jhe) - &
+                                         4*neighbor_z(:,:,this%jhe-1) + neighbor_z(:,:,this%jhe-2)) / (2*this%dx)
+        this%dzdy(:,:,:) = neighbor_dzdy(this%ims:this%ime,:,this%jms:this%jme)
         
-        global_dzdy(:,:,this%jds+1:this%jde) = (global_dzdy(:,:,this%jds+1:this%jde) + global_dzdy(:,:,this%jds:this%jde-1))/2.0
-        global_dzdy(:,:,this%jds) = global_dzdy(:,:,this%jds+1) 
-        global_dzdy(:,:,this%jde+1) = global_dzdy(:,:,this%jde)
+        neighbor_dzdy(:,:,this%jhs+1:this%jhe) = (neighbor_dzdy(:,:,this%jhs+1:this%jhe) + neighbor_dzdy(:,:,this%jhs:this%jhe-1))/2.0
+        neighbor_dzdy(:,:,this%jhs) = neighbor_dzdy(:,:,this%jhs+1) 
+        neighbor_dzdy(:,:,this%jhe+1) = neighbor_dzdy(:,:,this%jhe)
                 
-        this%dzdy_v(:,:,:) = global_dzdy(this%ims:this%ime,:,this%jms:this%jme+1)
+        this%dzdy_v(:,:,:) = neighbor_dzdy(this%ims:this%ime,:,this%jms:this%jme+1)
 
 
-        deallocate(global_z)
-        deallocate(global_dzdx)
-        deallocate(global_dzdy)
+        deallocate(neighbor_z)
+        deallocate(neighbor_dzdx)
+        deallocate(neighbor_dzdy)
 
     end subroutine setup_dzdxy
 
@@ -2413,35 +2440,32 @@ contains
         class(domain_t), intent(inout)  :: this
         type(options_t), intent(in)     :: options
 
-        real, allocatable :: h_org(:,:), h_u(:,:), h_v(:,:), temp(:,:), temp_offset(:,:)  ! temporary_data(:,:),
+        real, allocatable :: h_u(:,:), h_v(:,:), temp(:,:), temp_offset(:,:)  ! temporary_data(:,:),
         integer :: i !, nflt, windowsize,
 
-        allocate(h_org( this%grid2d% ids : this%grid2d% ide, &
-                        this%grid2d% jds : this%grid2d% jde) )
+        allocate(h_u( this% ihs : this% ihe+1,   &
+                      this% jhs : this% jhe) )
 
-        allocate(h_u( this%u_grid2d% ids : this%u_grid2d% ide,   &
-                      this%u_grid2d% jds : this%u_grid2d% jde) )
+        allocate(h_v( this% ihs : this% ihe,   &
+                      this% jhs : this% jhe+1) )
 
-        allocate(h_v( this%v_grid2d% ids : this%v_grid2d% ide,   &
-                      this%v_grid2d% jds : this%v_grid2d% jde) )
+        allocate(this%h1( this% ihs : this% ihe, &
+                          this% jhs : this% jhe) )
 
-        allocate(this%h1( this%grid2d% ids : this%grid2d% ide, &
-                          this%grid2d% jds : this%grid2d% jde) )
+        allocate(this%h2( this% ihs : this% ihe, &
+                          this% jhs : this% jhe) )
 
-        allocate(this%h2( this%grid2d% ids : this%grid2d% ide, &
-                          this%grid2d% jds : this%grid2d% jde) )
+        allocate(this%h1_u( this% ihs : this% ihe+1,   &
+                            this% jhs : this% jhe) )
 
-        allocate(this%h1_u( this%u_grid2d% ids : this%u_grid2d% ide,   &
-                            this%u_grid2d% jds : this%u_grid2d% jde) )
+        allocate(this%h1_v( this% ihs : this% ihe,   &
+                            this% jhs : this% jhe+1) )
 
-        allocate(this%h1_v( this%v_grid2d% ids : this%v_grid2d% ide,   &
-                            this%v_grid2d% jds : this%v_grid2d% jde) )
+        allocate(this%h2_u( this% ihs : this% ihe+1,   &
+                            this% jhs : this% jhe) )
 
-        allocate(this%h2_u( this%u_grid2d% ids : this%u_grid2d% ide,   &
-                            this%u_grid2d% jds : this%u_grid2d% jde) )
-
-        allocate(this%h2_v( this%v_grid2d% ids : this%v_grid2d% ide,   &
-                            this%v_grid2d% jds : this%v_grid2d% jde) )
+        allocate(this%h2_v( this% ihs : this% ihe,   &
+                            this% jhs : this% jhe+1) )
 
 
 
@@ -2456,7 +2480,7 @@ contains
                   h2_u                  => this%h2_u,                           &
                   h1_v                  => this%h1_v,                           &
                   h2_v                  => this%h2_v,                           &
-                  global_terrain        => this%global_terrain,                 &
+                  neighbor_terrain      => this%neighbor_terrain,                 &
                   terrain               => this%terrain%data_2d)
 
 
@@ -2479,15 +2503,15 @@ contains
 
 
         ! create a separate variable that will be smoothed later on:
-        h1 =  global_terrain(this%grid2d%ids:this%grid2d%ide, this%grid2d%jds:this%grid2d%jde)
+        h1 =  neighbor_terrain
 
         ! offset the global terrain for the h_(u/v) calculations:
-        call array_offset_x(global_terrain, temp_offset)
+        call array_offset_x(neighbor_terrain, temp_offset)
         h_u = temp_offset
         h1_u = temp_offset
         if (allocated(temp_offset)) deallocate(temp_offset)
 
-        call array_offset_y(global_terrain, temp_offset)
+        call array_offset_y(neighbor_terrain, temp_offset)
         h_v = temp_offset
         h1_v = temp_offset
 
@@ -2499,7 +2523,7 @@ contains
         enddo
 
         ! Subract the large-scale terrain from the full topography to attain the small-scale contribution:
-        h2   =  global_terrain - h1
+        h2   =  neighbor_terrain - h1
         h2_u =  h_u  - h1_u
         h2_v =  h_v  - h1_v
 
@@ -2512,7 +2536,7 @@ contains
         ! endif
 
         if (this_image()==1) then
-           write(*,*) "       Max of full topography", MAXVAL(global_terrain )
+           write(*,*) "       Max of full topography", MAXVAL(neighbor_terrain )
            write(*,*) "       Max of large-scale topography (h1)  ", MAXVAL(h1)
            write(*,*) "       Max of small-scale topography (h2)  ", MAXVAL(h2)
         end if
@@ -2585,7 +2609,7 @@ contains
         !If we don't have an Sx file saved, build one
         !if (.not.(fexist)) then
         if (this_image()==1) write(*,*) "    Calculating Sx and TPI for wind modification"
-        call calc_TPI(this)
+        call calc_TPI(this, options)
         call calc_Sx(this, options, filename)
         !endif
     
@@ -3337,6 +3361,18 @@ contains
         this%jms = this%grid%jms; this%jts = this%grid%jts; this%jds = this%grid%jds
         this%jme = this%grid%jme; this%jte = this%grid%jte; this%jde = this%grid%jde
         
+        !Calculate neighborhood indexes. These are used to store terrain in the local neighborhood for non-local wind calculations
+        
+        !Considering blocking terrain...
+        this%neighborhood_max = int(max(4000.0/this%dx,1.0))
+
+        !Considering TPI...
+        this%neighborhood_max = max(this%neighborhood_max,floor(max(1.0,options%wind%TPI_dmax/this%dx)))
+
+        this%ihs=max(this%grid%ims-this%neighborhood_max,this%grid%ids); this%ihe=min(this%grid%ime+this%neighborhood_max,this%grid%ide)
+        this%jhs=max(this%grid%jms-this%neighborhood_max,this%grid%jds); this%jhe=min(this%grid%jme+this%neighborhood_max,this%grid%jde)
+        this%khs=this%grid%kms;                                          this%khe=this%grid%kme
+
 
         my_index = FINDLOC(DOM_IMG_INDX,this_image(),dim=1)
         !If we were found/are a compute process
@@ -4332,7 +4368,7 @@ contains
                   jms => this%jms,      jme => this%jme,                        &
                   kms => this%kms,      kme => this%kme,                        &
                   terrain               => this%terrain%data_2d,                &
-                  global_terrain        => this%global_terrain,                 &
+                  neighbor_terrain      => this%neighbor_terrain,                 &
                   terrain_u             => this%terrain_u,                      &
                   terrain_v             => this%terrain_v,                      &
                   forcing_terrain       => this%forcing_terrain%data_2d,        &
@@ -4344,10 +4380,6 @@ contains
                   dzdy                  => this%dzdy,                           &
                   dz_scl                => this%dz_scl,                         &
                   smooth_height         => this%smooth_height,                  &
-                  h1_u                  => this%h1_u,                           &
-                  h2_u                  => this%h2_u,                           &
-                  h1_v                  => this%h1_v,                           &
-                  h2_v                  => this%h2_v,                           &
                   ! delta_dzdx_lc         => this%delta_dzdx,                     &
                   ! delta_dzdy_lc         => this%delta_dzdy,                     &
                   delta_dzdx_sc         => this%delta_dzdx,                     &
@@ -4365,11 +4397,11 @@ contains
         ! To prevent the wind_top (the height below which we hor.accelerate winds) from becoming too low, thus creating
         !   very large acceleration, we introduce this check.
         e = 1.2  ! <- first guess
-        if (MAXVAL(global_terrain) *e < s1 ) then
+        if (MAXVAL(neighbor_terrain) *e < s1 ) then
             wind_top = s1
             if (this_image()==1) write(*,*) "  horizontally accelerating winds below:", wind_top, "m. " !,"(Factor H/s:", H/s ,")"
         else
-            wind_top = MAXVAL(global_terrain) * e !**2
+            wind_top = MAXVAL(neighbor_terrain) * e !**2
             if (this_image()==1 )   write(*,*) "  adjusting wind top upward from ",s1 ," to ", wind_top  ,"m. Horizontally accelerating winds below this level."
         endif
         ! if (this_image()==1) write(*,*) "  s_accel max: ", wind_top, "  - h max:", MAXVAL(global_terrain)

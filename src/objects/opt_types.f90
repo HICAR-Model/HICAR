@@ -33,8 +33,9 @@ module options_types
         logical :: terr_diff
         logical :: Sx
         logical :: thermal
-        real    :: Sx_dmax
         real    :: TPI_scale
+        real    :: TPI_dmax
+        real    :: Sx_dmax
         real    :: Sx_scale_ang
         real    :: alpha_const
         integer :: roughness

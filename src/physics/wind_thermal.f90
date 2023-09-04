@@ -29,10 +29,11 @@ module wind_thermal
 
 contains
     
-    subroutine init_thermal_winds(domain)
+    subroutine init_thermal_winds(domain, options)
         implicit none
-        type(domain_t), intent(in) :: domain
-        
+        type(domain_t),  intent(in) :: domain
+        type(options_t), intent(in) :: options
+
         real :: z_mean
         integer :: k
 
@@ -58,12 +59,12 @@ contains
         !Max flow height
         if (therm_k_max==0) then
             do k = kms,kme
-                z_mean = SUM(domain%global_z_interface(:,k,:)-domain%global_z_interface(:,kms,:))/SIZE(domain%global_z_interface(:,k,:))
+                z_mean = SUM(options%parameters%dz_levels(1:k))
                 if (z_mean > Max_flow_height .and. therm_k_max==0) therm_k_max = max(2,k-1)
             enddo
             allocate( level_height(ims:ime,kms:therm_k_max,jms:jme))
             do k = kms,therm_k_max
-                level_height(:,k,:) = domain%z%data_3d(:,k,:)-domain%global_z_interface(ims:ime,kms,jms:jme)
+                level_height(:,k,:) = domain%z%data_3d(:,k,:)-domain%z_interface%data_3d(ims:ime,kms,jms:jme)
             enddo
         endif
 

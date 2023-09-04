@@ -2265,10 +2265,10 @@ contains
         !Define parameters
         integer :: roughness
         logical :: terr_diff, Sx, wind_only, thermal
-        real    :: Sx_dmax, Sx_scale_ang, TPI_scale, alpha_const
+        real    :: Sx_dmax, Sx_scale_ang, TPI_scale, TPI_dmax, alpha_const
         
         !Make name-list
-        namelist /wind/ terr_diff, Sx, thermal, wind_only, Sx_dmax, Sx_scale_ang, TPI_scale, roughness, alpha_const, update_frequency
+        namelist /wind/ terr_diff, Sx, thermal, wind_only, Sx_dmax, Sx_scale_ang, TPI_scale, TPI_dmax, roughness, alpha_const, update_frequency
         
         !Set defaults
         terr_diff = .False.
@@ -2278,6 +2278,9 @@ contains
         Sx_dmax = 300.0
         Sx_scale_ang = 30.0
         alpha_const = -1.0
+        
+        !Use 2km per Winstral et al. 2017 paper
+        TPI_dmax = 1000.0
         TPI_scale = 400.0
         wind_only = .False.
         update_frequency = 1
@@ -2295,6 +2298,7 @@ contains
         options%wind%Sx = Sx
         options%wind%thermal = thermal
         options%wind%Sx_dmax = Sx_dmax
+        options%wind%TPI_dmax = TPI_dmax
         options%wind%TPI_scale = TPI_scale
         options%wind%Sx_scale_ang = Sx_scale_ang
         options%wind%alpha_const = alpha_const

@@ -748,7 +748,7 @@ contains
             domain%advection_dz(:,i,:) = options%parameters%dz_levels(i)
         enddo
         
-        if (options%wind%thermal) call init_thermal_winds(domain)
+        if (options%wind%thermal) call init_thermal_winds(domain, options)
         
     end subroutine init_winds
 
@@ -935,20 +935,17 @@ contains
         integer, allocatable :: azm_indices(:,:)
         integer           :: i, j, k, kms, kme, ang, i_s, j_s, i_start_buffer, i_end_buffer, j_start_buffer, j_end_buffer
         integer           :: rear_ang, fore_ang, test_ang, rear_ang_diff, fore_ang_diff, ang_diff, k_max, window_rear, window_fore, window_width
-        integer :: nx, ny, x, y
+        integer :: x, y
         integer :: xs,xe, ys,ye, n, np, search_max
-        real, allocatable :: temp_terrain(:,:), f_terrain(:,:)
+        real, allocatable :: temp_terrain(:,:)
         real              :: pt_height, temp_ft, maxFTVal
 
-        search_max = int(max(4000.0/domain%dx,1.0))
+        search_max = domain%neighborhood_max 
 
-        nx = size(domain%global_terrain,1)
-        ny = size(domain%global_terrain,2)
         kms = lbound(domain%w%data_3d,2)
         kme = ubound(domain%w%data_3d,2)
         
         allocate(temp_ft_array( 1:72, domain%grid2d%ims:domain%grid2d%ime, kms:kme, domain%grid2d%jms:domain%grid2d%jme ))
-        allocate(f_terrain(nx,ny))
         
         
         temp_ft_array = -100000.0
@@ -976,7 +973,7 @@ contains
             do j=domain%grid2d%jms, domain%grid2d%jme
                 do k=kms,kme
                     if (k == kms) then
-                        pt_height = domain%global_terrain(i,j)
+                        pt_height = domain%neighbor_terrain(i,j)
                     else if (k > kms) then
                         pt_height = pt_height + domain%global_dz_interface(i,k,j)
                     end if
@@ -992,7 +989,7 @@ contains
                     do i_s = 1+i_start_buffer, (search_max*2+1)+i_end_buffer
                         do j_s = 1+j_start_buffer, (search_max*2+1)+j_end_buffer
                         
-                            temp_ft = domain%global_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1))) - pt_height
+                            temp_ft = domain%neighbor_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1))) - pt_height
                             
                             if (temp_ft > temp_ft_array(azm_indices(i_s,j_s),i,k,j)) then
                                                         

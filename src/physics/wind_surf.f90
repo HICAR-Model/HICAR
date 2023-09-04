@@ -31,24 +31,24 @@ module wind_surf
     
 contains
 
-    subroutine calc_TPI(domain)
+    subroutine calc_TPI(domain, options)
         implicit none
-        class(domain_t), intent(inout) :: domain
-        
+        class(domain_t),  intent(inout) :: domain
+        class(options_t), intent(in)    :: options
+
         real, allocatable    :: dist(:,:)
         integer           :: d_max, search_max, i, j, i_s, j_s, i_start_buffer, i_end_buffer, j_start_buffer, j_end_buffer
         integer           :: TPI_num
         real              :: search_height, TPI_sum
         
-        !Use 2km per Winstral et al. 2017 paper
-        d_max = 1000
-        search_max = floor(max(1.0,d_max/domain%dx))
+        d_max = options%wind%TPI_dmax
+        search_max = min(floor(max(1.0,d_max/domain%dx)),domain%neighborhood_max)
 
-        allocate(domain%global_TPI(domain%ids : domain%ide, domain%jds : domain%jde))
+        allocate(domain%neighbor_TPI(domain%ihs : domain%ihe, domain%jhs : domain%jhe))
         allocate(domain%TPI(domain%grid2d% ims : domain%grid2d% ime, domain%grid2d% jms : domain%grid2d% jme))
         allocate(dist( 2*search_max+1, 2*search_max+1 ))
        
-        domain%global_TPI = 0
+        domain%neighbor_TPI = 0
         do i = 1, 2*search_max+1
             do j = 1, 2*search_max+1
                 dist(i,j) = sqrt(abs(i-(search_max+1.0))**2 + abs(j-(search_max+1.0))**2)
@@ -58,8 +58,8 @@ contains
         !Convert distances to meters
         dist = dist*domain%dx
         !Now calc TPI
-        do i=domain%ids, domain%ide
-            do j=domain%jds, domain%jde
+        do i=domain%ihs, domain%ihe
+            do j=domain%jhs, domain%jhe
                 TPI_num = 0
                 TPI_sum = 0
                     
@@ -74,24 +74,24 @@ contains
                     do j_s = 1+j_start_buffer, (search_max*2+1)+j_end_buffer 
                         if (dist(i_s,j_s) <= d_max .and. .not.(dist(i_s,j_s) == 0) ) then
                             
-                            search_height = domain%global_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1)))
+                            search_height = domain%neighbor_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1)))
                         
                             TPI_sum = TPI_sum + search_height
                             TPI_num = TPI_num + 1
                         end if                               
                     end do
                 end do
-                if (TPI_num > 0) domain%global_TPI(i,j) = domain%global_terrain(i,j) - TPI_sum/TPI_num
+                if (TPI_num > 0) domain%neighbor_TPI(i,j) = domain%neighbor_terrain(i,j) - TPI_sum/TPI_num
             end do
         end do
         
-        domain%TPI = domain%global_TPI(domain%grid2d%ims:domain%grid2d%ime,domain%grid2d%jms:domain%grid2d%jme)
+        domain%TPI = domain%neighbor_TPI(domain%grid2d%ims:domain%grid2d%ime,domain%grid2d%jms:domain%grid2d%jme)
         
         
         if ( this_image() == 1 ) then
             !write (*,*) "Saving *_TPI.nc"
             !Save file
-            !call io_write("global_TPI_out.nc", "TPI", domain%global_TPI(:,:) ) 
+            !call io_write("neighbor_TPI.nc", "TPI", domain%neighbor_TPI(:,:) ) 
         endif
              
     end subroutine calc_TPI
@@ -112,11 +112,11 @@ contains
         TPI_scale = options%wind%TPI_scale
         Sx_scale_ang = options%wind%Sx_scale_ang
 
-        search_max = floor(max(1.0,d_max/domain%dx))
+        search_max = min(floor(max(1.0,d_max/domain%dx)),domain%neighborhood_max)
        
         if (Sx_k_max==0 .or. TPI_k_max==0) then
             do k = domain%grid%kms,domain%grid%kme
-                z_mean = SUM(domain%global_z_interface(:,k,:)-domain%global_z_interface(:,domain%grid%kms,:))/SIZE(domain%global_z_interface(:,k,:))
+                z_mean = SUM(options%parameters%dz_levels(1:k))
                 if (z_mean > SX_Z_MAX .and. Sx_k_max==0) Sx_k_max = max(2,k-1)
                 if (z_mean > TPI_Z_MAX .and. TPI_k_max==0) TPI_k_max = max(2,k-1)
             enddo
@@ -169,9 +169,9 @@ contains
                 do k = 1, Sx_k_max
 
                     if (k == 1) then
-                        pt_height = domain%global_terrain(i,j)
+                        pt_height = domain%terrain%data_2d(i,j)
                     else if (k > 1) then
-                        pt_height = pt_height + domain%global_dz_interface(i,k,j)
+                        pt_height = pt_height + domain%dz_interface%data_3d(i,k,j)
                     end if
                     
                     ! Check to use buffers to avoid searching out of grid
@@ -187,12 +187,12 @@ contains
                             if (dist(i_s,j_s) <= d_max .and. .not.(dist(i_s,j_s) == 0) ) then
                             
                                 !Calculate height difference
-                                search_height = domain%global_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1)))
+                                search_height = domain%neighbor_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1)))
                                 h_diff = search_height - pt_height
 
                                 !Calculate Sx slope to search-cell
                                 Sx_temp = atan(h_diff/dist(i_s,j_s))*rad2deg
-                                TPI_Shelter_temp = domain%global_TPI(i+(i_s-(search_max+1)),j+(j_s-(search_max+1)))
+                                TPI_Shelter_temp = domain%neighbor_TPI(i+(i_s-(search_max+1)),j+(j_s-(search_max+1)))
                             
                                 ! If new Sx is greater than existing Sx for a given search angle, replace
                                 if (Sx_temp > Sx_array_temp(azm_indices(i_s,j_s),i,k,j) ) then
@@ -202,7 +202,7 @@ contains
                                     if ( (Sx_temp > 0.0) .and. (TPI_Shelter_temp >= exposed_TPI) ) then ! .and. ( TPI_Shelter_temp >= temp_sheltering_TPI(azm_indices(i_s,j_s),i,k,j)) ) then
                                         Sx_array_temp(azm_indices(i_s,j_s),i,k,j) = Sx_temp
                                         temp_sheltering_TPI(azm_indices(i_s,j_s),i,k,j) = TPI_Shelter_temp
-                                    else if ( (Sx_temp <= 0.0) ) then !  .and. (domain%global_TPI(i,j) >= exposed_TPI) ) then
+                                    else if ( (Sx_temp <= 0.0) ) then !  .and. (domain%neighbor_TPI(i,j) >= exposed_TPI) ) then
                                         Sx_array_temp(azm_indices(i_s,j_s),i,k,j) = Sx_temp
                                     end if
                                 end if
@@ -317,7 +317,7 @@ contains
             do j=domain%grid2d%jms, domain%grid2d%jme
                 do k = 1, Sx_k_max
                     do ang = 1, 72
-                        if( (domain%Sx(ang,i,k,j) < 0.0) .and. (domain%global_TPI(i,j) <= exposed_TPI) ) domain%Sx(ang,i,k,j) = 0.0
+                        if( (domain%Sx(ang,i,k,j) < 0.0) .and. (domain%TPI(i,j) <= exposed_TPI) ) domain%Sx(ang,i,k,j) = 0.0
                         if( (domain%Sx(ang,i,k,j) > 0.0) .and. (sheltering_TPI(ang,i,k,j) <= exposed_TPI) ) domain%Sx(ang,i,k,j) = 0.0
                     end do
                 end do
@@ -328,7 +328,7 @@ contains
             !write (*,*) "Saving *_Sx.nc"
             !Save file
             !call io_write(filename, "Sx", domain%Sx(:,:,:,:) ) 
-            !call io_write("TPI_out.nc", "TPI", domain%global_TPI(:,:) ) 
+            !call io_write("TPI_out.nc", "TPI", domain%neighbor_TPI(:,:) ) 
             !call io_write("sheltering_TPI.nc", "Sx_shelter", sheltering_TPI(:,:,:,:) ) 
         endif
         

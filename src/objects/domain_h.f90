@@ -354,7 +354,7 @@ module domain_interface
     real,                       allocatable :: dz_scl(:)  ! the scaled dz levels, required for delta terrain calculation    
     real,                       allocatable :: Sx(:,:,:,:)
     real,                       allocatable :: TPI(:,:)
-    real,                       allocatable :: global_TPI(:,:)
+    real,                       allocatable :: neighbor_TPI(:,:)
     real,                       allocatable :: ustar(:,:)
     real,                       allocatable :: znu(:)
     real,                       allocatable :: znw(:)
@@ -362,9 +362,9 @@ module domain_interface
     ! these data are stored on the domain wide grid even if this process is only looking at a subgrid
     ! these variables are necessary with linear winds, especially with spatially variable dz, to compute the LUT
     real,                       allocatable :: global_terrain(:,:)
+    real,                       allocatable :: neighbor_terrain(:,:)
     real,                       allocatable :: global_z_interface(:,:,:)
     real,                       allocatable :: global_dz_interface(:,:,:)
-    real,                       allocatable :: global_jacobian(:,:,:)
 
 
     ! these coarrays are used to send all data to/from a master image for IO... ?
@@ -414,8 +414,11 @@ module domain_interface
     ! store the start (s) and end (e) for the i,j,k dimensions
     integer ::  ids,ide, jds,jde, kds,kde, & ! for the entire model domain    (d)
                 ims,ime, jms,jme, kms,kme, & ! for the memory in these arrays (m)
-                its,ite, jts,jte, kts,kte    ! for the data tile to process   (t)
-                
+                its,ite, jts,jte, kts,kte, & ! for the data tile to process   (t)
+                ihs,ihe, jhs,jhe, khs,khe    ! for the neighborhood arrays for non-local calculations (h)
+
+    integer :: neighborhood_max ! The maximum neighborhood radius in indices
+    
     !! MJ added new vars needed for FSM
     !real,allocatable :: FSM_slopemu(:,:)
     type(variable_t) :: runoff_tstep 
