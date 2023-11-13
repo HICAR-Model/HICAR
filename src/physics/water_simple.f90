@@ -8,7 +8,7 @@
 module module_water_simple
     use data_structures
     use options_interface,   only : options_t
-    use icar_constants
+    use mod_wrf_constants,   only : XLV, gravity, KARMAN
     implicit none
 
     real, parameter :: freezing_threshold=273.15
@@ -121,7 +121,7 @@ contains
                     coef_heat_exch(i,j) = exchange_C
                     sensible_heat(i,j) = exchange_C * wind(i,j) * (sst(i,j)-temperature(i,j))
                     evap_flux(i,j)     = exchange_C * wind(i,j) * (qv_surf(i,j)-qv(i,j))
-                    latent_heat(i,j)   = evap_flux(i,j) * LH_vaporization
+                    latent_heat(i,j)   = evap_flux(i,j) * XLV
                     tskin(i,j)   = sst(i,j)
 
                 endif

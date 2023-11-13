@@ -741,15 +741,19 @@ contains
             dx = domain%dx
             
             if (options%parameters%advect_density) then
-                do j = jms,jme
-                    do k = kms,kme
-                        rho(:,k,j) = domain%density%data_3d(:,k,j)  
+                do i = ims,ime
+                    do j = jms,jme
+                        do k = kms,kme
+                            rho(i,k,j) = domain%density%data_3d(i,k,j)  
+                        enddo
                     enddo
                 enddo
             else
-                do j = jms,jme
-                    do k = kms,kme
-                        rho(:,k,j) = 1
+                do i = ims,ime
+                    do j = jms,jme
+                        do k = kms,kme
+                            rho(i,k,j) = 1
+                        enddo
                     enddo
                 enddo
             endif
@@ -773,8 +777,8 @@ contains
                 do k = kms,kme-1
                     do i = i_s,i_e
                         W_m(i,k,j) = domain%w%data_3d(i,k,j) * dt * domain%jacobian_w(i,k,j) * &
-                                                ( rho(i,k,j)*domain%advection_dz(i,k,j) + &
-                                                  rho(i,k+1,j)*domain%advection_dz(i,k+1,j) ) / &
+                                                ( rho(i,k,j)*domain%advection_dz(i,k+1,j) + &
+                                                  rho(i,k+1,j)*domain%advection_dz(i,k,j) ) / &
                                                  (domain%advection_dz(i,k,j)+domain%advection_dz(i,k+1,j))
                     enddo
                 enddo

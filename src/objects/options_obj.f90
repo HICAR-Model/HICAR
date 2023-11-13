@@ -1,9 +1,10 @@
 submodule(options_interface) options_implementation
 
     use icar_constants,             only : kMAINTAIN_LON, MAXFILELENGTH, MAXVARLENGTH, MAX_NUMBER_FILES, MAXLEVELS, &
-                                           kNO_STOCHASTIC, kVERSION_STRING, kMAX_FILE_LENGTH, kMAX_NAME_LENGTH, pi, &
-                                           kWATER_LAKE, &
-                                           kWIND_LINEAR, kLINEAR_ITERATIVE_WINDS, kITERATIVE_WINDS, kCONSERVE_MASS
+                                           kNO_STOCHASTIC, kVERSION_STRING, kMAX_FILE_LENGTH, kMAX_NAME_LENGTH,     &
+                                           kWATER_LAKE, kRA_RRTMG, &
+                                           kWIND_LINEAR, kLINEAR_ITERATIVE_WINDS, kITERATIVE_WINDS
+    use mod_wrf_constants,          only : piconst
     use io_routines,                only : io_newunit
     use time_io,                    only : find_timestep_in_file
     use time_delta_object,          only : time_delta_t
@@ -13,6 +14,7 @@ submodule(options_interface) options_implementation
 
     use convection,                 only : cu_var_request
     use land_surface,               only : lsm_var_request
+    use surface_layer,              only : sfc_var_request
     use radiation,                  only : ra_var_request
     use microphysics,               only : mp_var_request
     use advection,                  only : adv_var_request
@@ -71,7 +73,9 @@ contains
         call cu_parameters_namelist(    this%parameters%cu_options_filename,    this)
         call bias_parameters_namelist(  this%parameters%bias_options_filename,  this)
         call rad_parameters_namelist(   this%parameters%rad_options_filename,   this)
-        
+        call pbl_parameters_namelist(   this%parameters%pbl_options_filename,   this)
+        call sfc_parameters_namelist(   this%parameters%sfc_options_filename,   this)
+
         if (this%parameters%phys_suite /= '') call set_phys_suite(this)
         
         if (this%parameters%restart) this%parameters%start_time = this%io_options%restart_time
@@ -97,6 +101,7 @@ contains
 
         call ra_var_request(options)
         call lsm_var_request(options)
+        call sfc_var_request(options)
         call pbl_var_request(options)
         call cu_var_request(options)
         call mp_var_request(options)
@@ -442,15 +447,24 @@ contains
         endif
         
         if (options%wind%alpha_const > 0) then
-            if (options%wind%alpha_const > 5.0) then
-                if (this_image()==1) write(*,*) "Alpha currently limited to values between 0.1 and 5.0, setting to 5.0"
-                options%wind%alpha_const = 5.0
+            if (options%wind%alpha_const > 1.0) then
+                if (this_image()==1) write(*,*) "Alpha currently limited to values between 0.1 and 1.0, setting to 1.0"
+                options%wind%alpha_const = 1.0
             else if (options%wind%alpha_const < 0.1) then
-                if (this_image()==1) write(*,*) "Alpha currently limited to values between 0.1 and 5.0, setting to 0.1"
+                if (this_image()==1) write(*,*) "Alpha currently limited to values between 0.1 and 1.0, setting to 0.1"
                 options%wind%alpha_const = 0.1
             endif
         endif
-
+        
+        
+        if (options%physics%landsurface>0) then
+            options%sfc_options%isfflx = 1
+            options%sfc_options%scm_force_flux = 1
+        endif
+        
+        if (options%physics%snowmodel>0) then
+            options%lsm_options%nmp_opt_snf = 4
+        endif
     end subroutine options_check
 
 
@@ -466,11 +480,11 @@ contains
 
         integer :: name_unit
 !       variables to be used in the namelist
-        integer :: pbl, lsm, sm, water, mp, rad, conv, adv, wind, radiation_downScaling
+        integer :: pbl, lsm, sfc, sm, water, mp, rad, conv, adv, wind, radiation_downScaling
         character(len=MAXVARLENGTH) :: phys_suite
         
 !       define the namelist
-        namelist /physics/ pbl, lsm, sm, water, mp, rad, conv, adv, wind, phys_suite, radiation_downScaling
+        namelist /physics/ pbl, lsm, sfc, sm, water, mp, rad, conv, adv, wind, phys_suite, radiation_downScaling
 
 !       default values for physics options (advection+linear winds+simple_microphysics)
         pbl = 0 ! 0 = no PBL,
@@ -483,6 +497,9 @@ contains
                 ! 2 = simple LSM, (not complete)
                 ! 3 = Noah LSM
                 ! 4 = Noah MP
+                
+        sfc = 1 ! 0 = no surface layer
+                ! 1 = Revised MM5 Monin-Obukhov scheme
                 
         sm = 0  ! 0 = no Snow Model
                 ! 1 = FSM2 (Flexible Snow Model)
@@ -529,6 +546,7 @@ contains
         options%physics%convection    = conv
         options%physics%advection     = adv
         options%physics%landsurface   = lsm
+        options%physics%surfacelayer  = sfc
         options%physics%snowmodel     = sm
         options%physics%watersurface  = water
         options%physics%microphysics  = mp
@@ -1038,14 +1056,14 @@ contains
                    high_res_soil_state, use_agl_height, time_varying_z, t_is_potential, qv_is_spec_humidity, &
                    qv_is_relative_humidity, &
                    use_mp_options, use_lt_options, use_adv_options, use_lsm_options, use_bias_correction, &
-                   use_block_options, use_cu_options, use_rad_options, batched_exch
+                   use_block_options, use_cu_options, use_rad_options, use_pbl_options, use_sfc_options, batched_exch
 
         character(len=MAXFILELENGTH) :: date, calendar, start_date, forcing_start_date, end_date
         integer :: year, month, day, hour, minute, second
         character(len=MAXFILELENGTH) :: mp_options_filename, lt_options_filename, &
                                         adv_options_filename, lsm_options_filename, &
                                         bias_options_filename, block_options_filename, &
-                                        cu_options_filename, rad_options_filename
+                                        cu_options_filename, rad_options_filename, pbl_options_filename, sfc_options_filename
 
 
         namelist /parameters/ ntimesteps, wind_iterations, surface_io_only,                &
@@ -1064,7 +1082,9 @@ contains
                               adv_options_filename,     use_adv_options,    &
                               bias_options_filename,    use_bias_correction,&
                               cu_options_filename,      use_cu_options,     &
-                              rad_options_filename,     use_rad_options
+                              rad_options_filename,     use_rad_options,    &
+                              sfc_options_filename,     use_sfc_options,    &
+                              pbl_options_filename,     use_pbl_options
 
 !       default parameters
         surface_io_only     = .False.
@@ -1094,8 +1114,8 @@ contains
         smooth_wind_distance= -9999
         calendar            = "gregorian"
         high_res_soil_state = .False.
-        use_agl_height      = .False.
-        agl_cap             = 300
+        use_agl_height      = .True.
+        agl_cap             = 800
         date                = ""
         start_date          = ""
         forcing_start_date  = ""
@@ -1122,6 +1142,12 @@ contains
 
         use_rad_options=.False.
         rad_options_filename = filename
+
+        use_pbl_options=.False.
+        pbl_options_filename = filename
+        
+        use_sfc_options=.False.
+        sfc_options_filename = filename
 
         use_bias_correction=.False.
         bias_options_filename = filename
@@ -1265,6 +1291,12 @@ contains
 
         options%use_rad_options     = use_rad_options
         options%rad_options_filename= rad_options_filename
+
+        options%use_pbl_options     = use_pbl_options
+        options%pbl_options_filename= pbl_options_filename
+
+        options%use_sfc_options     = use_sfc_options
+        options%sfc_options_filename= sfc_options_filename
 
         options%use_bias_correction  = use_bias_correction
         options%bias_options_filename= bias_options_filename
@@ -1519,7 +1551,7 @@ contains
         nsq_calibration = .False.      ! use a spatial mask to calibrate the nsquared (brunt vaisala frequency) field
 
         ! look up table generation parameters
-        dirmax = 2*pi
+        dirmax = 2*piconst
         dirmin = 0
         spdmax = 30
         spdmin = 0
@@ -1655,6 +1687,102 @@ contains
         ! copy the data back into the global options data structure
         options%adv_options = adv_options
     end subroutine adv_parameters_namelist
+
+
+    !> -------------------------------
+    !! Initialize the PBL options
+    !!
+    !! Reads the pbl_parameters namelist or sets default values
+    !!
+    !! -------------------------------
+    subroutine pbl_parameters_namelist(filename, options)
+        implicit none
+        character(len=*),   intent(in)   :: filename
+        type(options_t),    intent(inout):: options
+
+        type(pbl_options_type)::pbl_options
+        integer :: name_unit
+
+        integer :: ysu_topdown_pblmix ! controls if radiative, top-down mixing in YSU scheme is turned on
+        
+        ! define the namelist
+        namelist /pbl_parameters/ ysu_topdown_pblmix
+
+         ! because pbl_options could be in a separate file
+         if (options%parameters%use_pbl_options) then
+             if (trim(filename)/=trim(get_options_file())) then
+                 call version_check(filename,options%parameters)
+             endif
+         endif
+
+
+        ! set default values
+        ysu_topdown_pblmix = 0
+
+        ! read the namelist options
+        if (options%parameters%use_pbl_options) then
+            open(io_newunit(name_unit), file=filename)
+            read(name_unit,nml=pbl_parameters)
+            close(name_unit)
+        endif
+
+        ! store everything in the pbl_options structure
+        if (.not.(options%physics%radiation == kRA_RRTMG)) ysu_topdown_pblmix = 0
+        pbl_options%ysu_topdown_pblmix = ysu_topdown_pblmix
+
+        ! copy the data back into the global options data structure
+        options%pbl_options = pbl_options
+    end subroutine pbl_parameters_namelist
+
+    !> -------------------------------
+    !! Initialize the surface layer options
+    !!
+    !! Reads the sfc_parameters namelist or sets default values
+    !!
+    !! -------------------------------
+    subroutine sfc_parameters_namelist(filename, options)
+        implicit none
+        character(len=*),   intent(in)   :: filename
+        type(options_t),    intent(inout):: options
+
+        type(sfc_options_type)::sfc_options
+        integer :: name_unit, isfflx, scm_force_flux, iz0tlnd, isftcflx
+        real    :: sbrlim
+        ! define the namelist
+        namelist /sfc_parameters/ isfflx, scm_force_flux, iz0tlnd, sbrlim
+
+         ! because sfc_options could be in a separate file
+         if (options%parameters%use_sfc_options) then
+             if (trim(filename)/=trim(get_options_file())) then
+                 call version_check(filename,options%parameters)
+             endif
+         endif
+         
+        ! set default values
+        isfflx = 1 !If lsm is turned on, this will be changed to 1
+        scm_force_flux = 0 !If lsm is turned on, this will be changed to 1
+        iz0tlnd = 1
+        isftcflx       = 0 ! DR: not sure what this does, controls roughness length over water I think?
+        sbrlim = 250.    ! parameter to limit the bulk richardson number under stable conditions. Useful for snow 
+                         ! modeling in complex terrain (Mott et al., 2023, Lafaysse 2017). 
+                         ! Default value remains that used in SFCMM5REV
+        ! read the namelist options
+        if (options%parameters%use_sfc_options) then
+            open(io_newunit(name_unit), file=filename)
+            read(name_unit,nml=sfc_parameters)
+            close(name_unit)
+        endif
+        
+        ! store everything in the pbl_options structure
+        sfc_options%isfflx = isfflx
+        sfc_options%scm_force_flux = scm_force_flux
+        sfc_options%iz0tlnd = iz0tlnd
+        sfc_options%isftcflx = isftcflx
+        sfc_options%sbrlim = sbrlim
+
+        ! copy the data back into the global options data structure
+        options%sfc_options = sfc_options
+    end subroutine sfc_parameters_namelist
 
 
     !> -------------------------------
@@ -1854,7 +1982,7 @@ contains
         logical :: surface_diagnostics               ! MJ added: true means that temeprature_2m is calculated using sensible heat flux otherwise it is read from the first grid at 10 m													 ! ..this mean the first layer thickness in z-direction shoud be 20 m for which the center is at 10 m
         integer :: sf_urban_phys
         real    :: nmp_soiltstep
-        integer :: nmp_dveg, nmp_opt_crs, nmp_opt_sfc, nmp_opt_btr, nmp_opt_run, nmp_opt_infdv, nmp_opt_frz, nmp_opt_inf, nmp_opt_rad, nmp_opt_alb, nmp_opt_snf, nmp_opt_tbot, nmp_opt_stc, nmp_opt_gla, nmp_opt_rsf, nmp_opt_soil, nmp_opt_pedo, nmp_opt_crop, nmp_opt_irr, nmp_opt_irrm, nmp_opt_tdrn, nmp_iz0tlnd, noahmp_output
+        integer :: nmp_dveg, nmp_opt_crs, nmp_opt_sfc, nmp_opt_btr, nmp_opt_run, nmp_opt_infdv, nmp_opt_frz, nmp_opt_inf, nmp_opt_rad, nmp_opt_alb, nmp_opt_snf, nmp_opt_tbot, nmp_opt_stc, nmp_opt_gla, nmp_opt_rsf, nmp_opt_soil, nmp_opt_pedo, nmp_opt_crop, nmp_opt_irr, nmp_opt_irrm, nmp_opt_tdrn, noahmp_output
 
         integer :: lake_category                    ! index that defines the lake category in (some) LU_Categories
 
@@ -1867,7 +1995,7 @@ contains
                                   nmp_opt_inf, nmp_opt_rad, nmp_opt_alb, nmp_opt_snf, nmp_opt_tbot,           &
                                   nmp_opt_stc, nmp_opt_gla, nmp_opt_rsf, nmp_opt_soil, nmp_opt_pedo,          &
                                   nmp_opt_crop, nmp_opt_irr, nmp_opt_irrm, nmp_opt_tdrn, nmp_soiltstep,       &
-                                  sf_urban_phys, nmp_iz0tlnd, noahmp_output !! MJ added
+                                  sf_urban_phys, noahmp_output !! MJ added
 
 
          ! because adv_options could be in a separate file
@@ -1893,7 +2021,7 @@ contains
 
         lh_feedback_fraction = 1.0
         sh_feedback_fraction = 1.0 !0.625
-        sfc_layer_thickness  = 400.0
+        sfc_layer_thickness  = 50.0
         dz_lsm_modification  = 1.0 !0.5
         wind_enhancement = 1.0 !1.5
         
@@ -1901,7 +2029,7 @@ contains
         
         nmp_dveg = 3
         nmp_opt_crs = 1
-        nmp_opt_sfc = 1
+        nmp_opt_sfc = -1
         nmp_opt_btr = 2
         nmp_opt_run = 1
         nmp_opt_infdv = 1
@@ -1909,7 +2037,7 @@ contains
         nmp_opt_inf = 1
         nmp_opt_rad = 3
         nmp_opt_alb = 2
-        nmp_opt_snf = 1
+        nmp_opt_snf = 4
         nmp_opt_tbot = 2
         nmp_opt_stc = 1
         nmp_opt_gla = 1
@@ -1921,7 +2049,6 @@ contains
         nmp_opt_irrm = 0
         nmp_opt_tdrn = 0
         nmp_soiltstep = 0.0
-        nmp_iz0tlnd   = 0
         noahmp_output = 1
         
         max_swe = 1e10
@@ -1956,6 +2083,18 @@ contains
         lsm_options%nmp_dveg             = nmp_dveg
         lsm_options%nmp_opt_crs          = nmp_opt_crs
         lsm_options%nmp_opt_sfc          = nmp_opt_sfc
+        
+        !If user does not define this option, then let's Do The Right Thing
+        if (nmp_opt_sfc == -1) then
+            !If user has not turned on the surface layer scheme, then we set this to the recommended default value of 1
+            if (options%physics%surfacelayer == 0) then
+                lsm_options%nmp_opt_sfc = 1
+            !If user has turned on the surface layer scheme, then let's opt to use the surface layer scheme's surface exchange coefficients
+            else if (options%physics%surfacelayer == 1) then
+                lsm_options%nmp_opt_sfc = 3
+            endif
+        endif
+        
         lsm_options%nmp_opt_btr          = nmp_opt_btr
         lsm_options%nmp_opt_run          = nmp_opt_run
         lsm_options%nmp_opt_infdv        = nmp_opt_infdv
@@ -1975,7 +2114,6 @@ contains
         lsm_options%nmp_opt_irrm         = nmp_opt_irrm
         lsm_options%nmp_opt_tdrn         = nmp_opt_tdrn
         lsm_options%nmp_soiltstep        = nmp_soiltstep
-        lsm_options%nmp_iz0tlnd          = nmp_iz0tlnd
         lsm_options%noahmp_output        = noahmp_output
 
         
@@ -1999,11 +2137,12 @@ contains
 
         integer :: update_interval_rrtmg             ! minimum number of seconds between RRTMG updates
         integer :: icloud                            ! how RRTMG interacts with clouds
+        integer :: cldovrlp                          ! how RRTMG considers cloud overlapping
         logical :: read_ghg
         real    :: tzone !! MJ adedd,tzone is UTC Offset and 1 here for centeral Erupe
         logical :: use_simple_sw
         ! define the namelist
-        namelist /rad_parameters/ update_interval_rrtmg, icloud, read_ghg, use_simple_sw, tzone !! MJ adedd,tzone is UTC Offset and 1 here for centeral Erupe
+        namelist /rad_parameters/ update_interval_rrtmg, icloud, read_ghg, use_simple_sw, cldovrlp, tzone !! MJ adedd,tzone is UTC Offset and 1 here for centeral Erupe
 
 
          ! because adv_options could be in a separate file
@@ -2015,10 +2154,11 @@ contains
 
 
         ! set default values
-        update_interval_rrtmg = 600 ! 30 minutes
+        update_interval_rrtmg = 600 ! 10 minutes
         icloud          = 3    ! effective radius from microphysics scheme
+        cldovrlp        = 2    ! maximum-random overlap
         read_ghg        = .false.
-        tzone=1. !! MJ added
+        tzone=0. !! MJ added
         use_simple_sw   = .false.
 
         ! read the namelist options
@@ -2031,8 +2171,9 @@ contains
         ! store everything in the radiation_options structure
         rad_options%update_interval_rrtmg = update_interval_rrtmg
         rad_options%icloud                = icloud
+        rad_options%cldovrlp              = cldovrlp
         rad_options%read_ghg              = read_ghg
-        rad_options%tzone              = tzone
+        rad_options%tzone                 = tzone
         rad_options%use_simple_sw         = use_simple_sw
 
         ! copy the data back into the global options data structure
@@ -2057,12 +2198,12 @@ contains
         integer :: name_unit, this_level
         real, allocatable, dimension(:) :: dz_levels
         real, dimension(45) :: fulldz
-        logical :: space_varying, dz_modifies_wind, sleve, use_terrain_difference
+        logical :: space_varying, dz_modifies_wind, sleve
 
         real :: flat_z_height, decay_rate_L_topo, decay_rate_S_topo, sleve_n
         integer :: terrain_smooth_windowsize, terrain_smooth_cycles
 
-        namelist /z_info/ dz_levels, space_varying, dz_modifies_wind, flat_z_height, sleve, terrain_smooth_windowsize, terrain_smooth_cycles, decay_rate_L_topo, decay_rate_S_topo, sleve_n, use_terrain_difference
+        namelist /z_info/ dz_levels, space_varying, dz_modifies_wind, flat_z_height, sleve, terrain_smooth_windowsize, terrain_smooth_cycles, decay_rate_L_topo, decay_rate_S_topo, sleve_n
 
         this_level=1
         space_varying = .False.
@@ -2074,7 +2215,6 @@ contains
         decay_rate_L_topo = 2.
         decay_rate_S_topo = 6.
         sleve_n = 1.2
-        use_terrain_difference = .False.
 
         ! read the z_info namelist if requested
         if (options%readdz) then
@@ -2131,7 +2271,6 @@ contains
         options%decay_rate_L_topo = decay_rate_L_topo  ! decay_rate_large_scale_topography
         options%decay_rate_S_topo = decay_rate_S_topo ! decay_rate_small_scale_topography !
         options%sleve_n = sleve_n
-        options%use_terrain_difference = use_terrain_difference
 
 
         if (dz_modifies_wind) then

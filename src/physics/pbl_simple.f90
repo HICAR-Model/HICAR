@@ -24,7 +24,7 @@ module pbl_simple
     use icar_constants,     only : kLC_LAND, kLC_WATER
     use domain_interface,   only : domain_t
     use options_interface,  only : options_t
-
+    use mod_wrf_constants,  only : gravity, KARMAN
     private
     public :: simple_pbl, finalize_simple_pbl, init_simple_pbl
 

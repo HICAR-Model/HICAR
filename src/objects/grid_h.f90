@@ -1,7 +1,7 @@
 module grid_interface
 
     use icar_constants 
-
+    use mod_wrf_constants, only : epsilon
     implicit none
 
     private

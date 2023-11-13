@@ -11447,7 +11447,7 @@ contains
 !------------------------------------------------------------------
 MODULE module_ra_rrtmg_lw
 
-use icar_constants, only : cp
+use mod_wrf_constants, only : cp
 !use module_wrf_error
 !#if (HWRF == 1)
 !   USE module_state_description, ONLY : FER_MP_HIRES, FER_MP_HIRES_ADVECT, ETAMP_HWRF
@@ -11545,11 +11545,14 @@ CONTAINS
    REAL, DIMENSION( ims:ime, kms:kme, jms:jme )                 , &
          INTENT(IN   ) ::                                   dz8w, &
                                                              t3d, &
-                                                             t8w, &
-                                                             p8w, &
                                                              p3d, &
                                                             pi3d, &
                                                            rho3d
+                                                           
+   REAL, DIMENSION( ims:ime, kms:kme+1, jms:jme )               , &
+         INTENT(IN   ) ::                                   t8w , &
+                                                             p8w
+
 
    REAL, DIMENSION( ims:ime, kms:kme, jms:jme )                 , &
          INTENT(INOUT)  ::                            RTHRATENLW

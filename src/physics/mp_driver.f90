@@ -28,7 +28,7 @@
 module microphysics
     ! use data_structures
     use icar_constants
-    use mod_wrf_constants
+    use mod_wrf_constants,          only: EP_1, EP_2, cp, cpv, XLS, XLV, XLF, R_d, R_v, gravity, epsilon, cliq, cice, psat, rhowater, rhosnow, rhoair0
     use module_mp_thompson_aer,     only: mp_gt_driver_aer, thompson_aer_init
     use module_mp_thompson,         only: mp_gt_driver, thompson_init
     use MODULE_MP_MORR_TWO_MOMENT,  only: MORR_TWO_MOMENT_INIT, MP_MORR_TWO_MOMENT
@@ -649,7 +649,8 @@ contains
                              diag_rhopo3d_2=domain%ice2_rho%data_3d,          &
                              diag_phii3d_2=domain%ice2_phi%data_3d,           &
                              !diag_vmi3d_3=vmi3d_3,               &
-                             !diag_di3d_3=di3d_3,                 &
+                          
+                          !diag_di3d_3=di3d_3,                 &
                              diag_rhopo3d_3=domain%ice3_rho%data_3d,          &
                              diag_phii3d_3=domain%ice3_phi%data_3d            &
                              !diag_itype_1=itype,                 &
@@ -670,8 +671,8 @@ contains
                               den = domain%density%data_3d,                   &
                               delt = dt,                                           &
                               g = gravity,                                          &
-                              cpd = cp, cpv = cpv, rd = Rd, rv = Rw, t0c = 273.15,          &
-                              ep1 = EP1, ep2 = EP2, qmin = epsilon,                                &
+                              cpd = cp, cpv = cpv, rd = R_d, rv = R_v, t0c = 273.15,          &
+                              ep1 = EP_1, ep2 = EP_2, qmin = epsilon,                                &
                               XLS = XLS, XLV0 = XLV, XLF0 = XLF,                    &
                               den0 = rhoair0, denr = rhowater,                  &
                               cliq = cliq, cice = cice, psat = psat,                                   &
@@ -703,8 +704,8 @@ contains
                               den = domain%density%data_3d,                         &
                               delt = dt,                                            &
                               g = gravity,                                          &
-                              cpd = cp, cpv = cpv, rd = Rd, rv = Rw, t0c = 273.15,  &
-                              ep1 = EP1, ep2 = EP2, qmin = epsilon,                 &
+                              cpd = cp, cpv = cpv, rd = R_d, rv = R_v, t0c = 273.15,  &
+                              ep1 = EP_1, ep2 = EP_2, qmin = epsilon,                 &
                               XLS = XLS, XLV0 = XLV, XLF0 = XLF,                    &
                               den0 = rhoair0, denr = rhowater,                      &
                               cliq = cliq, cice = cice, psat = psat,                &
@@ -863,16 +864,17 @@ contains
             ! reset the counter so we know that *this* is the last time we've run the microphysics
             ! NOTE, ONLY reset this when running the inner subset... ideally probably need a separate counter for the halo and subset
             !last_model_time = domain%model_time%seconds()
+            
+            call calc_w_real(domain% u %data_3d,      &
+                         domain% v %data_3d,      &
+                         domain% w %data_3d,      &
+                         domain% w_real %data_3d,      &
+                         domain%dzdx_u, domain%dzdy_v, domain%dzdx, domain%dzdy,   &
+                         domain%jacobian_w)
+                             
+
             if (present(subset)) then
                 last_model_time = domain%model_time%seconds()
-                call calc_w_real(domain% u %data_3d,      &
-                             domain% v %data_3d,      &
-                             domain% w %data_3d,      &
-                             domain% w_real %data_3d,      &
-                             domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian_w,domain%ims,domain%ime,domain%kms,domain%kme,&
-                             domain%jms,domain%jme,domain%its,domain%ite,domain%jts,domain%jte)
-                             
                 call process_subdomain(domain, options, mp_dt,                 &
                                        its = its + subset, ite = ite - subset, &
                                        jts = jts + subset, jte = jte - subset, &
@@ -886,14 +888,6 @@ contains
             endif
 
             if (present(halo)) then
-                call calc_w_real(domain% u %data_3d,      &
-                             domain% v %data_3d,      &
-                             domain% w %data_3d,      &
-                             domain% w_real %data_3d,      &
-                             domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian_w,domain%ims,domain%ime,domain%kms,domain%kme,&
-                             domain%jms,domain%jme,domain%its,domain%ite,domain%jts,domain%jte)
-                             
                 call process_halo(domain, options, mp_dt, halo, &
                                        its = its, ite = ite,    &
                                        jts = jts, jte = jte,    &
@@ -908,15 +902,7 @@ contains
             endif
 
             if ((.not.present(halo)).and.(.not.present(subset))) then
-                last_model_time = domain%model_time%seconds()
-                call calc_w_real(domain% u %data_3d,      &
-                             domain% v %data_3d,      &
-                             domain% w %data_3d,      &
-                             domain% w_real %data_3d,      &
-                             domain%dzdx_u, domain%dzdy_v,    &
-                             domain%jacobian_w,domain%ims,domain%ime,domain%kms,domain%kme,&
-                             domain%jms,domain%jme,domain%its,domain%ite,domain%jts,domain%jte)
-                             
+                last_model_time = domain%model_time%seconds()                             
                 call process_subdomain(domain, options, mp_dt,  &
                                         its = its, ite = ite,    &
                                         jts = jts, jte = jte,    &

@@ -11,8 +11,7 @@
 !!
 !!----------------------------------------------------------
 module mod_atm_utilities
-
-    use icar_constants,           only : pi, gravity, Rd, Rw, cp, LH_vaporization
+    use mod_wrf_constants,   only : piconst, gravity, R_d, R_v, cp, XLV
     ! use data_structures
     use options_interface,        only : options_t
 
@@ -158,7 +157,7 @@ contains
         real, intent(in),       dimension(:,:)   :: qv      ! water vapor in layer between p_out and p [kg/kg]
 
         dz_out = &
-            Rd / gravity * ( t * ( 1 + 0.608 * qv ) ) * &
+            R_d / gravity * ( t * ( 1 + 0.608 * qv ) ) * &
             LOG ( p_ratio )
 
         ! WRF formulate to compute height from pressure
@@ -224,7 +223,7 @@ contains
         real, intent(in),       dimension(:,:)   :: t       ! temperature in layer between p_out and p [K]
         real, intent(in),       dimension(:,:)   :: qv      ! water vapor in layer between p_out and p [kg/kg]
 
-        p_out = p * exp( -dz / (Rd / gravity * ( t * ( 1 + 0.608 * qv ) )))
+        p_out = p * exp( -dz / (R_d / gravity * ( t * ( 1 + 0.608 * qv ) )))
 
         ! note: derived from WRF formulate to compute height from pressure
         ! z(k) = z(k-1) - &
@@ -254,7 +253,7 @@ contains
     !     real, intent(in),       dimension(:,:)   :: qv      !
     !
     !     z_out = z - &
-    !             Rd / gravity * ( t * ( 1 + 0.608 * qv ) ) * &
+    !             R_d / gravity * ( t * ( 1 + 0.608 * qv ) ) * &
     !             LOG ( p1 / p0 )
     !
     !     ! note: WRF formulate to compute height from pressure
@@ -337,18 +336,18 @@ contains
         real :: direction
 
         if (v<0) then
-            direction = atan(u/v) + pi
+            direction = atan(u/v) + piconst
         elseif (v==0) then
             if (u>0) then
-                direction=pi/2.0
+                direction=piconst/2.0
             else
-                direction=pi*1.5
+                direction=piconst*1.5
             endif
         else
             if (u>=0) then
                 direction = atan(u/v)
             else
-                direction = atan(u/v) + (2*pi)
+                direction = atan(u/v) + (2*piconst)
             endif
         endif
 
@@ -404,9 +403,9 @@ contains
         real :: L
         real :: sat_lapse
 
-        L=LH_vaporization ! short cut for imported parameter
-        sat_lapse = gravity*((1 + (L*mr) / (Rd*T))          &
-                    / (cp + (L*L*mr*(Rd/Rw)) / (Rd*T*T) ))
+        L=XLV ! short cut for imported parameter
+        sat_lapse = gravity*((1 + (L*mr) / (R_d*T))          &
+                    / (cp + (L*L*mr*(R_d/R_v)) / (R_d*T*T) ))
     end function calc_sat_lapse_rate
 
     !>----------------------------------------------------------
@@ -426,7 +425,7 @@ contains
         sat_lapse = calc_sat_lapse_rate(t,qv)
 
         BV_freq = (gravity/t) * ((t_top-t_bot)/dz + sat_lapse) * &
-                  (1 + (LH_vaporization*qv)/(Rd*t)) - (gravity/(1+qv+qc) * (qv_top-qv_bot)/dz)
+                  (1 + (XLV*qv)/(R_d*t)) - (gravity/(1+qv+qc) * (qv_top-qv_bot)/dz)
     end function calc_moist_stability
 
     !>----------------------------------------------------------
@@ -679,7 +678,7 @@ contains
 
                     ! Actual pressure adjustment
                     ! slp= ps*np.exp(((g/R)*Hp) / (ts - a*Hp/2.0 + e*Ch))
-                    pressure(:,i,j) = pressure(:,i,j) * exp( ((gravity/Rd) * dz) / tmean )   !&
+                    pressure(:,i,j) = pressure(:,i,j) * exp( ((gravity/R_d) * dz) / tmean )   !&
                     !                     (tmean + (e * 0.12) ) ) ! alternative
 
                     ! alternative formulation M=0.029, R=8.314?
@@ -725,8 +724,8 @@ contains
         real, intent(in) :: pressure
         real :: exner
 
-        associate(po=>100000) !, Rd=>287.058, cp=>1003.5)
-            exner = (pressure / po) ** (Rd/cp)
+        associate(po=>100000) !, R_d=>287.058, cp=>1003.5)
+            exner = (pressure / po) ** (R_d/cp)
 
         end associate
     end function

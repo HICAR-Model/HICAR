@@ -876,7 +876,7 @@ contains
             var%name        = "dz_i"
             var%three_d     = .True.
             var%two_d       = .False.
-            var%dimensions  = three_d_interface_dimensions
+            var%dimensions  = three_d_dimensions
             var%attributes  = [attribute_t("non_standard_name", "layer_thickness"),                 &
                                attribute_t("units",         "m"),                                   &
                                attribute_t("coordinates",   "lat lon")]
@@ -2893,7 +2893,7 @@ contains
         !>------------------------------------------------------------
         !!  Sensible Heat Exchange Coefficient
         !!------------------------------------------------------------
-        associate(var=>var_meta(kVARS%coeff_heat_exchange))
+        associate(var=>var_meta(kVARS%chs))
             var%name        = "coeff_heat_exchange"
             var%dimensions  = two_d_t_dimensions
             var%three_d     = .False.
@@ -2903,6 +2903,33 @@ contains
                                attribute_t("units",         "1"),                                      &
                                attribute_t("coordinates",   "lat lon")]
         end associate
+        !>------------------------------------------------------------
+        !!  Sensible Heat Exchange Coefficient, 2m
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%chs2))
+            var%name        = "coeff_heat_exchange"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "sensible_heat_exchange_coefficient"), &
+                               attribute_t("units",         "1"),                                      &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  Latent Heat Exchange Coefficient, 2m
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%cqs2))
+            var%name        = "coeff_moisture_exchange"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "latent_heat_exchange_coefficient"), &
+                               attribute_t("units",         "1"),                                      &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
         !>------------------------------------------------------------
         !!  Sensible Heat Exchange Coefficient 3d
         !!------------------------------------------------------------
@@ -2916,6 +2943,46 @@ contains
                                attribute_t("units",         "1"),                                      &
                                attribute_t("coordinates",   "lat lon")]
         end associate
+        !>------------------------------------------------------------
+        !!  Momentum Exchange Coefficient 3d
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%coeff_momentum_exchange_3d))
+            var%name        = "coeff_momentum_exchange_3d"
+            var%dimensions  = three_d_t_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "momentum_exchange_coefficient_3d"), &
+                               attribute_t("units",         "1"),                                      &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  Sensible Heat Exchange Coefficient
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%br))
+            var%name        = "sfc_Ri"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "bulk_richardson_num_from_SFC_scheme"), &
+                               attribute_t("units",         "1"),                                      &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  Sensible Heat Exchange Coefficient
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%QFX))
+            var%name        = "moisture_flux"
+            var%dimensions  = two_d_t_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "moisture_flux_from_surface"), &
+                               attribute_t("units",         "kg/m²/s"),                                      &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
         !>------------------------------------------------------------
         !!  PBL height
         !!------------------------------------------------------------

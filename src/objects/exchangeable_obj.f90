@@ -78,7 +78,7 @@ contains
       class(exchangeable_t), intent(inout) :: this
       type(grid_t),          intent(in)    :: grid
       integer :: n_neighbors, current, me
-
+      
       ! set up the neighbors array so we can sync with our neighbors when needed
       if (.not.allocated(neighbors)) then
           me = FINDLOC(DOM_IMG_INDX,this_image(),dim=1)
@@ -117,11 +117,10 @@ contains
               endif
               ! if current = 1 then all of the boundaries were set, just store ourself as our "neighbor"
               if (current == 1) then
-                  neighbors(current) = me
+                  neighbors(current) = this_image()
               endif
           endif
       endif
-
   end subroutine
 
   module subroutine set_outputdata(this, metadata)

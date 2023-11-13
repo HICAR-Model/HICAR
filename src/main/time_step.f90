@@ -11,12 +11,12 @@ module time_step
     use iso_fortran_env
 
     use data_structures             ! *_type  types and kCONSTANTS
-    use icar_constants,             only : Rd, cp
     use microphysics,               only : mp
     use advection,                  only : advect
     use mod_atm_utilities,          only : exner_function, compute_ivt, compute_iq
     use convection,                 only : convect
     use land_surface,               only : lsm
+    use surface_layer,              only : sfc
     use planetary_boundary_layer,   only : pbl
     use radiation,                  only : rad
     use wind,                       only : balance_uvw, update_winds, update_wind_dqdt
@@ -331,7 +331,7 @@ contains
     subroutine step(domain, forcing, end_time, options, mp_timer, adv_timer, rad_timer, lsm_timer, pbl_timer, exch_timer, send_timer, ret_timer, wait_timer, forcing_timer, diagnostic_timer, wind_bal_timer, wind_timer)
         implicit none
         type(domain_t),     intent(inout)   :: domain
-        type(boundary_t),   intent(in)      :: forcing
+        type(boundary_t),   intent(inout)   :: forcing
         type(Time_type),    intent(in)      :: end_time
         type(options_t),    intent(in)      :: options
 
@@ -353,10 +353,9 @@ contains
 
         ! now just loop over internal timesteps computing all physics in order (operator splitting...)
         do while (domain%model_time < end_time)
-        
             !Determine dt
             if (last_wind_update >= options%wind%update_dt%seconds()) then
-            
+
                 call domain%diagnostic_update(options)
 
                 call wind_timer%start()
@@ -367,7 +366,6 @@ contains
                 ! the next time step, but we assume that it is negligable
                 ! and that using a CFL criterion < 1.0 will cover this
                 call update_dt(dt, options, domain)
-
                 call update_wind_dqdt(domain, options)
 
                 last_wind_update = 0.0
@@ -412,6 +410,7 @@ contains
                 call rad_timer%stop()
 
                 call lsm_timer%start()
+                call sfc(domain, options, real(dt%seconds()))!, halo=1)
                 call lsm(domain, options, real(dt%seconds()))!, halo=1)
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" lsm")
                 call lsm_timer%stop()
@@ -458,6 +457,7 @@ contains
                 call mp_timer%stop()
                 
                 if (options%parameters%debug) call domain_check(domain, "img: "//trim(str(this_image()))//" domain%halo_send", fix=.True.)
+
 
                 !If we are in the last ~10 updates of a time step and a variable drops below 0, we have probably over-shot a value of 0. Force back to 0
                 if ((end_time%seconds() - domain%model_time%seconds()) < (dt%seconds()*10)) then

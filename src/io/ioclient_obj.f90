@@ -40,7 +40,7 @@ contains
         
         
         this%i_s_w = domain%its; this%i_e_w = domain%ite
-        this%k_s_w = domain%kts; this%k_e_w = domain%kte
+        this%k_s_w = domain%kts; this%k_e_w = domain%kte+1
         this%j_s_w = domain%jts; this%j_e_w = domain%jte
         if (domain%ims == domain%ids) this%i_s_w = domain%ids
         if (domain%ime == domain%ide) this%i_e_w = domain%ide !Add extra to accomodate staggered vars
@@ -196,7 +196,7 @@ contains
                 elseif (var%dtype == kDOUBLE) then
                     var%data_2dd(i_s_w:i_e_w,j_s_w:j_e_w) = &
                          dble(write_buffer(n,1:nx,1,1:ny))
-                endif
+                endif                
             else
                 var%data_3d(i_s_w:i_e_w,1:var%dim_len(2),j_s_w:j_e_w) = &
                     write_buffer(n,1:nx,1:var%dim_len(2),1:ny)

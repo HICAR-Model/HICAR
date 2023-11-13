@@ -32,6 +32,7 @@ program icar
     use wind_iterative,     only : finalize_iter_winds
     use ioserver_interface, only : ioserver_t
     use ioclient_interface, only : ioclient_t
+    use io_routines,        only : io_write
 
     use land_surface,               only : lsm_init
 
@@ -101,7 +102,7 @@ program icar
 
         call ioclient%receive(boundary, read_buffer)
         EVENT POST (child_read_ev[ioclient%server])
-        
+
         call boundary%update_computed_vars(options, update=options%parameters%time_varying_z)
 
         call init_model_state(options, domain, boundary, add_cond) ! added boundary structure for external files (additional conditions)
@@ -128,6 +129,7 @@ program icar
 
         call output_timer%start()
         call ioclient%push(domain, write_buffer)
+
         EVENT POST (write_ev[ioclient%server])
         call output_timer%stop()
         next_output = options%parameters%start_time + options%io_options%output_dt
@@ -267,7 +269,7 @@ program icar
 
         if (options%physics%windtype==kITERATIVE_WINDS) call finalize_iter_winds() 
     case (kIO_TEAM)
-    
+
         call EVENT_QUERY(end_ev,end_ev_cnt)
 
         do while (end_ev_cnt < ioserver%n_children)
@@ -276,11 +278,13 @@ program icar
             if (ev_cnt == ioserver%n_children .and. next_input<=options%parameters%end_time) then
                 !Do an event wait to decrement the event counter
                 EVENT WAIT (child_read_ev, UNTIL_COUNT=ioserver%n_children)
-            
+
                 call ioserver%read_file(read_buffer)
+
                 do i = 1,ioserver%n_children
                     EVENT POST (read_ev[ioserver%children(i)])
                 enddo
+
                 next_input = next_input + options%io_options%input_dt
             endif
 
@@ -483,7 +487,7 @@ contains
         case(kIO_TEAM)
             color = 1
         end select
-        
+
         CALL MPI_COMM_DUP( MPI_COMM_WORLD, globalComm, ierr )
         ! Assign all images in the IO team to the IO_comms MPI communicator. Use image indexing within initial team to get indexing of global MPI ranks
         CALL MPI_COMM_SPLIT( globalComm, color, (this_image()-1), splitComm, ierr )
@@ -502,12 +506,11 @@ contains
             k_s_w(this_image()) = ioclient%k_s_w; k_e_w(this_image()) = ioclient%k_e_w
             k_s_r(this_image()) = ioclient%k_s_r; k_e_r(this_image()) = ioclient%k_e_r
         end select
-                
+
         call co_max(i_s_w); call co_max(i_e_w); call co_max(i_s_r); call co_max(i_e_r)
         call co_max(j_s_w); call co_max(j_e_w); call co_max(j_s_r); call co_max(j_e_r)
         call co_max(k_s_w); call co_max(k_e_w); call co_max(k_s_r); call co_max(k_e_r)            
         
-    
         select case(exec_team)
         case(kIO_TEAM)
             CALL MPI_COMM_DUP( splitComm, ioserver%IO_comms, ierr )
@@ -532,7 +535,7 @@ contains
         end select
 
         call co_max(childrens)
-        
+
         select case(exec_team)
         case(kCOMPUTE_TEAM)
             do i = 1,size(childrens,1)

@@ -89,7 +89,7 @@ MODULE MODULE_MP_MORR_TWO_MOMENT
    ! USE module_mp_radar
 
 ! USE WRF PHYSICS CONSTANTS taken from ICAR data_structures module
-  use mod_wrf_constants, ONLY: CP=>wrf_cp, G=>wrf_gravity, R => r_d, RV => r_v, EP_2
+  use mod_wrf_constants, ONLY: CP=>cp, G=>gravity, R => r_d, RV => r_v, EP_2
 !  USE module_state_description
 
    IMPLICIT NONE

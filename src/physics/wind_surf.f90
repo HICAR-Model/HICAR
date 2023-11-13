@@ -36,45 +36,45 @@ contains
         class(domain_t),  intent(inout) :: domain
         class(options_t), intent(in)    :: options
 
-        real, allocatable    :: dist(:,:)
-        integer           :: d_max, search_max, i, j, i_s, j_s, i_start_buffer, i_end_buffer, j_start_buffer, j_end_buffer
-        integer           :: TPI_num
-        real              :: search_height, TPI_sum
+        integer           :: Sx_search_max, TPI_search_max, i, j, i_s, j_s, i_start_buff, i_end_buff, j_start_buff, j_end_buff
+        integer           :: ips, ipe, jps, jpe, TPI_num
+        real              :: search_height, TPI_sum, dist, TPI_d_max, Sx_d_max
         
-        d_max = options%wind%TPI_dmax
-        search_max = min(floor(max(1.0,d_max/domain%dx)),domain%neighborhood_max)
+        TPI_d_max = options%wind%TPI_dmax
+        TPI_search_max = min(floor(max(1.0,TPI_d_max/domain%dx)),domain%neighborhood_max)
 
-        allocate(domain%neighbor_TPI(domain%ihs : domain%ihe, domain%jhs : domain%jhe))
+        Sx_d_max = options%wind%Sx_dmax
+        Sx_search_max = min(floor(max(1.0,Sx_d_max/domain%dx)),domain%neighborhood_max)
+
+        ips = max(domain%ims - Sx_search_max,domain%ihs); ipe = min(domain%ime + Sx_search_max,domain%ihe);
+        jps = max(domain%jms - Sx_search_max,domain%jhs); jpe = min(domain%jme + Sx_search_max,domain%jhe);
+
+        allocate(domain%neighbor_TPI(ips:ipe,jps:jpe))
         allocate(domain%TPI(domain%grid2d% ims : domain%grid2d% ime, domain%grid2d% jms : domain%grid2d% jme))
-        allocate(dist( 2*search_max+1, 2*search_max+1 ))
-       
+              
         domain%neighbor_TPI = 0
-        do i = 1, 2*search_max+1
-            do j = 1, 2*search_max+1
-                dist(i,j) = sqrt(abs(i-(search_max+1.0))**2 + abs(j-(search_max+1.0))**2)
-            end do
-        end do
         
-        !Convert distances to meters
-        dist = dist*domain%dx
         !Now calc TPI
-        do i=domain%ihs, domain%ihe
-            do j=domain%jhs, domain%jhe
+        do i=ips, ipe
+            do j=jps, jpe
                 TPI_num = 0
                 TPI_sum = 0
                     
                 ! Check to use buffers to avoid searching out of grid
-                i_start_buffer = -min(0,i-(search_max+1))
-                i_end_buffer = min(0,domain%grid2d%ide-(i+search_max))
+                i_start_buff = max(domain%ihs,i-TPI_search_max)
+                i_end_buff = min(domain%ihe,i+TPI_search_max)
                 
-                j_start_buffer = -min(0,j-(search_max+1))
-                j_end_buffer = min(0,domain%grid2d%jde-(j+search_max))
+                j_start_buff = max(domain%jhs,j-TPI_search_max)
+                j_end_buff = min(domain%jhe,j+TPI_search_max)
                 
-                do i_s = 1+i_start_buffer, (search_max*2+1)+i_end_buffer
-                    do j_s = 1+j_start_buffer, (search_max*2+1)+j_end_buffer 
-                        if (dist(i_s,j_s) <= d_max .and. .not.(dist(i_s,j_s) == 0) ) then
-                            
-                            search_height = domain%neighbor_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1)))
+                do i_s = i_start_buff, i_end_buff
+                    do j_s = j_start_buff, j_end_buff
+                    
+                        !Determine distance of search point
+                        dist = domain%dx*sqrt(real((i-i_s)**2+(j-j_s)**2))
+                        
+                        if (dist <= TPI_d_max .and. .not.(dist == 0) ) then
+                            search_height = domain%neighbor_terrain(i_s,j_s)
                         
                             TPI_sum = TPI_sum + search_height
                             TPI_num = TPI_num + 1
@@ -102,11 +102,14 @@ contains
         type(options_t),intent(in)    :: options
         character(len=*),   intent(in) :: filename
         
-        real, allocatable    :: dist(:,:), azm(:,:), Sx_array_temp(:,:,:,:), sheltering_TPI(:,:,:,:), temp_sheltering_TPI(:,:,:,:)
-        integer, allocatable :: azm_indices(:,:), valid_ks(:)
-        integer           :: d_max, search_max, i, j, k, ang, i_s, j_s, i_start_buffer, i_end_buffer, j_start_buffer, j_end_buffer
+        real, allocatable    :: Sx_array_temp(:,:,:,:), sheltering_TPI(:,:,:,:), temp_sheltering_TPI(:,:,:,:)
+        integer           :: search_max, i, j, k, ang, i_s, j_s, i_start_buff, i_end_buff, j_start_buff, j_end_buff, TPI_i_s, TPI_i_e, TPI_j_s, TPI_j_e
         integer           :: rear_ang, fore_ang, test_ang, rear_ang_diff, fore_ang_diff, ang_diff, k_max, window_rear, window_fore, maxSxLoc, window_width
-        real              :: search_height, pt_height, h_diff, Sx_temp, maxSxVal, TPI_Shelter_temp, exposed_TPI, z_mean
+        integer           :: azm_index
+        real              :: search_height, pt_height, h_diff, Sx_temp, maxSxVal, TPI_Shelter_temp, exposed_TPI, z_mean, dist, azm, d_max
+
+        TPI_i_s = lbound(domain%neighbor_TPI,1); TPI_i_e = ubound(domain%neighbor_TPI,1)
+        TPI_j_s = lbound(domain%neighbor_TPI,2); TPI_j_e = ubound(domain%neighbor_TPI,2)
 
         d_max = options%wind%Sx_dmax
         TPI_scale = options%wind%TPI_scale
@@ -138,29 +141,7 @@ contains
 
         temp_sheltering_TPI = 0.0
         sheltering_TPI = 0.0
-        
-        !Pre-compute distances, using search_max to build grid
-        allocate(dist( 2*search_max+1, 2*search_max+1 ))
-        allocate(azm( 2*search_max+1, 2*search_max+1 ))
-        allocate(azm_indices( 2*search_max+1, 2*search_max+1 ))
-        azm = 0
-                
-        do i = 1, 2*search_max+1
-            do j = 1, 2*search_max+1
-                dist(i,j) = sqrt(abs(i-(search_max+1.0))**2 + abs(j-(search_max+1.0))**2)
-                
-                if (dist(i,j) > 0) azm(i,j)  = atan2(1.0*(i-(search_max+1)),1.0*(j-(search_max+1)))
-
-            end do
-        end do
-        
-        !Convert distances to meters
-        dist = dist*domain%dx
-        !convert azm to deg
-        azm = azm*rad2deg
-        where(azm < 0) azm = 360+azm
-        where(azm >= 360.0) azm=0.0
-        azm_indices = int(azm/5)+1
+                     
                 
         !call unique_sort_ind(azm_indices,valid_ks)
         
@@ -175,35 +156,48 @@ contains
                     end if
                     
                     ! Check to use buffers to avoid searching out of grid
-                    i_start_buffer = -min(0,i-(search_max+1))
-                    i_end_buffer = min(0,domain%grid2d%ide-(i+search_max))
+                    i_start_buff = max(TPI_i_s,i-search_max)
+                    i_end_buff = min(TPI_i_e,i+search_max)
+
+                    j_start_buff = max(TPI_j_s,j-search_max)
+                    j_end_buff = min(TPI_j_e,j+search_max)
                 
-                    j_start_buffer = -min(0,j-(search_max+1))
-                    j_end_buffer = min(0,domain%grid2d%jde-(j+search_max))
-                
-                    do i_s = 1+i_start_buffer, (search_max*2+1)+i_end_buffer
-                        do j_s = 1+j_start_buffer, (search_max*2+1)+j_end_buffer
-                            !Since dist is for a grid, and we want a search RADIUS, check that we are within d_max
-                            if (dist(i_s,j_s) <= d_max .and. .not.(dist(i_s,j_s) == 0) ) then
+                    do i_s = i_start_buff, i_end_buff
+                        do j_s = j_start_buff, j_end_buff
                             
+                            !Determine distance of search point
+                            dist = domain%dx*sqrt(real((i-i_s)**2+(j-j_s)**2))
+                            
+                            !Since dist is for a grid, and we want a search RADIUS, check that we are within d_max
+                            if (dist <= d_max .and. .not.(dist == 0) ) then
+                            
+                                !Compute azimuth ind of point
+                                azm = atan2(1.0*(i_s-i),1.0*(j_s-j))*rad2deg
+                                if(azm < 0) then
+                                    azm = 360+azm
+                                else if(azm >= 360.0) then
+                                    azm=0.0
+                                endif
+                                azm_index = int(azm/5)+1
+
                                 !Calculate height difference
-                                search_height = domain%neighbor_terrain(i+(i_s-(search_max+1)),j+(j_s-(search_max+1)))
+                                search_height = domain%neighbor_terrain(i_s,j_s)
                                 h_diff = search_height - pt_height
 
                                 !Calculate Sx slope to search-cell
-                                Sx_temp = atan(h_diff/dist(i_s,j_s))*rad2deg
-                                TPI_Shelter_temp = domain%neighbor_TPI(i+(i_s-(search_max+1)),j+(j_s-(search_max+1)))
+                                Sx_temp = atan(h_diff/dist)*rad2deg
+                                TPI_Shelter_temp = domain%neighbor_TPI(i_s,j_s)
                             
                                 ! If new Sx is greater than existing Sx for a given search angle, replace
-                                if (Sx_temp > Sx_array_temp(azm_indices(i_s,j_s),i,k,j) ) then
+                                if (Sx_temp > Sx_array_temp(azm_index,i,k,j) ) then
                                     !If we have found a sheltering Sx, and it is "exposed" (TPI >= 100.0), use this Sx
                                     !If we have found a sheltering Sx, but it is not "exposed", then this cell gets neither sheltering nor exposure (Sx = 0)
                                     !Sx_array_temp(azm_isndices(i_s,j_s),i,k,j) = Sx_temp
-                                    if ( (Sx_temp > 0.0) .and. (TPI_Shelter_temp >= exposed_TPI) ) then ! .and. ( TPI_Shelter_temp >= temp_sheltering_TPI(azm_indices(i_s,j_s),i,k,j)) ) then
-                                        Sx_array_temp(azm_indices(i_s,j_s),i,k,j) = Sx_temp
-                                        temp_sheltering_TPI(azm_indices(i_s,j_s),i,k,j) = TPI_Shelter_temp
+                                    if ( (Sx_temp > 0.0) .and. (TPI_Shelter_temp >= exposed_TPI) ) then ! .and. ( TPI_Shelter_temp >= temp_sheltering_TPI(azm_index,i,k,j)) ) then
+                                        Sx_array_temp(azm_index,i,k,j) = Sx_temp
+                                        temp_sheltering_TPI(azm_index,i,k,j) = TPI_Shelter_temp
                                     else if ( (Sx_temp <= 0.0) ) then !  .and. (domain%neighbor_TPI(i,j) >= exposed_TPI) ) then
-                                        Sx_array_temp(azm_indices(i_s,j_s),i,k,j) = Sx_temp
+                                        Sx_array_temp(azm_index,i,k,j) = Sx_temp
                                     end if
                                 end if
                             end if
@@ -327,15 +321,12 @@ contains
         if ( this_image() == 1 ) then
             !write (*,*) "Saving *_Sx.nc"
             !Save file
-            !call io_write(filename, "Sx", domain%Sx(:,:,:,:) ) 
+            call io_write(filename, "Sx", domain%Sx(:,:,:,:) ) 
             !call io_write("TPI_out.nc", "TPI", domain%neighbor_TPI(:,:) ) 
             !call io_write("sheltering_TPI.nc", "Sx_shelter", sheltering_TPI(:,:,:,:) ) 
         endif
         
-        deallocate(dist)
         deallocate(Sx_array_temp)
-        deallocate(azm)
-        deallocate(azm_indices)
         
         !Sync images befoer exiting so that we don't try to read Sx while it is being written
         !sync images ([DOM_IMG_INDX])

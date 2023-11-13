@@ -34,8 +34,8 @@ add_library(FSM_interface STATIC ${SOURCE_FILES})
 
 # Set the location for library installation -- i.e., /usr/lib in this case
 # not really necessary in this example. Use "sudo make install" to apply 
-set(CMAKE_INSTALL_LIBDIR /users/mjafari/lib/FSM_interface)
-set(CMAKE_Fortran_MODULE_DIRECTORY  /users/mjafari/include/FSM_interface)
+set(CMAKE_INSTALL_LIBDIR /users/dreynold/lib/FSM_interface)
+set(CMAKE_Fortran_MODULE_DIRECTORY  /users/dreynold/include/FSM_interface)
 
 # this is to copy the library to the diseired directory
 install(TARGETS FSM_interface  DESTINATION  ${CMAKE_INSTALL_LIBDIR})
@@ -50,10 +50,10 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build DESTINATION ${CMAKE_Fortran_
 #target_link_libraries(test_FSM_interface FSM_interface ${PROJECT_LINK_LIBS})
 
 # this is for gnu
-#SET(CMAKE_Fortran_FLAGS "-fcoarray=lib -mfma -ffree-line-length-none -ftree-vectorize -fimplicit-none -funroll-loops -march=native  -fno-protect-parens ")
+SET(CMAKE_Fortran_FLAGS "-fcoarray=lib -mfma -ffree-line-length-none -ftree-vectorize -fimplicit-none -funroll-loops -march=native  -fno-protect-parens ")
 
 # this is for cray
-SET(CMAKE_Fortran_FLAGS "-h omp vector2 -O3 -c -hfp2 -eI")
+#SET(CMAKE_Fortran_FLAGS "-h omp vector2 -O3 -c -hfp2 -eI")
 
 ADD_CUSTOM_TARGET( distclean make clean
 				   COMMAND ${CMAKE_COMMAND} -E remove_directory CMakeFiles

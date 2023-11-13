@@ -30,16 +30,22 @@ module radiation
     use options_interface,  only : options_t
     use domain_interface,   only : domain_t
     use data_structures
-    use icar_constants, only : kVARS, cp, Rd, gravity, solar_constant
+    use icar_constants, only : kVARS
+    use mod_wrf_constants, only : cp, R_d, gravity, DEGRAD, DPD, piconst
     use mod_atm_utilities, only : cal_cldfra3
     implicit none
     integer :: update_interval
     real*8  :: last_model_time
+    real    :: solar_constant
 
     !! MJ added to aggregate radiation over output interval
-    real, allocatable:: sum_SWdif(:,:), sum_SWdir(:,:), sum_SW(:,:), sum_LW(:,:) 
+    real, allocatable, dimension(:,:) :: sum_SWdif, sum_SWdir, sum_SW, sum_LW, cos_project_angle, solar_elevation_store, solar_azimuth_store
+    real, allocatable                 :: solar_azimuth(:), solar_elevation(:), day_frac(:)
     real*8 :: counter
     real*8  :: Delta_t !! MJ added to detect the time for outputting 
+    integer :: ims, ime, jms, jme, kms, kme
+    integer :: its, ite, jts, jte, kts, kte
+    integer :: ids, ide, jds, jde, kds, kde
 
     
 contains
@@ -48,11 +54,41 @@ contains
         type(domain_t), intent(inout) :: domain
         type(options_t),intent(in) :: options
         
+        ims = domain%grid%ims
+        ime = domain%grid%ime
+        jms = domain%grid%jms
+        jme = domain%grid%jme
+        kms = domain%grid%kms
+        kme = domain%grid%kme
+        its = domain%grid%its
+        ite = domain%grid%ite
+        jts = domain%grid%jts
+        jte = domain%grid%jte
+        kts = domain%grid%kts
+        kte = domain%grid%kte
+
+        ids = domain%grid%ids
+        ide = domain%grid%ide
+        jds = domain%grid%jds
+        jde = domain%grid%jde
+        kds = domain%grid%kds
+        kde = domain%grid%kde
+        
         !! MJ added to aggregate radiation over output interval
-        allocate(sum_SW(domain%grid%ims:domain%grid%ime,domain%grid%jms:domain%grid%jme)); sum_SW=0.
-        allocate(sum_SWdif(domain%grid%ims:domain%grid%ime,domain%grid%jms:domain%grid%jme)); sum_SWdif=0.
-        allocate(sum_SWdir(domain%grid%ims:domain%grid%ime,domain%grid%jms:domain%grid%jme)); sum_SWdir=0.
-        allocate(sum_LW(domain%grid%ims:domain%grid%ime,domain%grid%jms:domain%grid%jme)); sum_LW=0.
+        !allocate(sum_SW(domain%grid%ims:domain%grid%ime,domain%grid%jms:domain%grid%jme)); sum_SW=0.
+        !allocate(sum_SWdif(domain%grid%ims:domain%grid%ime,domain%grid%jms:domain%grid%jme)); sum_SWdif=0.
+        !allocate(sum_SWdir(domain%grid%ims:domain%grid%ime,domain%grid%jms:domain%grid%jme)); sum_SWdir=0.
+        !allocate(sum_LW(domain%grid%ims:domain%grid%ime,domain%grid%jms:domain%grid%jme)); sum_LW=0.
+        
+        if (options%physics%radiation_downScaling==1) then
+            allocate(cos_project_angle(ims:ime,jms:jme)) !! MJ added
+            allocate(solar_elevation_store(ims:ime,jms:jme)) !! MJ added
+            allocate(solar_azimuth_store(ims:ime,jms:jme)) !! MJ added
+        endif
+        
+        allocate(solar_elevation(ims:ime))
+        allocate(solar_azimuth(ims:ime)) !! MJ added
+        allocate(day_frac(ims:ime))
 
 
         if (this_image()==1) write(*,*) "Initializing Radiation"
@@ -60,7 +96,7 @@ contains
         if (options%physics%radiation==kRA_BASIC) then
             if (this_image()==1) write(*,*) "    Basic Radiation"
         endif
-        if (options%physics%radiation==kRA_SIMPLE) then
+        if (options%physics%radiation==kRA_SIMPLE .or. (options%physics%landsurface>0 .and. options%physics%radiation==0)) then
             if (this_image()==1) write(*,*) "    Simple Radiation"
             call ra_simple_init(domain, options)
         endif!! MJ added to detect the time for outputting 
@@ -84,7 +120,7 @@ contains
                 ! Added 0.8 factor to make sure p_top is low enough. This value can be changed if code crashes.
                 ! Code will crash because of negative log value in this expression in ra_rrtmg_lw and ra_rrtmg_sw:
                 !        plog = log(pavel(lay))
-                p_top=(minval(domain%pressure_interface%data_3d(:,domain%kme,:)))*0.8, allowed_to_read=.TRUE. ,                &
+                p_top=(minval(domain%pressure_interface%data_3d(:,domain%kme+1,:))),     allowed_to_read=.TRUE. ,                &
                 ids=domain%ids, ide=domain%ide, jds=domain%jds, jde=domain%jde, kds=domain%kds, kde=domain%kde,                &
                 ims=domain%ims, ime=domain%ime, jms=domain%jms, jme=domain%jme, kms=domain%kms, kme=domain%kme,                &
                 its=domain%its, ite=domain%ite, jts=domain%jts, jte=domain%jte, kts=domain%kts, kte=domain%kte                 )
@@ -98,7 +134,7 @@ contains
                 domain%tend%th_lwrad = 0
         endif
         update_interval=options%rad_options%update_interval_rrtmg ! 30 min, 1800 s   600 ! 10 min (600 s)
-        last_model_time=-999
+        last_model_time = domain%model_time%seconds()-update_interval
 
     end subroutine radiation_init
 
@@ -190,25 +226,17 @@ contains
         real,           intent(in)    :: dt
         integer,        intent(in), optional :: halo, subset
 
-        integer :: ims, ime, jms, jme, kms, kme
-        integer :: its, ite, jts, jte, kts, kte
-        integer :: ids, ide, jds, jde, kds, kde
 
         real, dimension(:,:,:,:), pointer :: tauaer_sw=>null(), ssaaer_sw=>null(), asyaer_sw=>null()
-        real, allocatable :: day_frac(:), solar_elevation(:)
-        real, allocatable :: solar_azimuth(:), cos_project_angle(:,:), solar_elevation_store(:,:), solar_azimuth_store(:,:)
-        real, allocatable :: solar_elevation_test(:), solar_elevation_store_test(:,:)!! MJ added
         real, allocatable:: albedo(:,:),gsw(:,:)
-        integer :: j
-        real ::ra_dt
-
-        real :: gridkm
-        integer :: i, k
         real, allocatable:: t_1d(:), p_1d(:), Dz_1d(:), qv_1d(:), qc_1d(:), qi_1d(:), qs_1d(:), cf_1d(:)
         real, allocatable :: qc(:,:,:),qi(:,:,:), qs(:,:,:), qg(:,:,:), qr(:,:,:), cldfra(:,:,:)
         real, allocatable :: re_c(:,:,:),re_i(:,:,:), re_s(:,:,:)
 
         real, allocatable :: xland(:,:)
+
+        real :: gridkm, ra_dt, declin
+        integer :: i, k, j
 
         logical :: f_qr, f_qc, f_qi, F_QI2, F_QI3, f_qs, f_qg, f_qv, f_qndrop
         integer :: mp_options, F_REC, F_REI, F_RES
@@ -217,163 +245,148 @@ contains
         !! MJ added
         real :: trans_atm, trans_atm_dir, max_dir_1, max_dir_2, max_dir, elev_th, ratio_dif
         integer :: zdx, zdx_max
-
-
-        ims = domain%grid%ims
-        ime = domain%grid%ime
-        jms = domain%grid%jms
-        jme = domain%grid%jme
-        kms = domain%grid%kms
-        kme = domain%grid%kme
-        its = domain%grid%its
-        ite = domain%grid%ite
-        jts = domain%grid%jts
-        jte = domain%grid%jte
-        kts = domain%grid%kts
-        kte = domain%grid%kte
-
-        ids = domain%grid%ids
-        ide = domain%grid%ide
-        jds = domain%grid%jds
-        jde = domain%grid%jde
-        kds = domain%grid%kds
-        kde = domain%grid%kde
-
-        allocate(t_1d(kms:kme))
-        allocate(p_1d(kms:kme))
-        allocate(Dz_1d(kms:kme))
-        allocate(qv_1d(kms:kme))
-        allocate(qc_1d(kms:kme))
-        allocate(qi_1d(kms:kme))
-        allocate(qs_1d(kms:kme))
-        allocate(cf_1d(kms:kme))
-
-        allocate(qc(ims:ime,kms:kme,jms:jme))
-        allocate(qi(ims:ime,kms:kme,jms:jme))
-        allocate(qs(ims:ime,kms:kme,jms:jme))
-        allocate(qg(ims:ime,kms:kme,jms:jme))
-        allocate(qr(ims:ime,kms:kme,jms:jme))
         
-        allocate(re_c(ims:ime,kms:kme,jms:jme))
-        allocate(re_i(ims:ime,kms:kme,jms:jme))
-        allocate(re_s(ims:ime,kms:kme,jms:jme))
-
-        allocate(cldfra(ims:ime,kms:kme,jms:jme))
-        allocate(xland(ims:ime,jms:jme))
-
-        allocate(day_frac(ims:ime))
-        allocate(solar_elevation(ims:ime))
-        allocate(albedo(ims:ime,jms:jme))
-        allocate(gsw(ims:ime,jms:jme))
-
-        allocate(solar_azimuth(ims:ime)) !! MJ added
-        allocate(solar_elevation_test(ims:ime)) !! MJ added
-        allocate(cos_project_angle(ims:ime,jms:jme)) !! MJ added
-        allocate(solar_elevation_store(ims:ime,jms:jme)) !! MJ added
-        allocate(solar_elevation_store_test(ims:ime,jms:jme)) !! MJ added
-        allocate(solar_azimuth_store(ims:ime,jms:jme)) !! MJ added
-
-
-        ! Note, need to link NoahMP to update albedo
+        if (options%physics%radiation == 0) return
         
-        qc = 0
-        qi = 0
-        qs = 0
-        qg = 0
-        qr = 0
-        
-        re_c = 0
-        re_i = 0
-        re_s = 0
-        
-        cldfra=0
-
-        F_QI=.false.
-        F_QI2 = .false.
-        F_QI3 = .false.
-        F_QC=.false.
-        F_QR=.false.
-        F_QS=.false.
-        F_QG=.false.
-        f_qndrop=.false.
-        F_QV=.false.
-        
-        F_REC=0
-        F_REI=0
-        F_RES=0
-
-        F_QI=associated(domain%cloud_ice_mass%data_3d )
-        F_QC=associated(domain%cloud_water_mass%data_3d )
-        F_QR=associated(domain%rain_mass%data_3d )
-        F_QS=associated(domain%snow_mass%data_3d )
-        F_QV=associated(domain%water_vapor%data_3d )
-        F_QG=associated(domain%graupel_mass%data_3d )
-        F_QNDROP=associated(domain%cloud_number%data_3d)
-        F_QI2=associated(domain%ice2_mass%data_3d)
-        F_QI3=associated(domain%ice3_mass%data_3d)
-        
-        if(associated(domain%re_cloud%data_3d)) F_REC = 1
-        if(associated(domain%re_ice%data_3d)) F_REI = 1
-        if(associated(domain%re_snow%data_3d)) F_RES = 1
-        
-
-        if (F_QG) qg(:,:,:) = domain%graupel_mass%data_3d
-        if (F_QC) qc(:,:,:) = domain%cloud_water_mass%data_3d
-        if (F_QI) qi(:,:,:) = domain%cloud_ice_mass%data_3d
-        if (F_QI2) qi(:,:,:) = qi + domain%ice2_mass%data_3d
-        if (F_QI3) qi(:,:,:) = qi + domain%ice3_mass%data_3d
-        if (F_QS) qs(:,:,:) = domain%snow_mass%data_3d
-        if (F_QR) qr(:,:,:) = domain%rain_mass%data_3d
-
-        if (F_REC > 0) re_c(:,:,:) = domain%re_cloud%data_3d
-        if (F_REI > 0) re_i(:,:,:) = domain%re_ice%data_3d
-        if (F_RES > 0) re_s(:,:,:) = domain%re_snow%data_3d
-
-        mp_options=0
-
-        if (options%physics%radiation==kRA_SIMPLE) then
-            call ra_simple(theta = domain%potential_temperature%data_3d,         &
-                           pii= domain%exner%data_3d,                            &
-                           qv = domain%water_vapor%data_3d,                      &
-                           qc = qc,                 &
-                           qs = qs + qi + qg,                                    &
-                           qr = qr,                        &
-                           p =  domain%pressure%data_3d,                         &
-                           swdown =  domain%shortwave%data_2d,                   &
-                           lwdown =  domain%longwave%data_2d,                    &
-                           cloud_cover =  domain%cloud_fraction%data_2d,         &
-                           lat = domain%latitude%data_2d,                        &
-                           lon = domain%longitude%data_2d,                       &
-                           date = domain%model_time,                             &
-                           options = options,                                    &
-                           dt = dt,                                              &
-                           ims=ims, ime=ime, jms=jms, jme=jme, kms=kms, kme=kme, &
-                           its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte, F_runlw=.True.)
-        endif
-
-        if (options%physics%radiation==kRA_RRTMG) then
-
-            if (options%lsm_options%monthly_albedo) then
-                ALBEDO = domain%albedo%data_3d(:, domain%model_time%month, :)
-            else
-                ALBEDO = domain%albedo%data_3d(:, 1, :)
-            endif
-
+        !We only need to calculate these variables if we are using terrain shading, otherwise only call on each radiation update
+        if (options%physics%radiation_downScaling == 1 .or. &
+            ((domain%model_time%seconds() - last_model_time) >= update_interval)) then
             do j = jms,jme
-               !! MJ commented as it does not work in Erupe
-               ! solar_elevation  = calc_solar_elevation(date=domain%model_time, lon=domain%longitude%data_2d, &
-               !                j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac)
+               !! MJ used corr version, as other does not work in Erupe
                 solar_elevation  = calc_solar_elevation_corr(date=domain%model_time, lon=domain%longitude%data_2d, &
                                 j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac, solar_azimuth=solar_azimuth)
                 domain%cosine_zenith_angle%data_2d(its:ite,j)=sin(solar_elevation(its:ite))
-            enddo
+                
+                !If we are doing terrain shading, we will need these later!
+                if (options%physics%radiation_downScaling == 1) then
+                    cos_project_angle(its:ite,j)= cos(domain%slope_angle%data_2d(its:ite,j))*sin(solar_elevation(its:ite)) + &
+                                                  sin(domain%slope_angle%data_2d(its:ite,j))*cos(solar_elevation(its:ite))   &
+                                                  *cos(solar_azimuth(its:ite)-domain%aspect_angle%data_2d(its:ite,j))
 
-            if (last_model_time==-999) then
-                last_model_time = domain%model_time%seconds()-update_interval
+                    solar_elevation_store(its:ite,j) = solar_elevation(its:ite)
+                    solar_azimuth_store(its:ite,j) = solar_azimuth(its:ite)
+                endif
+            enddo
+        endif
+        !If we are not over the update interval, don't run any of this, since it contains allocations, etc...
+        if ((domain%model_time%seconds() - last_model_time) >= update_interval) then
+
+            ra_dt = domain%model_time%seconds() - last_model_time
+            last_model_time = domain%model_time%seconds()
+
+            allocate(t_1d(kms:kme))
+            allocate(p_1d(kms:kme))
+            allocate(Dz_1d(kms:kme))
+            allocate(qv_1d(kms:kme))
+            allocate(qc_1d(kms:kme))
+            allocate(qi_1d(kms:kme))
+            allocate(qs_1d(kms:kme))
+            allocate(cf_1d(kms:kme))
+
+            allocate(qc(ims:ime,kms:kme,jms:jme))
+            allocate(qi(ims:ime,kms:kme,jms:jme))
+            allocate(qs(ims:ime,kms:kme,jms:jme))
+            allocate(qg(ims:ime,kms:kme,jms:jme))
+            allocate(qr(ims:ime,kms:kme,jms:jme))
+
+            allocate(re_c(ims:ime,kms:kme,jms:jme))
+            allocate(re_i(ims:ime,kms:kme,jms:jme))
+            allocate(re_s(ims:ime,kms:kme,jms:jme))
+
+            allocate(cldfra(ims:ime,kms:kme,jms:jme))
+            allocate(xland(ims:ime,jms:jme))
+
+            allocate(albedo(ims:ime,jms:jme))
+            allocate(gsw(ims:ime,jms:jme))
+
+            ! Note, need to link NoahMP to update albedo
+
+            qc = 0
+            qi = 0
+            qs = 0
+            qg = 0
+            qr = 0
+
+            re_c = 0
+            re_i = 0
+            re_s = 0
+
+            cldfra=0
+
+            F_QI=.false.
+            F_QI2 = .false.
+            F_QI3 = .false.
+            F_QC=.false.
+            F_QR=.false.
+            F_QS=.false.
+            F_QG=.false.
+            f_qndrop=.false.
+            F_QV=.false.
+
+            F_REC=0
+            F_REI=0
+            F_RES=0
+
+            F_QI=associated(domain%cloud_ice_mass%data_3d )
+            F_QC=associated(domain%cloud_water_mass%data_3d )
+            F_QR=associated(domain%rain_mass%data_3d )
+            F_QS=associated(domain%snow_mass%data_3d )
+            F_QV=associated(domain%water_vapor%data_3d )
+            F_QG=associated(domain%graupel_mass%data_3d )
+            F_QNDROP=associated(domain%cloud_number%data_3d)
+            F_QI2=associated(domain%ice2_mass%data_3d)
+            F_QI3=associated(domain%ice3_mass%data_3d)
+
+            if(associated(domain%re_cloud%data_3d)) F_REC = 1
+            if(associated(domain%re_ice%data_3d)) F_REI = 1
+            if(associated(domain%re_snow%data_3d)) F_RES = 1
+
+
+            if (F_QG) qg(:,:,:) = domain%graupel_mass%data_3d
+            if (F_QC) qc(:,:,:) = domain%cloud_water_mass%data_3d
+            if (F_QI) qi(:,:,:) = domain%cloud_ice_mass%data_3d
+            if (F_QI2) qi(:,:,:) = qi + domain%ice2_mass%data_3d
+            if (F_QI3) qi(:,:,:) = qi + domain%ice3_mass%data_3d
+            if (F_QS) qs(:,:,:) = domain%snow_mass%data_3d
+            if (F_QR) qr(:,:,:) = domain%rain_mass%data_3d
+
+            if (F_REC > 0) re_c(:,:,:) = domain%re_cloud%data_3d
+            if (F_REI > 0) re_i(:,:,:) = domain%re_ice%data_3d
+            if (F_RES > 0) re_s(:,:,:) = domain%re_snow%data_3d
+
+            mp_options=0
+
+            !Calculate solar constant
+            call radconst(domain%model_time%day_of_year(), declin, solar_constant)
+
+            if (options%physics%radiation==kRA_SIMPLE) then
+                call ra_simple(theta = domain%potential_temperature%data_3d,         &
+                               pii= domain%exner%data_3d,                            &
+                               qv = domain%water_vapor%data_3d,                      &
+                               qc = qc,                 &
+                               qs = qs + qi + qg,                                    &
+                               qr = qr,                        &
+                               p =  domain%pressure%data_3d,                         &
+                               swdown =  domain%shortwave%data_2d,                   &
+                               lwdown =  domain%longwave%data_2d,                    &
+                               cloud_cover =  domain%cloud_fraction%data_2d,         &
+                               lat = domain%latitude%data_2d,                        &
+                               lon = domain%longitude%data_2d,                       &
+                               date = domain%model_time,                             &
+                               options = options,                                    &
+                               dt = ra_dt,                                           &
+                               ims=ims, ime=ime, jms=jms, jme=jme, kms=kms, kme=kme, &
+                               its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte, F_runlw=.True.)
             endif
-            if ((domain%model_time%seconds() - last_model_time) >= update_interval) then
-                ra_dt = domain%model_time%seconds() - last_model_time
-                last_model_time = domain%model_time%seconds()
+
+            if (options%physics%radiation==kRA_RRTMG) then
+
+                if (options%lsm_options%monthly_albedo) then
+                    ALBEDO = domain%albedo%data_3d(:, domain%model_time%month, :)
+                else
+                    ALBEDO = domain%albedo%data_3d(:, 1, :)
+                endif
+
                 domain%tend%th_swrad = 0
                 domain%shortwave%data_2d = 0
                 ! Calculate cloud fraction
@@ -437,7 +450,7 @@ contains
                     cldfra3d=cldfra,                                      &
                     !, lradius, iradius,                                  &
                     is_cammgmp_used = .False.,                            &
-                    r = Rd,                                               &
+                    r = R_d,                                               &
                     g = gravity,                                          &
                     re_cloud = re_c,                   &
                     re_ice   = re_i,                     &
@@ -447,7 +460,7 @@ contains
                     has_reqs=F_RES,                                           & ! use with icloud > 0 ! G. Thompson
                     icloud = options%rad_options%icloud,                  & ! set to nonzero if effective radius is available from microphysics
                     warm_rain = .False.,                                  & ! when a dding WSM3scheme, add option for .True.
-                    cldovrlp=1,                                           & ! J. Henderson AER: cldovrlp namelist value
+                    cldovrlp=options%rad_options%cldovrlp,                & ! J. Henderson AER: cldovrlp namelist value
                     !f_ice_phy, f_rain_phy,                               &
                     xland=real(domain%land_mask),                         &
                     xice=real(domain%land_mask)*0,                        & ! should add a variable for sea ice fraction
@@ -511,12 +524,12 @@ contains
                             t3d = domain%temperature%data_3d,                     &
                             t8w = domain%temperature_interface%data_3d,           &     ! temperature interface
                             rho3d = domain%density%data_3d,                       &
-                            r = Rd,                                               &
+                            r = R_d,                                               &
                             g = gravity,                                          &
                             icloud = options%rad_options%icloud,                  & ! set to nonzero if effective radius is available from microphysics
                             warm_rain = .False.,                                  & ! when a dding WSM3scheme, add option for .True.
                             cldfra3d = cldfra,                                    &
-                            cldovrlp=1,                                           & ! set to 1 for now. Could make this ICAR namelist option
+                            cldovrlp=options%rad_options%cldovrlp,                & ! J. Henderson AER: cldovrlp namelist value
 !                            lradius,iradius,                                     & !goes with CAMMGMP (Morrison Gettelman CAM mp)
                             is_cammgmp_used = .False.,                            & !goes with CAMMGMP (Morrison Gettelman CAM mp)
 !                            f_ice_phy, f_rain_phy,                               & !goes with MP option 5 (Ferrier)
@@ -567,6 +580,10 @@ contains
                 
                 domain%tend_swrad%data_3d = domain%tend%th_swrad
             endif
+        endif
+        
+        !If using the RRTMG scheme, then apply tendencies here. This is now outside of interval loop, so this will be called every phys timestep
+        if (options%physics%radiation==kRA_RRTMG) then
             domain%potential_temperature%data_3d = domain%potential_temperature%data_3d+domain%tend%th_lwrad*dt+domain%tend%th_swrad*dt
             domain%temperature%data_3d = domain%potential_temperature%data_3d*domain%exner%data_3d
             domain%tend_swrad%data_3d = domain%tend%th_swrad
@@ -575,28 +592,14 @@ contains
         !! MJ: note that radiation down scaling works only for simple and rrtmg schemes as they provide the above-topography radiation per horizontal plane
         !! MJ corrected, as calc_solar_elevation has largley understimated the zenith angle in Switzerland
         !! MJ added: this is Tobias Jonas (TJ) scheme based on swr function in metDataWizard/PROCESS_COSMO_DATA_1E2E.m and also https://github.com/Tobias-Jonas-SLF/HPEval
-        if (options%physics%radiation_downScaling==1) then
-            do j = jms,jme
-                solar_elevation  = calc_solar_elevation_corr(date=domain%model_time, lon=domain%longitude%data_2d,&
-                                           j=j,ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac, & 
-                                           solar_azimuth=solar_azimuth)
-                cos_project_angle(its:ite,j)= cos(domain%slope_angle%data_2d(its:ite,j))*sin(solar_elevation(its:ite)) + &
-                                              sin(domain%slope_angle%data_2d(its:ite,j))*cos(solar_elevation(its:ite))   &
-                                              *cos(solar_azimuth(its:ite)-domain%aspect_angle%data_2d(its:ite,j))
-
-                solar_elevation_store(its:ite,j) = solar_elevation(its:ite)
-                solar_azimuth_store(its:ite,j) = solar_azimuth(its:ite)
-
-                domain%cosine_zenith_angle%data_2d(its:ite,j)=sin(solar_elevation(its:ite))
-            enddo 
-            
+        if (options%physics%radiation_downScaling==1) then            
             !! partitioning the total radiation per horizontal plane into the diffusive and direct ones based on https://www.sciencedirect.com/science/article/pii/S0168192320300058, HPEval
             if (.not.(options%physics%radiation==kRA_RRTMG)) then
                 ratio_dif=0.            
                 do j = jts,jte
                     do i = its,ite
                         trans_atm = max(min(domain%shortwave%data_2d(i,j)/&
-                                ( 1367* (sin(solar_elevation_store(i,j)+1.e-4)) ),1.),0.)   ! atmospheric transmissivity
+                                ( solar_constant* (sin(solar_elevation_store(i,j)+1.e-4)) ),1.),0.)   ! atmospheric transmissivity
                         if (trans_atm<=0.22) then
                             ratio_dif=1.-0.09*trans_atm  
                         elseif (0.22<trans_atm .and. trans_atm<=0.8) then
@@ -618,16 +621,16 @@ contains
 
                     ! determin maximum allowed direct swr
                     trans_atm_dir = max(min(domain%shortwave_direct%data_2d(i,j)/&
-                                    (1367*sin(solar_elevation_store(i,j)+1.e-4)),1.),0.)  ! atmospheric transmissivity for direct sw radiation
-                    max_dir_1     = 1367.*exp(log(1.-0.165)/max(sin(solar_elevation_store(i,j)),1.e-4))            
-                    max_dir_2     = 1367.*trans_atm_dir                          
+                                    (solar_constant*sin(solar_elevation_store(i,j)+1.e-4)),1.),0.)  ! atmospheric transmissivity for direct sw radiation
+                    max_dir_1     = solar_constant*exp(log(1.-0.165)/max(sin(solar_elevation_store(i,j)),1.e-4))            
+                    max_dir_2     = solar_constant*trans_atm_dir                          
                     max_dir       = min(max_dir_1,max_dir_2)                     ! applying both above criteria 1 and 2                    
                     
                     !!
-                    zdx=floor(solar_azimuth_store(i,j)*(180./pi)/4.0) !! MJ added= we have 90 by 4 deg for hlm ...zidx is the right index based on solar azimuthal angle
+                    zdx=floor(solar_azimuth_store(i,j)*(180./piconst)/4.0) !! MJ added= we have 90 by 4 deg for hlm ...zidx is the right index based on solar azimuthal angle
 
                     zdx = max(min(zdx,zdx_max),1)
-                    elev_th=(90.-domain%hlm%data_3d(i,zdx,j))*pi/180. !! MJ added: it is the solar elevation threshold above which we see the sun from the pixel  
+                    elev_th=(90.-domain%hlm%data_3d(i,zdx,j))*DEGRAD !! MJ added: it is the solar elevation threshold above which we see the sun from the pixel  
                     if (solar_elevation_store(i,j)>=elev_th) then
                         domain%shortwave_direct_above%data_2d(i,j)=min(domain%shortwave_direct%data_2d(i,j),max_dir)
                         domain%shortwave_direct%data_2d(i,j) = min(domain%shortwave_direct%data_2d(i,j)/            &
@@ -667,6 +670,54 @@ contains
 !                sum_LW = 0.
 !            endif
 !        endif
-
     end subroutine rad
+    
+    
+! DR 2023: Taken from WRF mod_radiation_driver
+!---------------------------------------------------------------------
+!BOP
+! !IROUTINE: radconst - compute radiation terms
+! !INTERFAC:
+   SUBROUTINE radconst(JULIAN, DECLIN, SOLCON)
+!---------------------------------------------------------------------
+   IMPLICIT NONE
+!---------------------------------------------------------------------
+
+! !ARGUMENTS:
+   REAL, INTENT(IN   )      ::       JULIAN
+   REAL, INTENT(OUT  )      ::       DECLIN,SOLCON
+   REAL                     ::       OBECL,SINOB,SXLONG,ARG,  &
+                                     DECDEG,DJUL,RJUL,ECCFAC
+!
+! !DESCRIPTION:
+! Compute terms used in radiation physics 
+!EOP
+
+! for short wave radiation
+
+   DECLIN=0.
+   SOLCON=0.
+
+!-----OBECL : OBLIQUITY = 23.5 DEGREE.
+        
+   OBECL=23.5*DEGRAD
+   SINOB=SIN(OBECL)
+        
+!-----CALCULATE LONGITUDE OF THE SUN FROM VERNAL EQUINOX:
+        
+   IF(JULIAN.GE.80.)SXLONG=DPD*(JULIAN-80.)
+   IF(JULIAN.LT.80.)SXLONG=DPD*(JULIAN+285.)
+   SXLONG=SXLONG*DEGRAD
+   ARG=SINOB*SIN(SXLONG)
+   DECLIN=ASIN(ARG)
+   DECDEG=DECLIN/DEGRAD
+!----SOLAR CONSTANT ECCENTRICITY FACTOR (PALTRIDGE AND PLATT 1976)
+   DJUL=JULIAN*360./365.
+   RJUL=DJUL*DEGRAD
+   ECCFAC=1.000110+0.034221*COS(RJUL)+0.001280*SIN(RJUL)+0.000719*  &
+          COS(2*RJUL)+0.000077*SIN(2*RJUL)
+   SOLCON=1370.*ECCFAC
+   
+   END SUBROUTINE radconst
+   
 end module radiation

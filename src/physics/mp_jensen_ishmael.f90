@@ -489,7 +489,7 @@ contains
     integer :: gi2, gi3   !.. Index for the Gamma(NU) lookup
     integer :: numice     !.. Number of ice species currently with ice
     integer :: current_index  !.. Used to determine number of ice species wi th mass > QSMALL
-    real, allocatable, dimension(:) :: icearray !.. Array with size of number
+    integer, dimension(cat) :: icearray !.. Array with size of number
                                                 !.. of ice species with mass > QSMALL
     real :: wetg          !.. wet growth check
     real :: gamma_arg     !.. Gamma argument: Gamma(gamma_arg)
@@ -677,8 +677,8 @@ contains
   !..  If condensate or supersaturation wrt liquid, do microphysics
        if(domicro) then
           
-          if(allocated(icearray)) deallocate(icearray)
-          
+          !if(allocated(icearray)) deallocate(icearray)
+          icearray = 1
           numice = 0     !.. Number of species with ice
           do cc = 1, cat !.. Loop over all ice species
              has_ice(cc) = .false.
@@ -692,8 +692,8 @@ contains
 
   !.. Determine the number of ice species to loop over
   !.. For vapor growth/riming, etc
-          if(numice.gt.0.and..not.allocated(icearray)) then 
-             allocate(icearray(numice))
+          if(numice.gt.0) then 
+             !allocate(icearray(numice))
              current_index = 1
              do cc = 1, cat
                 if(has_ice(cc)) then
@@ -3962,8 +3962,8 @@ contains
        r(k,4) =  max(qdum2,0.)
        
        qr(k,3) = 0.0 !.. internal energy... not needed so pass in zero                                        
-       qq(k,3) = t(k,3)
        t(k,3) = tk(k) - 273.15
+       qq(k,3) = t(k,3)
        qr(k,4) = 0.0 !.. internal energy... not needed so pass in zero                               
        qq(k,4) = t(k,3)
        t(k,4) = t(k,3)

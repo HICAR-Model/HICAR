@@ -19,7 +19,7 @@ submodule(domain_interface) domain_implementation
     use vertical_interpolation,only : vinterp, vLUT
     use wind_surf,            only : calc_Sx, calc_TPI
     use output_metadata,            only : get_varname
-
+    use mod_wrf_constants,    only : gravity, R_d, KARMAN
     implicit none
 
     interface setup
@@ -52,11 +52,11 @@ contains
         call initialize_core_variables(this, options)  ! split into several subroutines?
 
         call read_land_variables(this, options)
-
+        
         call setup_meta_data(this, options)
 
         call set_var_lists(this, options)
-        
+
         if (options%parameters%batched_exch) call setup_batch_exch(this)
 
         call init_relax_filters(this)
@@ -93,7 +93,8 @@ contains
         if (options%vars_to_advect(kVARS%ice3_c)>0) call this%adv_vars%add_var('ice3_c', this%ice3_c%meta_data)   
 
         !Exchange-only variables
-        if (options%vars_to_exch(kVARS%sensible_heat)>0) call this%exch_vars%add_var('hfss', this%sensible_heat)   
+        if (options%vars_to_exch(kVARS%sensible_heat)>0) call this%exch_vars%add_var('hfss', this%sensible_heat) 
+        if (options%vars_to_exch(kVARS%skin_temperature)>0) call this%exch_vars%add_var('tsfe', this%skin_temperature)   
         if (options%vars_to_exch(kVARS%Ds)>0) call this%exch_vars%add_var('Ds', this%Ds)   
         if (options%vars_to_exch(kVARS%fsnow)>0) call this%exch_vars%add_var('fsnow', this%fsnow)   
         if (options%vars_to_exch(kVARS%Sice)>0) call this%exch_vars%add_var('Sice', this%Sice)   
@@ -227,7 +228,11 @@ contains
         if (0<var_list( kVARS%v_10m) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%v_10m                        )), this%v_10m)
         if (0<var_list( kVARS%windspd_10m) )                call this%vars_to_out%add_var( trim( get_varname( kVARS%windspd_10m                  )), this%windspd_10m) !! MJ added
         if (0<var_list( kVARS%coeff_momentum_drag) )        call this%vars_to_out%add_var( trim( get_varname( kVARS%coeff_momentum_drag          )), this%coeff_momentum_drag)
-        if (0<var_list( kVARS%coeff_heat_exchange) )        call this%vars_to_out%add_var( trim( get_varname( kVARS%coeff_heat_exchange          )), this%coeff_heat_exchange)
+        if (0<var_list( kVARS%chs) )                        call this%vars_to_out%add_var( trim( get_varname( kVARS%chs                          )), this%chs)
+        if (0<var_list( kVARS%chs2) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%chs2                         )), this%chs2)
+        if (0<var_list( kVARS%cqs2) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%cqs2                         )), this%cqs2)
+        if (0<var_list( kVARS%br) )                         call this%vars_to_out%add_var( trim( get_varname( kVARS%br                           )), this%br)
+        if (0<var_list( kVARS%QFX) )                        call this%vars_to_out%add_var( trim( get_varname( kVARS%QFX                          )), this%qfx)
         if (0<var_list( kVARS%surface_rad_temperature) )    call this%vars_to_out%add_var( trim( get_varname( kVARS%surface_rad_temperature      )), this%surface_rad_temperature)
         if (0<var_list( kVARS%temperature_2m) )             call this%vars_to_out%add_var( trim( get_varname( kVARS%temperature_2m               )), this%temperature_2m)
         if (0<var_list( kVARS%humidity_2m) )                call this%vars_to_out%add_var( trim( get_varname( kVARS%humidity_2m                  )), this%humidity_2m)
@@ -326,6 +331,7 @@ contains
         if (0<var_list( kVARS%hlm) )                        call this%vars_to_out%add_var( trim( get_varname( kVARS%hlm                          )), this%hlm)        
         if (0<var_list( kVARS%hpbl) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%hpbl                         )), this%hpbl)
         if (0<var_list( kVARS%coeff_heat_exchange_3d) )     call this%vars_to_out%add_var( trim( get_varname( kVARS%coeff_heat_exchange_3d       )), this%coeff_heat_exchange_3d)
+        if (0<var_list( kVARS%coeff_momentum_exchange_3d) ) call this%vars_to_out%add_var( trim( get_varname( kVARS%coeff_momentum_exchange_3d   )), this%coeff_momentum_exchange_3d)
         if (0<var_list( kVARS%wind_alpha) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%wind_alpha                   )), this%alpha)
         if (0<var_list( kVARS%froude) )                     call this%vars_to_out%add_var( trim( get_varname( kVARS%froude                       )), this%froude)
         if (0<var_list( kVARS%blk_ri) )                     call this%vars_to_out%add_var( trim( get_varname( kVARS%blk_ri                       )), this%Ri)
@@ -417,10 +423,8 @@ contains
 
       ! for all variables with a forcing_var /= "", get forcing, interpolate to local domain
       call this%interpolate_forcing(forcing)
-
-      call initialize_internal_variables(this, options)
-      call this%enforce_limits()
-      this%model_time = options%parameters%start_time
+      
+      if (allocated(this%znw).or.allocated(this%znu)) call init_znu(this)
 
 
       ! - - - - - - - - - - - - - - - - - - -  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -438,6 +442,8 @@ contains
 
       ! - - - - - - - - - - - - - - - - - - -  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
       call diagnostic_update(this,options)
+      call this%enforce_limits()
+      this%model_time = options%parameters%start_time
 
     end subroutine
 
@@ -456,7 +462,6 @@ contains
         class(domain_t),  intent(inout)   :: this
         type(options_t), intent(in)      :: options
         integer :: i, j, k
-        logical :: use_delta_terrain
         real :: qsum
         
         associate(ims => this%ims, ime => this%ime,                             &
@@ -502,7 +507,7 @@ contains
                         if(associated(this%graupel_mass%data_3d)) qsum = qsum + this%graupel_mass%data_3d(i,k,j)
                         
                         temperature(i,k,j) = potential_temperature(i,k,j) * exner(i,k,j)
-                        density(i,k,j) =  pressure(i,k,j) / (Rd * temperature(i,k,j)*(1+qv(i,k,j))) ! kg/m^3
+                        density(i,k,j) =  pressure(i,k,j) / (R_d * temperature(i,k,j)*(1+qv(i,k,j))) ! kg/m^3
                     enddo
                 enddo
             enddo
@@ -514,12 +519,14 @@ contains
         do j = jms,jme
             do k = kms+1,kme
                 do i = ims,ime
-                    pressure_i(i,k,j) = (pressure(i,k-1,j) + pressure(i,k,j)) * 0.5
-                    temperature_i(i,k,j) = (temperature(i,k-1,j) + temperature(i,k,j)) * 0.5
+                    pressure_i(i,k,j) = (dz_i(i,k,j)*pressure(i,k-1,j)+dz_i(i,k-1,j)*pressure(i,k,j))/((dz_i(i,k-1,j)+dz_i(i,k,j)))
+                    temperature_i(i,k,j) = (dz_i(i,k,j)*temperature(i,k-1,j)+dz_i(i,k-1,j)*temperature(i,k,j))/((dz_i(i,k-1,j)+dz_i(i,k,j)))
                 enddo
             enddo
         enddo
-        
+        temperature_i(ims:ime,kme+1,jms:jme) = temperature(ims:ime,kme,jms:jme) + (temperature(ims:ime,kme,jms:jme) - temperature(ims:ime,kme-1,jms:jme)) * 0.5
+        pressure_i(ims:ime,kme+1,jms:jme) = pressure(ims:ime,kme,jms:jme) + (pressure(ims:ime,kme,jms:jme) - pressure(ims:ime,kme-1,jms:jme)) * 0.5
+
         if (associated(this%u_mass%data_3d)) then
             do j = jms,jme
                 do k = kms,kme
@@ -536,46 +543,46 @@ contains
             psfc = pressure_i(ims:ime, kms, jms:jme)
         endif
         if (associated(this%ivt%data_2d)) then
-            call compute_ivt(this%ivt%data_2d, qv, u_mass, v_mass, pressure_i)
+            call compute_ivt(this%ivt%data_2d, qv, u_mass, v_mass, pressure_i(:,kms:kme,:))
         endif
         if (associated(this%iwv%data_2d)) then
-            call compute_iq(this%iwv%data_2d, qv, pressure_i)
+            call compute_iq(this%iwv%data_2d, qv, pressure_i(:,kms:kme,:))
         endif
         if (associated(this%iwl%data_2d)) then
             mod_temp_3d = 0
             if (associated(this%cloud_water_mass%data_3d)) mod_temp_3d = mod_temp_3d + cloud_water
             if (associated(this%rain_mass%data_3d)) mod_temp_3d = mod_temp_3d + rain_water
-            call compute_iq(this%iwl%data_2d, mod_temp_3d, pressure_i)
+            call compute_iq(this%iwl%data_2d, mod_temp_3d, pressure_i(:,kms:kme,:))
         endif
         if (associated(this%iwi%data_2d)) then
             mod_temp_3d = 0
             if (associated(this%cloud_ice_mass%data_3d)) mod_temp_3d = mod_temp_3d + cloud_ice
             if (associated(this%snow_mass%data_3d)) mod_temp_3d = mod_temp_3d + snow_ice
             if (associated(this%graupel_mass%data_3d)) mod_temp_3d = mod_temp_3d + graupel_ice
-            call compute_iq(this%iwi%data_2d, mod_temp_3d, pressure_i)
+            call compute_iq(this%iwi%data_2d, mod_temp_3d, pressure_i(:,kms:kme,:))
         endif
         
+        if (options%physics%surfacelayer == 0) then
+            ! temporary constant
+            if (associated(this%roughness_z0%data_2d)) then
+                ! use log-law of the wall to convert from first model level to surface
+                surf_temp_1 = karman / log((this%z%data_3d(ims:ime,kms,jms:jme) - this%terrain%data_2d(ims:ime,jms:jme)) / this%roughness_z0%data_2d(ims:ime,jms:jme))
+                ! use log-law of the wall to convert from surface to 10m height
+                surf_temp_2 = log(10.0 / this%roughness_z0%data_2d(ims:ime,jms:jme)) / karman
+            endif
 
-        ! temporary constant
-        if (associated(this%roughness_z0%data_2d)) then
-            ! use log-law of the wall to convert from first model level to surface
-            surf_temp_1 = karman / log((this%z%data_3d(ims:ime,kms,jms:jme) - this%terrain%data_2d(ims:ime,jms:jme)) / this%roughness_z0%data_2d(ims:ime,jms:jme))
-            ! use log-law of the wall to convert from surface to 10m height
-            surf_temp_2 = log(10.0 / this%roughness_z0%data_2d(ims:ime,jms:jme)) / karman
-        endif
+            if (associated(this%u_10m%data_2d)) then
+                this%ustar        (ims:ime,jms:jme) = u_mass      (ims:ime,kms,jms:jme) * surf_temp_1
+                this%u_10m%data_2d(ims:ime,jms:jme) = this%ustar(ims:ime,jms:jme)     * surf_temp_2
+                this%ustar        (ims:ime,jms:jme) = v_mass      (ims:ime,kms,jms:jme) * surf_temp_1
+                this%v_10m%data_2d(ims:ime,jms:jme) = this%ustar(ims:ime,jms:jme)     * surf_temp_2
+            endif
 
-        if (associated(this%u_10m%data_2d)) then
-            this%ustar        (ims:ime,jms:jme) = u_mass      (ims:ime,kms,jms:jme) * surf_temp_1
-            this%u_10m%data_2d(ims:ime,jms:jme) = this%ustar(ims:ime,jms:jme)     * surf_temp_2
-            this%ustar        (ims:ime,jms:jme) = v_mass      (ims:ime,kms,jms:jme) * surf_temp_1
-            this%v_10m%data_2d(ims:ime,jms:jme) = this%ustar(ims:ime,jms:jme)     * surf_temp_2
+            if (allocated(this%ustar)) then
+                ! now calculate master ustar based on U and V combined in quadrature
+                this%ustar(its:ite,jts:jte) = sqrt(u_mass(its:ite,kms,jts:jte)**2 + v_mass(its:ite,kms,jts:jte)**2) * surf_temp_1(its:ite,jts:jte)
+            endif
         endif
-
-        if (allocated(this%ustar)) then
-            ! now calculate master ustar based on U and V combined in quadrature
-            this%ustar(its:ite,jts:jte) = sqrt(u_mass(its:ite,kms,jts:jte)**2 + v_mass(its:ite,kms,jts:jte)**2) * surf_temp_1(its:ite,jts:jte)
-        endif
-        
         
         end associate
 
@@ -684,14 +691,14 @@ contains
                 ! get the next variable
                 var = this%adv_vars%next()
                 if (var%three_d) then
-                    if (.not.(this%north_boundary)) this%north_buffer_3d(n,1:(this%ite-this%its+1),:,:) = &
-                            var%data_3d(this%its:this%ite,:,(this%jte-this%grid%halo_size+1):this%jte)
-                    if (.not.(this%south_boundary)) this%south_buffer_3d(n,1:(this%ite-this%its+1),:,:) = &
-                            var%data_3d(this%its:this%ite,:,this%jts:(this%jts+this%grid%halo_size-1))
-                    if (.not.(this%east_boundary)) this%east_buffer_3d(n,:,:,1:(this%jte-this%jts+1)) = &
-                            var%data_3d((this%ite-this%grid%halo_size+1):this%ite,:,this%jts:this%jte)
-                    if (.not.(this%west_boundary)) this%west_buffer_3d(n,:,:,1:(this%jte-this%jts+1)) = &
-                            var%data_3d(this%its:(this%its+this%grid%halo_size)-1,:,this%jts:this%jte)
+                    if (.not.(this%north_boundary)) this%north_buffer_3d(n,1:(this%ite-this%its+3),:,:) = &
+                            var%data_3d(this%its-1:this%ite+1,:,(this%jte-this%grid%halo_size+1):this%jte)
+                    if (.not.(this%south_boundary)) this%south_buffer_3d(n,1:(this%ite-this%its+3),:,:) = &
+                            var%data_3d(this%its-1:this%ite+1,:,this%jts:(this%jts+this%grid%halo_size-1))
+                    if (.not.(this%east_boundary)) this%east_buffer_3d(n,:,:,1:(this%jte-this%jts+3)) = &
+                            var%data_3d((this%ite-this%grid%halo_size+1):this%ite,:,this%jts-1:this%jte+1)
+                    if (.not.(this%west_boundary)) this%west_buffer_3d(n,:,:,1:(this%jte-this%jts+3)) = &
+                            var%data_3d(this%its:(this%its+this%grid%halo_size)-1,:,this%jts-1:this%jte+1)
 
                     n = n+1
                 endif
@@ -704,14 +711,14 @@ contains
             var = this%exch_vars%next()
             if (var%three_d) then
                 k_max = ubound(var%data_3d,2)
-                if (.not.(this%north_boundary)) this%north_buffer_3d(n,1:(this%ite-this%its+1),1:k_max,:) = &
-                        var%data_3d(this%its:this%ite,1:k_max,(this%jte-this%grid%halo_size+1):this%jte)
-                if (.not.(this%south_boundary)) this%south_buffer_3d(n,1:(this%ite-this%its+1),1:k_max,:) = &
-                        var%data_3d(this%its:this%ite,1:k_max,this%jts:(this%jts+this%grid%halo_size-1))
-                if (.not.(this%east_boundary)) this%east_buffer_3d(n,:,1:k_max,1:(this%jte-this%jts+1)) = &
-                        var%data_3d((this%ite-this%grid%halo_size+1):this%ite,1:k_max,this%jts:this%jte)
-                if (.not.(this%west_boundary)) this%west_buffer_3d(n,:,1:k_max,1:(this%jte-this%jts+1)) = &
-                        var%data_3d(this%its:(this%its+this%grid%halo_size)-1,1:k_max,this%jts:this%jte)
+                if (.not.(this%north_boundary)) this%north_buffer_3d(n,1:(this%ite-this%its+3),1:k_max,:) = &
+                        var%data_3d(this%its-1:this%ite+1,1:k_max,(this%jte-this%grid%halo_size+1):this%jte)
+                if (.not.(this%south_boundary)) this%south_buffer_3d(n,1:(this%ite-this%its+3),1:k_max,:) = &
+                        var%data_3d(this%its-1:this%ite+1,1:k_max,this%jts:(this%jts+this%grid%halo_size-1))
+                if (.not.(this%east_boundary)) this%east_buffer_3d(n,:,1:k_max,1:(this%jte-this%jts+3)) = &
+                        var%data_3d((this%ite-this%grid%halo_size+1):this%ite,1:k_max,this%jts-1:this%jte+1)
+                if (.not.(this%west_boundary)) this%west_buffer_3d(n,:,1:k_max,1:(this%jte-this%jts+3)) = &
+                        var%data_3d(this%its:(this%its+this%grid%halo_size)-1,1:k_max,this%jts-1:this%jte+1)
 
                 n = n+1
             endif
@@ -757,14 +764,14 @@ contains
                 ! get the next variable
                 var = this%adv_vars%next()
                 if (var%three_d) then
-                    if (.not.(this%north_boundary)) var%data_3d(this%its:this%ite,:,(this%jte+1):this%jme) = &
-                            this%north_in_3d(n,1:(this%ite-this%its+1),:,:)
-                    if (.not.(this%south_boundary)) var%data_3d(this%its:this%ite,:,this%jms:(this%jts-1)) = &
-                            this%south_in_3d(n,1:(this%ite-this%its+1),:,:)
-                    if (.not.(this%east_boundary)) var%data_3d((this%ite+1):this%ime,:,this%jts:this%jte) = &
-                            this%east_in_3d(n,:,:,1:(this%jte-this%jts+1))
-                    if (.not.(this%west_boundary)) var%data_3d(this%ims:(this%its-1),:,this%jts:this%jte) = &
-                            this%west_in_3d(n,:,:,1:(this%jte-this%jts+1))
+                    if (.not.(this%north_boundary)) var%data_3d(this%its-1:this%ite+1,:,(this%jte+1):this%jme) = &
+                            this%north_in_3d(n,1:(this%ite-this%its+3),:,:)
+                    if (.not.(this%south_boundary)) var%data_3d(this%its-1:this%ite+1,:,this%jms:(this%jts-1)) = &
+                            this%south_in_3d(n,1:(this%ite-this%its+3),:,:)
+                    if (.not.(this%east_boundary)) var%data_3d((this%ite+1):this%ime,:,this%jts-1:this%jte+1) = &
+                            this%east_in_3d(n,:,:,1:(this%jte-this%jts+3))
+                    if (.not.(this%west_boundary)) var%data_3d(this%ims:(this%its-1),:,this%jts-1:this%jte+1) = &
+                            this%west_in_3d(n,:,:,1:(this%jte-this%jts+3))
                     n = n+1
                 endif
             enddo
@@ -776,14 +783,14 @@ contains
             var = this%exch_vars%next()
             if (var%three_d) then
                 k_max = ubound(var%data_3d,2)
-                if (.not.(this%north_boundary)) var%data_3d(this%its:this%ite,1:k_max,(this%jte+1):this%jme) = &
-                        this%north_in_3d(n,1:(this%ite-this%its+1),1:k_max,:)
-                if (.not.(this%south_boundary)) var%data_3d(this%its:this%ite,1:k_max,this%jms:(this%jts-1)) = &
-                        this%south_in_3d(n,1:(this%ite-this%its+1),1:k_max,:)
-                if (.not.(this%east_boundary)) var%data_3d((this%ite+1):this%ime,1:k_max,this%jts:this%jte) = &
-                        this%east_in_3d(n,:,1:k_max,1:(this%jte-this%jts+1))
-                if (.not.(this%west_boundary)) var%data_3d(this%ims:(this%its-1),1:k_max,this%jts:this%jte) = &
-                        this%west_in_3d(n,:,1:k_max,1:(this%jte-this%jts+1))
+                if (.not.(this%north_boundary)) var%data_3d(this%its-1:this%ite+1,1:k_max,(this%jte+1):this%jme) = &
+                        this%north_in_3d(n,1:(this%ite-this%its+3),1:k_max,:)
+                if (.not.(this%south_boundary)) var%data_3d(this%its-1:this%ite+1,1:k_max,this%jms:(this%jts-1)) = &
+                        this%south_in_3d(n,1:(this%ite-this%its+3),1:k_max,:)
+                if (.not.(this%east_boundary)) var%data_3d((this%ite+1):this%ime,1:k_max,this%jts-1:this%jte+1) = &
+                        this%east_in_3d(n,:,1:k_max,1:(this%jte-this%jts+3))
+                if (.not.(this%west_boundary)) var%data_3d(this%ims:(this%its-1),1:k_max,this%jts-1:this%jte+1) = &
+                        this%west_in_3d(n,:,1:k_max,1:(this%jte-this%jts+3))
                 n = n+1
             endif
         enddo
@@ -803,14 +810,14 @@ contains
             ! get the next variable
             var = this%exch_vars%next()
             if (var%two_d) then
-                if (.not.(this%north_boundary)) this%north_buffer_2d(n,1:(this%ite-this%its+1),:) = &
-                        var%data_2d(this%its:this%ite,(this%jte-this%grid%halo_size+1):this%jte)
-                if (.not.(this%south_boundary)) this%south_buffer_2d(n,1:(this%ite-this%its+1),:) = &
-                        var%data_2d(this%its:this%ite,this%jts:(this%jts+this%grid%halo_size-1))
-                if (.not.(this%east_boundary)) this%east_buffer_2d(n,:,1:(this%jte-this%jts+1)) = &
-                        var%data_2d((this%ite-this%grid%halo_size+1):this%ite,this%jts:this%jte)
-                if (.not.(this%west_boundary)) this%west_buffer_2d(n,:,1:(this%jte-this%jts+1)) = &
-                        var%data_2d(this%its:(this%its+this%grid%halo_size)-1,this%jts:this%jte)
+                if (.not.(this%north_boundary)) this%north_buffer_2d(n,1:(this%ite-this%its+3),:) = &
+                        var%data_2d(this%its-1:this%ite+1,(this%jte-this%grid%halo_size+1):this%jte)
+                if (.not.(this%south_boundary)) this%south_buffer_2d(n,1:(this%ite-this%its+3),:) = &
+                        var%data_2d(this%its-1:this%ite+1,this%jts:(this%jts+this%grid%halo_size-1))
+                if (.not.(this%east_boundary)) this%east_buffer_2d(n,:,1:(this%jte-this%jts+3)) = &
+                        var%data_2d((this%ite-this%grid%halo_size+1):this%ite,this%jts-1:this%jte+1)
+                if (.not.(this%west_boundary)) this%west_buffer_2d(n,:,1:(this%jte-this%jts+3)) = &
+                        var%data_2d(this%its:(this%its+this%grid%halo_size)-1,this%jts-1:this%jte+1)
 
                 n = n+1
             endif
@@ -849,10 +856,10 @@ contains
             ! get the next variable
             var = this%exch_vars%next()
             if (var%two_d) then
-                if (.not.(this%north_boundary)) var%data_2d(this%its:this%ite,(this%jte+1):this%jme) = this%north_in_2d(n,1:(this%ite-this%its+1),:)
-                if (.not.(this%south_boundary)) var%data_2d(this%its:this%ite,this%jms:(this%jts-1)) = this%south_in_2d(n,1:(this%ite-this%its+1),:)
-                if (.not.(this%east_boundary)) var%data_2d((this%ite+1):this%ime,this%jts:this%jte) = this%east_in_2d(n,:,1:(this%jte-this%jts+1))
-                if (.not.(this%west_boundary)) var%data_2d(this%ims:(this%its-1),this%jts:this%jte) = this%west_in_2d(n,:,1:(this%jte-this%jts+1))
+                if (.not.(this%north_boundary)) var%data_2d(this%its-1:this%ite+1,(this%jte+1):this%jme) = this%north_in_2d(n,1:(this%ite-this%its+3),:)
+                if (.not.(this%south_boundary)) var%data_2d(this%its-1:this%ite+1,this%jms:(this%jts-1)) = this%south_in_2d(n,1:(this%ite-this%its+3),:)
+                if (.not.(this%east_boundary)) var%data_2d((this%ite+1):this%ime,this%jts-1:this%jte+1) = this%east_in_2d(n,:,1:(this%jte-this%jts+3))
+                if (.not.(this%west_boundary)) var%data_2d(this%ims:(this%its-1),this%jts-1:this%jte+1) = this%west_in_2d(n,:,1:(this%jte-this%jts+3))
                 n = n+1
             endif
         enddo
@@ -963,10 +970,10 @@ contains
         if (0<opt%vars_to_allocate( kVARS%exner) )                      call setup(this%exner,                    this%grid )
         if (0<opt%vars_to_allocate( kVARS%z) )                          call setup(this%z,                        this%grid )
         if (0<opt%vars_to_allocate( kVARS%dz_interface) )               call setup(this%dz_interface,             this%grid )
-        if (0<opt%vars_to_allocate( kVARS%z_interface) )                call setup(this%z_interface,              this%grid )
+        if (0<opt%vars_to_allocate( kVARS%z_interface) )                call setup(this%z_interface,              this%grid8w )
         if (0<opt%vars_to_allocate( kVARS%dz) )                         call setup(this%dz_mass,                  this%grid )
         if (0<opt%vars_to_allocate( kVARS%density) )                    call setup(this%density,                  this%grid )
-        if (0<opt%vars_to_allocate( kVARS%pressure_interface) )         call setup(this%pressure_interface,       this%grid )
+        if (0<opt%vars_to_allocate( kVARS%pressure_interface) )         call setup(this%pressure_interface,       this%grid8w )
         if (0<opt%vars_to_allocate( kVARS%graupel) )                    call setup(this%graupel,                  this%grid2d, dtype=kDOUBLE )
         if (0<opt%vars_to_allocate( kVARS%cloud_fraction) )             call setup(this%cloud_fraction,           this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%shortwave) )                  call setup(this%shortwave,                this%grid2d,   forcing_var=opt%parameters%swdown_var,  list=this%variables_to_force, force_boundaries=.False.)
@@ -1057,8 +1064,18 @@ contains
 
         if (0<opt%vars_to_allocate( kVARS%windspd_10m) )                call setup(this%windspd_10m,              this%grid2d) !! MJ added
         if (0<opt%vars_to_allocate( kVARS%coeff_momentum_drag) )        call setup(this%coeff_momentum_drag,      this%grid2d)
-        if (0<opt%vars_to_allocate( kVARS%coeff_heat_exchange) )        call setup(this%coeff_heat_exchange,      this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%chs) )                        call setup(this%chs,                      this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%chs2) )                       call setup(this%chs2,                     this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%cqs2) )                       call setup(this%cqs2,                     this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%br) )                         call setup(this%br,                       this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%QFX) )                        call setup(this%qfx,                      this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%psim) )                       call setup(this%psim,                     this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%psih) )                       call setup(this%psih,                     this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%fm) )                         call setup(this%fm,                       this%grid2d)
+        if (0<opt%vars_to_allocate( kVARS%fh) )                        call setup(this%fh,                      this%grid2d)
+        
         if (0<opt%vars_to_allocate( kVARS%coeff_heat_exchange_3d) )     call setup(this%coeff_heat_exchange_3d,   this%grid)    ! for pbl ysu
+        if (0<opt%vars_to_allocate( kVARS%coeff_momentum_exchange_3d) ) call setup(this%coeff_momentum_exchange_3d,this%grid)    ! for pbl ysu
         if (0<opt%vars_to_allocate( kVARS%hpbl) )                       call setup(this%hpbl,                     this%grid2d)    ! for pbl ysu
         if (0<opt%vars_to_allocate( kVARS%surface_rad_temperature) )    call setup(this%surface_rad_temperature,  this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%temperature_2m) )             call setup(this%temperature_2m,           this%grid2d)
@@ -1128,7 +1145,7 @@ contains
         if (0<opt%vars_to_allocate( kVARS%longwave_cloud_forcing) )     call setup(this%longwave_cloud_forcing,   this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%shortwave_cloud_forcing) )    call setup(this%shortwave_cloud_forcing,  this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%cosine_zenith_angle) )        call setup(this%cosine_zenith_angle,      this%grid2d)
-        if (0<opt%vars_to_allocate( kVARS%temperature_interface) )      call setup(this%temperature_interface,    this%grid)
+        if (0<opt%vars_to_allocate( kVARS%temperature_interface) )      call setup(this%temperature_interface,    this%grid8w)
         if (0<opt%vars_to_allocate( kVARS%land_emissivity) )            call setup(this%land_emissivity,          this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%tend_swrad) )                 call setup(this%tend_swrad,               this%grid)
         ! lake vars:
@@ -1303,36 +1320,12 @@ contains
 
     end subroutine
 
-    !> ---------------------------------
-    !! Load the data in varname from filename into data_array
-    !!
-    !! The first / master image reads the file from the disk
-    !! Other images get the data broadcast from the master image
-    !!
-    !! ---------------------------------
-    subroutine load_data(filename, varname, data_array, grid)
-        implicit none
-        character(len=*),  intent(in)   :: filename, varname
-        real, allocatable, intent(inout):: data_array(:,:)
-        type(grid_t),      intent(in)   :: grid
-
-        ! if (this_image()==1) then
-            call io_read(filename, varname, data_array)
-        ! else
-        !     if (allocated(data_array)) deallocate(data_array)
-        !     allocate(data_array(grid%nx_global, grid%ny_global))
-        ! endif
-        !
-        ! call broadcast(data_array, 1, 1, num_images(), .true.)
-
-    end subroutine
-
 
     !> ---------------------------------
     !! Read the core model variables from disk
     !!
     !! Reads Terrain, lat, lon and u/v lat/lon on the high-res domain grid
-    !! Passing data between images and disk is handled by load_data
+    !! Passing data between images and disk is handled by io_read
     !!
     !! ---------------------------------
     subroutine read_core_variables(this, options)
@@ -1342,49 +1335,37 @@ contains
         real, allocatable :: temporary_data(:,:), temp_offset(:,:)
 
         ! Read the terrain data
-        call load_data(options%parameters%init_conditions_file,   &
+        call io_read(options%parameters%init_conditions_file,   &
                        options%parameters%hgt_hi,                 &
-                       temporary_data, this%grid)
+                       temporary_data)
         this%terrain%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
+        
+        !while we have global terrain loaded, pass to split_topography
+        if (options%parameters%sleve) call split_topography(this, temporary_data, options)  ! here h1 and h2 are calculated
         
         allocate(this%neighbor_terrain(this%ihs:this%ihe, this%jhs:this%jhe), &
                     source=temporary_data(this%ihs:this%ihe, this%jhs:this%jhe))
-        
+        allocate(temp_offset(1:this%grid%ide+1,1:this%grid%jde+1))
+
         if ( (options%physics%windtype == kWIND_LINEAR) .or. (options%physics%windtype == kLINEAR_OBRIEN_WINDS) .or. &
              (options%physics%windtype == kLINEAR_ITERATIVE_WINDS) ) then
             this%global_terrain = temporary_data ! save the global terrain map for the linear wind solution
         end if
-        
-        ! here we just initialize the first level of geo_u and geo_v with the terrain height.  3D Z will be defined later
-        associate(g => this%u_grid2d_ext, geo => this%geo_u)
-            call array_offset_x(temporary_data, temp_offset)
-            if (allocated(geo%z)) deallocate(geo%z)
-            allocate(geo%z(1:g%ime-g%ims+1, 1:this%u_grid%kme-this%u_grid%kms+1, 1:g%jme-g%jms+1))
-            geo%z(:,1,:) = temp_offset(g%ims:g%ime, g%jms:g%jme)
-        end associate
-
-        associate(g => this%v_grid2d_ext, geo => this%geo_v)
-            call array_offset_y(temporary_data, temp_offset)
-            if (allocated(geo%z)) deallocate(geo%z)
-            allocate(geo%z(1:g%ime-g%ims+1, 1:this%u_grid%kme-this%u_grid%kms+1, 1:g%jme-g%jms+1))
-            geo%z(:,1,:) = temp_offset(g%ims:g%ime, g%jms:g%jme)
-        end associate
-
 
 
         ! Read the latitude data
-        call load_data(options%parameters%init_conditions_file,   &
+        call io_read(options%parameters%init_conditions_file,   &
                        options%parameters%lat_hi,                 &
-                       temporary_data, this%grid)
+                       temporary_data)
 
         call make_2d_y(temporary_data, this%grid%ims, this%grid%ime)
         this%latitude%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
         ! allocate(this%latitude_global, source=temporary_data)
 
         ! Read the longitude data
-        call load_data(options%parameters%init_conditions_file,   &
+        call io_read(options%parameters%init_conditions_file,   &
                        options%parameters%lon_hi,                 &
-                       temporary_data, this%grid)
+                       temporary_data)
         call make_2d_x(temporary_data, this%grid%jms, this%grid%jme)
         this%longitude%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
         ! allocate(this%longitude_global, source=temporary_data)
@@ -1397,246 +1378,106 @@ contains
         !-----------------------------------------
         ! Read the u-grid longitude data if specified, other wise interpolate from mass grid
         if (options%parameters%ulon_hi /= "") then
-            call load_data(options%parameters%init_conditions_file,   &
+            call io_read(options%parameters%init_conditions_file,   &
                            options%parameters%ulon_hi,                &
-                           temporary_data, this%u_grid)
+                           temporary_data)
 
             call make_2d_y(temporary_data, 1, this%jde)
-            call subset_array(temporary_data, this%u_longitude%data_2d, this%u_grid)
-
-            associate(g=>this%u_grid2d_ext, var=>this%geo_u%lon)
-                allocate(this%geo_u%lon(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
-                call subset_array(temporary_data, this%geo_u%lon, g)
-            end associate
+            this%u_longitude%data_2d = temporary_data(this%u_grid%ims:this%u_grid%ime,this%u_grid%jms:this%u_grid%jme)
         else
             ! load the mass grid data again to get the full grid
-            call load_data(options%parameters%init_conditions_file,   &
+            call io_read(options%parameters%init_conditions_file,   &
                            options%parameters%lon_hi,                 &
-                           temporary_data, this%grid)
+                           temporary_data)
 
             call make_2d_y(temporary_data, 1, this%jde)
             call array_offset_x(temporary_data, temp_offset)
-            call subset_array(temp_offset, this%u_longitude%data_2d, this%u_grid)
-            associate(g=>this%u_grid2d_ext, var=>this%geo_u%lon)
-                allocate(this%geo_u%lon(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
-                call subset_array(temp_offset, this%geo_u%lon, g)
-            end associate
+            this%u_longitude%data_2d = temp_offset(this%u_grid%ims:this%u_grid%ime,this%u_grid%jms:this%u_grid%jme)
         endif
 
         ! Read the u-grid latitude data if specified, other wise interpolate from mass grid
         if (options%parameters%ulat_hi /= "") then
-            call load_data(options%parameters%init_conditions_file,   &
+            call io_read(options%parameters%init_conditions_file,   &
                            options%parameters%ulat_hi,                &
-                           temporary_data, this%u_grid)
+                           temporary_data)
 
             call make_2d_x(temporary_data, 1, this%ide+1)
-            call subset_array(temporary_data, this%u_latitude%data_2d, this%u_grid)
-            associate(g=>this%u_grid2d_ext, var=>this%geo_u%lat)
-                allocate(this%geo_u%lat(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
-                call subset_array(temporary_data, this%geo_u%lat, g)
-            end associate
+            this%u_latitude%data_2d = temporary_data(this%u_grid%ims:this%u_grid%ime,this%u_grid%jms:this%u_grid%jme)
         else
             ! load the mass grid data again to get the full grid
-            call load_data(options%parameters%init_conditions_file,   &
+            call io_read(options%parameters%init_conditions_file,   &
                            options%parameters%lat_hi,                 &
-                           temporary_data, this%grid)
+                           temporary_data)
 
             call make_2d_x(temporary_data, 1, this%ide+1)
             call array_offset_x(temporary_data, temp_offset)
-            call subset_array(temp_offset, this%u_latitude%data_2d, this%u_grid)
-            associate(g=>this%u_grid2d_ext, var=>this%geo_u%lat)
-                allocate(this%geo_u%lat(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
-                call subset_array(temp_offset, this%geo_u%lat, g)
-            end associate
-
+            this%u_latitude%data_2d = temp_offset(this%u_grid%ims:this%u_grid%ime,this%u_grid%jms:this%u_grid%jme)
         endif
 
         ! Read the v-grid longitude data if specified, other wise interpolate from mass grid
         if (options%parameters%vlon_hi /= "") then
-            call load_data(options%parameters%init_conditions_file,   &
+            call io_read(options%parameters%init_conditions_file,   &
                            options%parameters%vlon_hi,                &
-                           temporary_data, this%v_grid)
+                           temporary_data)
 
             call make_2d_y(temporary_data, 1, this%jde+1)
-            call subset_array(temporary_data, this%v_longitude%data_2d, this%v_grid)
-            associate(g=>this%v_grid2d_ext, var=>this%geo_v%lon)
-                allocate(this%geo_v%lon(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
-                call subset_array(temporary_data, this%geo_v%lon, g)
-            end associate
+            this%v_longitude%data_2d = temporary_data(this%v_grid%ims:this%v_grid%ime,this%v_grid%jms:this%v_grid%jme)
         else
             ! load the mass grid data again to get the full grid
-            call load_data(options%parameters%init_conditions_file,   &
+            call io_read(options%parameters%init_conditions_file,   &
                            options%parameters%lon_hi,                 &
-                           temporary_data, this%grid)
+                           temporary_data)
 
             call make_2d_y(temporary_data, 1, this%jde+1)
             call array_offset_y(temporary_data, temp_offset)
-            call subset_array(temp_offset, this%v_longitude%data_2d, this%v_grid)
-            associate(g=>this%v_grid2d_ext, var=>this%geo_v%lon)
-                allocate(this%geo_v%lon(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
-                call subset_array(temp_offset, this%geo_v%lon, g)
-            end associate
+            this%v_longitude%data_2d = temp_offset(this%v_grid%ims:this%v_grid%ime,this%v_grid%jms:this%v_grid%jme)
         endif
 
         ! Read the v-grid latitude data if specified, other wise interpolate from mass grid
         if (options%parameters%vlat_hi /= "") then
-            call load_data(options%parameters%init_conditions_file,   &
+            call io_read(options%parameters%init_conditions_file,   &
                            options%parameters%vlat_hi,                &
-                           temporary_data, this%v_grid)
+                           temporary_data)
 
             call make_2d_x(temporary_data, 1, this%ide)
-            call subset_array(temporary_data, this%v_latitude%data_2d, this%v_grid)
-            associate(g=>this%v_grid2d_ext, var=>this%geo_v%lat)
-                allocate(this%geo_v%lat(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
-                call subset_array(temporary_data, this%geo_v%lat, g)
-            end associate
-
+            this%v_latitude%data_2d = temporary_data(this%v_grid%ims:this%v_grid%ime,this%v_grid%jms:this%v_grid%jme)
         else
             ! load the mass grid data again to get the full grid
-            call load_data(options%parameters%init_conditions_file,   &
+            call io_read(options%parameters%init_conditions_file,   &
                            options%parameters%lat_hi,                 &
-                           temporary_data, this%grid)
+                           temporary_data)
 
             call make_2d_x(temporary_data, 1, this%ide)
             call array_offset_y(temporary_data, temp_offset)
-            call subset_array(temp_offset, this%v_latitude%data_2d, this%v_grid)
-            associate(g=>this%v_grid2d_ext, var=>this%geo_v%lat)
-                allocate(this%geo_v%lat(1:g%ime-g%ims+1, 1:g%jme-g%jms+1))
-                call subset_array(temp_offset, this%geo_v%lat, g)
-            end associate
+            this%v_latitude%data_2d = temp_offset(this%v_grid%ims:this%v_grid%ime,this%v_grid%jms:this%v_grid%jme)
         endif
-
-        call standardize_coordinates(this%geo_u, options%parameters%longitude_system)
-        call standardize_coordinates(this%geo_v, options%parameters%longitude_system)
 
         if (this_image()==1) write(*,*) "  Finished reading core domain variables"
 
     end subroutine
 
 
-
-    !> ---------------------------------
-    !! Subset one array to the memory bounds defined by the grid
-    !!
-    !! If the input grid does not cover the entire subset, values
-    !! are extrapolated outside of that subset region
-    !!
-    !! ---------------------------------
-    subroutine subset_array(input, output, grid, extrapolate)
-        implicit none
-        real,           intent(in)    :: input(:,:)
-        real,           intent(inout) :: output(:,:)
-        type(grid_t),   intent(in)    :: grid
-        logical,        intent(in),   optional :: extrapolate
-
-        ! loop counter
-        integer :: i
-
-        ! input array dimensions
-        integer :: nx, ny
-        ! output array dimensions
-        integer :: nxo, nyo
-
-        ! these will hold the actual indexes into the two arrays
-        integer :: xs_in, xs_out, ys_in, ys_out
-        integer :: xe_in, xe_out, ye_in, ye_out
-
-        logical :: do_extrapolate
-
-        do_extrapolate = .True.
-        if (present(extrapolate)) do_extrapolate = extrapolate
-
-        ! Ideally, and most of the time, this is all it is doing
-        ! output = input(grid%ims:grid%ime, grid%jms:grid%jme)
-        ! However, it is possible that input does not cover the requested memory bounds of this data
-        ! so we have to test.  If outside of bounds, extrapolate out from the boundary
-
-        nx = size(input,1)
-        ny = size(input,2)
-
-        nxo = size(output,1)
-        nyo = size(output,2)
-
-        xs_in=grid%ims; xs_out=1
-        ys_in=grid%jms; ys_out=1
-        xe_in=grid%ime; xe_out=nxo
-        ye_in=grid%jme; ye_out=nyo
-
-        if ((ye_in-ys_in+1) /= nyo) write(*,*) "subset_array ERROR in image:",this_image(),ye_in,ys_in,nyo
-        if ((xe_in-xs_in+1) /= nxo) write(*,*) "subset_array ERROR in image:",this_image(),xe_in,xs_in,nxo
-
-        !----------------------------------------------------
-        ! This is the area of overlap
-        ! Note that this is the main and likely only assignment
-        !----------------------------------------------------
-
-        output(xs_out:xe_out, ys_out:ye_out) = input(xs_in:xe_in, ys_in:ye_in)
-
-        ! outside of that overlap, extrapolate out from the boundary
-        ! this should only be necessary for border images
-        if (grid%ims < 1) then
-            do i=1,xs_out-1
-                if (do_extrapolate) then
-                    output(i,:) = output(xs_out,:) + (output(xs_out,:) - output(xs_out+1,:)) * (xs_out - i)
-                else
-                    output(i,:) = output(xs_out,:)
-                endif
-            enddo
-        endif
-
-        if (grid%ime > nx) then
-            do i=xe_out+1,nxo
-                if (do_extrapolate) then
-                    output(i,:) = output(xe_out,:) + (output(xe_out,:) - output(xe_out-1,:)) * (i - xe_out)
-                else
-                    output(i,:) = output(xe_out,:)
-                endif
-            enddo
-        endif
-
-        if (grid%jms < 1) then
-            do i=1,ys_out-1
-                if (do_extrapolate) then
-                    output(:,i) = output(:,ys_out) + (output(:,ys_out) - output(:,ys_out+1)) * (ys_out - i)
-                else
-                    output(:,i) = output(:,ys_out)
-                endif
-            enddo
-        endif
-
-        if (grid%jme > ny) then
-            do i=ye_out+1,nyo
-                if (do_extrapolate) then
-                    output(:,i) = output(:,ye_out) + (output(:,ye_out) - output(:,ye_out-1)) * (i - ye_out)
-                else
-                    output(:,i) = output(:,ye_out)
-                endif
-            enddo
-        endif
-
-    end subroutine subset_array
-
     !> -------------------------------
     !! Setup a single Geographic structure given a latitude, longitude, and z array
     !!
     !! -------------------------------
-    subroutine setup_geo(geo, latitude, longitude, z, longitude_system)
+    subroutine setup_geo(geo, latitude, longitude, longitude_system, z)
         implicit none
         type(interpolable_type),  intent(inout) :: geo
         real,                     intent(in)    :: latitude(:,:)
         real,                     intent(in)    :: longitude(:,:)
-        real,                     intent(in)    :: z(:,:,:)
         integer,                  intent(in)    :: longitude_system
-
+        real, optional,           intent(in)    :: z(:,:,:)
         if (allocated(geo%lat)) deallocate(geo%lat)
         allocate( geo%lat, source=latitude)
 
         if (allocated(geo%lon)) deallocate(geo%lon)
         allocate( geo%lon, source=longitude)
 
-        if (allocated(geo%z)) deallocate(geo%z)
-        allocate( geo%z, source=z)
-
+        if (present(z)) then
+            if (allocated(geo%z)) deallocate(geo%z)
+            allocate( geo%z, source=z)
+        endif
         ! This makes 2D variables out of lat/lon if they come in as 1D variables
         ! This also puts the longitudes onto a 0-360 if they are -180-180 (important for Alaska)
         ! Though if working in Europe the -180-180 grid is better ideally the optimal value should be checked.
@@ -1720,14 +1561,14 @@ contains
 
         allocate(this%dz_scl( this%kms : this%kme))
 
-        allocate(this%zr_u( this%u_grid2d_ext% ims : this%u_grid2d_ext% ime,   &
-                            this%u_grid%       kms : this%u_grid%       kme,   &
-                            this%u_grid2d_ext% jms : this%u_grid2d_ext% jme) )
-
-        allocate(this%zr_v( this%v_grid2d_ext% ims : this%v_grid2d_ext% ime,   &
-                            this%v_grid%       kms : this%v_grid%       kme,   &
-                            this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
-
+        if (options%physics%windtype == kLINEAR_ITERATIVE_WINDS .or. options%physics%windtype == kITERATIVE_WINDS) then
+            allocate(this%dzdxz(this% ims : this% ime, &
+                                this% kms : this% kme, &
+                                this% jms : this% jme) )
+            allocate(this%dzdyz(this% ims : this% ime, &
+                                this% kms : this% kme, &
+                                this% jms : this% jme) )
+        endif
 
         if ( (options%physics%windtype == kWIND_LINEAR) .or. (options%physics%windtype == kLINEAR_OBRIEN_WINDS) .or. &
              (options%physics%windtype == kLINEAR_ITERATIVE_WINDS) ) then
@@ -1749,20 +1590,6 @@ contains
                                               this% jhs : this% jhe)   )
         endif
 
-
-        allocate(this%delta_dzdx( this% ims+1 : this% ime,    &    ! can go to calculate delta terrain ?
-                                  this% kms : this% kme,      &
-                                  this% jms : this% jme) )
-
-        allocate(this%delta_dzdy( this% ims: this% ime,       &
-                                  this% kms : this% kme,      &
-                                  this% jms+1 : this% jme) )
-
-        allocate(this%terrain_u( this%u_grid2d_ext% ims : this%u_grid2d_ext% ime,   &  ! can go to calculate delta terrain ?
-                                 this%u_grid2d_ext% jms : this%u_grid2d_ext% jme) )
-
-        allocate(this%terrain_v( this%v_grid2d_ext% ims : this%v_grid2d_ext% ime,   &
-                                 this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
 
         allocate(this%sintheta( this% ims : this% ime, &
                                 this% jms : this% jme) )
@@ -1795,11 +1622,11 @@ contains
         class(domain_t), intent(inout)  :: this
         type(options_t), intent(in)     :: options
 
-        real, allocatable :: temp(:,:,:), gamma_n(:), neighbor_jacobian(:,:,:)
+        real, allocatable :: temp(:,:,:), gamma_n(:), neighbor_jacobian(:,:,:), neighbor_z(:,:,:)
         integer :: i, max_level
         real :: s, n, s1, s2, gamma, gamma_min
-        logical :: SLEVE
-
+        real :: b1_i, b1_mass, db1_i, db1_mass, b2_i, b2_mass, db2_i, db2_mass
+        
         associate(ims => this%ims,      ime => this%ime,                        &
             jms => this%jms,      jme => this%jme,                        &
             kms => this%kms,      kme => this%kme,                        &
@@ -1812,8 +1639,6 @@ contains
             dz_mass               => this%dz_mass%data_3d,                &
             dz_interface          => this%dz_interface%data_3d,           &
             terrain               => this%terrain%data_2d,                &
-            terrain_u             => this%terrain_u,              &
-            terrain_v             => this%terrain_v,              &
             h1                    => this%h1,                &
             h2                    => this%h2,                &
             h1_u                  => this%h1_u,                &
@@ -1826,27 +1651,26 @@ contains
             jacobian_u            => this%jacobian_u,                     &
             jacobian_v            => this%jacobian_v,                     &
             jacobian_w            => this%jacobian_w,                     &
+            dzdx                  => this%dzdx,                           &
             dzdy                  => this%dzdy,                           &
+            dzdx_u                => this%dzdx_u,                         &
+            dzdy_v                => this%dzdy_v,                         &
             jacobian              => this%jacobian,                       &
             smooth_height         => this%smooth_height,                  &
-            dz_scl                => this%dz_scl,                         &
-            zr_u                  => this%zr_u,                           &
-            zr_v                  => this%zr_v)
+            dz_scl                => this%dz_scl)
 
             ! Still not 100% convinced this works well in cases other than flat_z_height = 0 (w sleve). So for now best to keep at 0 when using sleve?
             max_level = find_flat_model_level(options, nz, dz)
 
-            smooth_height = sum(dz(1:max_level))
+            smooth_height = sum(dz(1:max_level-1))+dz(max_level)*0.5
 
             ! Terminology from Schär et al 2002, Leuenberger 2009: (can be simpliied later on, but for clarity)
             s1 = smooth_height / options%parameters%decay_rate_L_topo
             s2 = smooth_height / options%parameters%decay_rate_S_topo
-            n  =  options%parameters%sleve_n  ! this will have an effect on the z_level ratio throughout the vertical column, and thus on the terrain induced acceleration with wind=2 . Conceptually very nice, but for wind is 2 not ideal. Unless we let that acceleration depend on the difference between hi-res and lo-res terrain.
-
+            n  =  options%parameters%sleve_n 
 
             ! Scale dz with smooth_height/sum(dz(1:max_level)) before calculating sleve levels.
-            dz_scl(:)   =   dz(1:nz) *  smooth_height / sum(dz(1:max_level))  ! this leads to a jump in dz thickness at max_level+1. Not sure if this is a problem.
-
+            dz_scl(:)   =   dz(1:nz) !*  smooth_height / sum(dz(1:max_level))  ! this leads to a jump in dz thickness at max_level+1. Not sure if this is a problem.
 
             ! - - -   calculate invertibility parameter gamma (Schär et al 2002 eqn 20):  - - - - - -
             gamma  =  1  -  MAXVAL(h1)/s1 * COSH(smooth_height/s1)/SINH(smooth_height/s1) &
@@ -1893,155 +1717,155 @@ contains
                 write(*,*) ""
             endif
 
-            ! - - - - -   Mass grid calculations for lowest level (i=kms)  - - - - -
-            i=kms
-
             ! use temp to store global z-interface so that global-jacobian can be calculated
 
             if ( (options%physics%windtype == kWIND_LINEAR) .or. (options%physics%windtype == kLINEAR_OBRIEN_WINDS) .or. &
                  (options%physics%windtype == kLINEAR_ITERATIVE_WINDS) ) then
                  
                 allocate(temp(this%ids:this%ide, this%kds:this%kde, this%jds:this%jde))
-                temp(:,i,:)   = this%global_terrain
+                temp(:,kms,:)   = this%global_terrain
             else
                 allocate(temp(this%ihs:this%ihe, this%khs:this%khe, this%jhs:this%jhe))
-                temp(:,i,:)   = neighbor_terrain
+                temp(:,kms,:)   = neighbor_terrain
             endif
             
             allocate(neighbor_jacobian(this%ihs:this%ihe, this%khs:this%khe, this%jhs:this%jhe))
-            
-            temp(:,i+1,:)  = dz_scl(i)   &
-                                    + h1  *  SINH( (smooth_height/s1)**n - (dz_scl(i)/s1)**n ) / SINH((smooth_height/s1)**n)  &! large-scale terrain
-                                    + h2  *  SINH( (smooth_height/s2)**n - (dz_scl(i)/s2)**n ) / SINH((smooth_height/s2)**n)   ! small terrain features
+            allocate(neighbor_z(this%ihs:this%ihe, this%khs:this%khe, this%jhs:this%jhe))
+                                    
+            ! - - - - -  k levels  - - - - -
+            do i = this%grid%kms, this%grid%kme
 
-            global_dz_interface(:,i,:)  =  temp(:,i+1,:) - temp(:,i,:)  ! same for higher k
-            global_z_interface(:,i,:)  = temp(:,i,:)
-            neighbor_jacobian(:,i,:) = global_dz_interface(this%ihs:this%ihe,i,this%jhs:this%jhe)/dz_scl(i)
+                if (i==kms) then
+                    b1_i = SINH( (smooth_height/s1)**n - (dz_scl(i)/s1)**n ) / SINH((smooth_height/s1)**n)
+                    b2_i = SINH( (smooth_height/s2)**n - (dz_scl(i)/s2)**n ) / SINH((smooth_height/s2)**n)
+                    b1_mass = SINH( (smooth_height/s1)**n -  ( (dz_scl(i)/2) /s1)**n ) / SINH((smooth_height/s1)**n)
+                    b2_mass = SINH( (smooth_height/s2)**n -  ( (dz_scl(i)/2) /s2)**n ) / SINH((smooth_height/s2)**n)
 
-            ! this is on the subset grid:
-            z_interface(:,i,:) = temp(ims:ime,i,jms:jme)
-            z_interface(:,i+1,:) = temp(ims:ime,i+1,jms:jme)
+                    db1_i = -n/(s1**n) * dz_scl(i)**(n-1) * COSH((smooth_height/s1)**n - & 
+                            (dz_scl(i)/s1)**n ) / SINH((smooth_height/s1)**n)
+                    db2_i = -n/(s2**n) * dz_scl(i)**(n-1) * COSH((smooth_height/s2)**n - & 
+                            (dz_scl(i)/s2)**n ) / SINH((smooth_height/s2)**n)
 
-            dz_interface(:,i,:)  =  z_interface(:,i+1,:) - z_interface(:,i,:)  ! same for higher k
+                    db1_mass = -n/(s1**n) * (dz_scl(i)/2)**(n-1) * COSH((smooth_height/s1)**n - &
+                            ((dz_scl(i)/2)/s1)**n ) / SINH((smooth_height/s1)**n)
+                    db2_mass = -n/(s2**n) * (dz_scl(i)/2)**(n-1) * COSH((smooth_height/s2)**n - &
+                            ((dz_scl(i)/2)/s2)**n ) / SINH((smooth_height/s2)**n)
 
-            dz_mass(:,i,:)       = dz_interface(:,i,:) / 2           ! Diff for k=1
-            z(:,i,:)             = terrain + dz_mass(:,i,:)          ! Diff for k=1
+                    temp(:,i+1,:)  = dz_scl(i) + h1*b1_i + h2*b1_i
 
-            jacobian(:,i,:) = dz_interface(:,i,:)/dz_scl(i)
+                    global_dz_interface(:,i,:)  =  temp(:,i+1,:) - temp(:,i,:)  ! same for higher k
+                    global_z_interface(:,i,:)  = temp(:,i,:)
 
-            ! ! - - - - -   u/v grid calculations for lowest level (i=kms)  - - - - -
-            ! ! for the u and v grids, z(1) was already initialized with terrain.
-            ! ! but the first level needs to be offset, and the rest of the levels need to be created
-            ! ! BK: So if z_u is already offset in the u dir, but not in the z dir, we can say that
-            ! !     z_u(:,1,:) is the terrain on the u grid, and it needs to be offset in the z-dir
-            ! !     to reach mass levels (so by dz[i]/2)
+                    dz_mass(:,i,:)       = global_dz_interface(ims:ime,i,jms:jme) / 2           ! Diff for k=1            
 
-            terrain_u =  z_u(:,kms,:)  ! save for later on.
-            terrain_v =  z_v(:,kms,:)  ! save for later on
+                    ! ! - - - - -   u/v grid calculations for lowest level (i=kms)  - - - - -
+                    ! ! for the u and v grids, z(1) was already initialized with terrain.
+                    ! ! but the first level needs to be offset, and the rest of the levels need to be created
+                    ! ! BK: So if z_u is already offset in the u dir, but not in the z dir, we can say that
+                    ! !     z_u(:,1,:) is the terrain on the u grid, and it needs to be offset in the z-dir
+                    ! !     to reach mass levels (so by dz[i]/2)
 
-            ! Offset analogous to: z_u(:,i,:) = z_u(:,i,:) + dz(i) / 2 * zr_u(:,i,:)
-            z_u(:,i,:)  = dz_scl(i)/2  &
-                        + h1_u  *  SINH( (smooth_height/s1)**n - (dz_scl(i)/2/s1)**n ) / SINH((smooth_height/s1)**n)  &! large-scale terrain
-                        + h2_u  *  SINH( (smooth_height/s2)**n - (dz_scl(i)/2/s2)**n ) / SINH((smooth_height/s2)**n)   ! small terrain features
-            z_v(:,i,:)  = dz_scl(i)/2   &
-                        + h1_v  *  SINH( (smooth_height/s1)**n - (dz_scl(i)/2/s1)**n ) / SINH((smooth_height/s1)**n)  &! large-scale terrain
-                        + h2_v  *  SINH( (smooth_height/s2)**n - (dz_scl(i)/2/s2)**n ) / SINH((smooth_height/s2)**n)   ! small terrain features
+                    neighbor_z(:,i,:)  = (dz_scl(i)/2)  + h1*b1_mass + h2*b2_mass
+                    z_u(:,i,:)   = (dz_scl(i)/2) + h1_u*b1_mass + h2_u*b2_mass
+                    z_v(:,i,:)   = (dz_scl(i)/2) + h1_v*b1_mass + h2_v*b2_mass
 
-            zr_u(:,i,:)  =  (z_u(:,i,:) - terrain_u) / ( dz_scl(i)/2 )
-            zr_v(:,i,:)  =  (z_v(:,i,:) - terrain_v) / (dz_scl(i)/2 )
+                else if(i>kms) then
+                    if(i<=max_level) then
 
-            ! - - - - -  higher k levels  - - - - -
-            do i = this%grid%kms+1, this%grid%kme
+                        b1_i = SINH( (smooth_height/s1)**n - (sum(dz_scl(1:i))/s1)**n ) / SINH((smooth_height/s1)**n)
+                        b2_i = SINH( (smooth_height/s2)**n - (sum(dz_scl(1:i))/s2)**n ) / SINH((smooth_height/s2)**n)
+                        b1_mass = SINH( (smooth_height/s1)**n -  ( (sum(dz_scl(1:(i-1)))+dz_scl(i)/2) /s1)**n ) / SINH((smooth_height/s1)**n)
+                        b2_mass = SINH( (smooth_height/s2)**n -  ( (sum(dz_scl(1:(i-1)))+dz_scl(i)/2) /s2)**n ) / SINH((smooth_height/s2)**n)
 
-                if (i<=max_level) then
 
-                    if (i==this%grid%kme) then  ! if we are at the model top i+1 is not defined
+                        db1_i = -n/(s1**n) * sum(dz_scl(1:i))**(n-1) * COSH((smooth_height/s1)**n - & 
+                                (sum(dz_scl(1:i))/s1)**n ) / SINH((smooth_height/s1)**n)
+                        db2_i = -n/(s2**n) * sum(dz_scl(1:i))**(n-1) * COSH((smooth_height/s2)**n - & 
+                                (sum(dz_scl(1:i))/s2)**n ) / SINH((smooth_height/s2)**n)
+                                
+                        db1_mass = -n/(s1**n) * (sum(dz_scl(1:(i-1)))+dz_scl(i)/2)**(n-1) * COSH((smooth_height/s1)**n - &
+                                ((sum(dz_scl(1:(i-1)))+dz_scl(i)/2)/s1)**n ) / SINH((smooth_height/s1)**n)
+                        db2_mass = -n/(s2**n) * (sum(dz_scl(1:(i-1)))+dz_scl(i)/2)**(n-1) * COSH((smooth_height/s2)**n - &
+                                ((sum(dz_scl(1:(i-1)))+dz_scl(i)/2)/s2)**n ) / SINH((smooth_height/s2)**n)
 
-                    dz_interface(:,i,:)  =  smooth_height - z_interface(:,i,:)
-                    global_dz_interface(:,i,:)  =  smooth_height - temp(:,i,:)
-                    else
+                        if (i==this%grid%kme) then  ! if we are at the model top i+1 is not defined
+                            global_dz_interface(:,i,:)  =  smooth_height - temp(:,i,:)
+                        else
+                            temp(:,i+1,:)  = sum(dz_scl(1:i)) + h1*b1_i + h2*b1_i 
+                            global_dz_interface(:,i,:)  =  temp(:,i+1,:) - temp(:,i,:)
+                        endif
 
-                    temp(:,i+1,:)  = sum(dz_scl(1:i))   &
-                                    + h1  *  SINH( (smooth_height/s1)**n - (sum(dz_scl(1:i))/s1)**n ) / SINH((smooth_height/s1)**n)  &! large-scale terrain
-                                    + h2  *  SINH( (smooth_height/s2)**n - (sum(dz_scl(1:i))/s2)**n ) / SINH((smooth_height/s2)**n)   ! small terrain features
+                        global_z_interface(:,i,:)  = global_z_interface(:,i-1,:) + global_dz_interface(:,i-1,:)
 
-                    z_interface(:,i+1,:) = temp(ims:ime,i+1,jms:jme)
+                        neighbor_z(:,i,:)  = (sum(dz_scl(1:(i-1))) + dz_scl(i)/2)  + h1*b1_mass + h2*b2_mass  
+                        z_u(:,i,:)   = (sum(dz_scl(1:(i-1))) + dz_scl(i)/2) + h1_u*b1_mass + h2_u*b2_mass  
+                        z_v(:,i,:)   = (sum(dz_scl(1:(i-1))) + dz_scl(i)/2) + h1_v*b1_mass + h2_v*b2_mass  
 
-                    global_dz_interface(:,i,:)  =  temp(:,i+1,:) - temp(:,i,:)
-                    global_z_interface(:,i,:)  = global_z_interface(:,i-1,:) + global_dz_interface(:,i-1,:)
-                    dz_interface(:,i,:)  =  z_interface(:,i+1,:) - z_interface(:,i,:)
+                        if ( ANY(global_z_interface(:,i,:)<0) ) then   ! Eror catching. Probably good to engage.
+                        if (this_image()==1) then
+                            write(*,*) "Error: dz_interface below zero (for level  ",i,")"
+                            write(*,*)  "min max dz_interface: ",MINVAL(global_z_interface(:,i,:)),MAXVAL(global_z_interface(:,i,:))
+                            error stop
+                        endif
+                        else if ( ANY(global_z_interface(:,i,:)<=0.01) ) then
+                            write(*,*) "WARNING: dz_interface very low (at level ",i,")"
+                        endif
+
+                    else ! above the flat_z_height
+                        b1_i = 0
+                        b2_i = 0
+                        b1_mass = 0
+                        b2_mass = 0
+
+                        db1_i = 0
+                        db2_i = 0
+                        db1_mass = 0
+                        db2_mass = 0
+
+                        global_dz_interface(:,i,:) =  dz_scl(i)
+                        global_z_interface(:,i,:)  = global_z_interface(:,i-1,:) + global_dz_interface(:,i-1,:)
+                        !  if (i/=this%grid%kme)   z_interface(:,i+1,:) = z_interface(:,i,:) + dz(i) ! (dz(i) + dz_scl( i) )/2 !test in icar_s5T
+                        z_u(:,i,:)  = z_u(:,i-1,:)  + (dz_scl(i) + dz_scl(i-1))*0.5 ! zr_u only relevant for first i above max level, aferwards both zr_u(i) AND zr_u(i-1) ar
+                        z_v(:,i,:)  = z_v(:,i-1,:)  + (dz_scl(i) + dz_scl(i-1))*0.5
+                        neighbor_z(:,i,:) =  neighbor_z(:,i-1,:) + (dz_scl(i-1) + dz_scl(i))*0.5
 
                     endif
+                    dz_mass(:,i,:)   =  global_dz_interface(ims:ime,i-1,jms:jme) / 2  +  global_dz_interface(ims:ime,i,jms:jme) / 2
+                endif ! if (i>kms)
+                
+                neighbor_jacobian(:,i,:) = 1 + h1*db1_mass + h2*db2_mass
+                jacobian_u(:,i,:) = 1 + h1_u*db1_mass + h2_u*db2_mass
+                jacobian_v(:,i,:) = 1 + h1_v*db1_mass + h2_v*db2_mass
+                jacobian_w(:,i,:) = 1 + h1(ims:ime,jms:jme)*db1_i + h2(ims:ime,jms:jme)*db2_i
+                
+                dzdx(:,i,:) = (b1_mass*(h1_u(ims+1:ime+1,jms:jme)-h1_u(ims:ime,jms:jme)) + b2_mass*(h2_u(ims+1:ime+1,jms:jme)-h2_u(ims:ime,jms:jme)))/this%dx
+                dzdy(:,i,:) = (b1_mass*(h1_v(ims:ime,jms+1:jme+1)-h1_v(ims:ime,jms:jme)) + b2_mass*(h2_v(ims:ime,jms+1:jme+1)-h2_v(ims:ime,jms:jme)))/this%dx
 
-                    if ( ANY(dz_interface(:,i,:)<0) ) then   ! Eror catching. Probably good to engage.
-                    if (this_image()==1) then
-                        write(*,*) "Error: dz_interface below zero (for level  ",i,")"
-                        write(*,*)  "min max dz_interface: ",MINVAL(dz_interface(:,i,:)),MAXVAL(dz_interface(:,i,:))
-                        error stop
-                    endif
-                    else if ( ANY(dz_interface(:,i,:)<=0.01) ) then
-                        write(*,*) "WARNING: dz_interface very low (at level ",i,")"
-                    endif
+                dzdx_u(ims+1:ime,i,:) = (b1_mass*(h1(ims+1:ime,jms:jme)-h1(ims:ime-1,jms:jme))   + b2_mass*(h2(ims+1:ime,jms:jme)-h2(ims:ime-1,jms:jme)))/this%dx
+                dzdx_u(ims,i,:)   = dzdx(ims,i,:)*1.5 - dzdx(ims+1,i,:)*0.5
+                dzdx_u(ime+1,i,:)   = dzdx(ime,i,:)*1.5 - dzdx(ime-1,i,:)*0.5
 
-                    ! - - - - -   u/v grid calculations - - - - -
-                    ! contrary to the calculations above, these all take place on the parallelized terrain
-                    z_u(:,i,:)   = (sum(dz_scl(1:(i-1))) + dz_scl(i)/2)   &
-                                + h1_u  *  SINH( (smooth_height/s1)**n -  ( (sum(dz_scl(1:(i-1)))+dz_scl(i)/2) /s1)**n ) / SINH((smooth_height/s1)**n)  &! large-scale terrain
-                                + h2_u  *  SINH( (smooth_height/s2)**n -  ( (sum(dz_scl(1:(i-1)))+dz_scl(i)/2) /s2)**n ) / SINH((smooth_height/s2)**n)   ! small terrain features
-                    z_v(:,i,:)   = (sum(dz_scl(1:(i-1))) + dz_scl(i)/2)   &
-                                + h1_v  *  SINH( (smooth_height/s1)**n -  ( (sum(dz_scl(1:(i-1)))+dz_scl(i)/2) /s1)**n ) / SINH((smooth_height/s1)**n)  &! large-scale terrain
-                                + h2_v  *  SINH( (smooth_height/s2)**n -  ( (sum(dz_scl(1:(i-1)))+dz_scl(i)/2) /s2)**n ) / SINH((smooth_height/s2)**n)   ! small terrain features
+                dzdy_v(:,i,jms+1:jme) = (b1_mass*(h1(ims:ime,jms+1:jme)-h1(ims:ime,jms:jme-1))   + b2_mass*(h2(ims:ime,jms+1:jme)-h2(ims:ime,jms:jme-1)))/this%dx
+                dzdy_v(:,i,jms)   = dzdy(:,i,jms)*1.5 - dzdy(:,i,jms+1)*0.5
+                dzdy_v(:,i,jme+1)   = dzdy(:,i,jme)*1.5 - dzdy(:,i,jme-1)*0.5
 
-                    zr_u(:,i,:)  = (z_u(:,i,:) - z_u(:,i-1,:)) / (dz_scl(i)/2 + dz_scl(i-1)/2 )  ! if dz_scl(i-1) = 0 (and no error)  k=1 can be included
-                    zr_v(:,i,:)  = (z_v(:,i,:) - z_v(:,i-1,:)) / (dz_scl(i)/2 + dz_scl(i-1)/2 )
-
-
-                else ! above the flat_z_height
-
-                    zr_u(:,i,:) = 1
-                    zr_v(:,i,:) = 1
-
-                    global_dz_interface(:,i,:) =  dz_scl(i)
-                    global_z_interface(:,i,:)  = global_z_interface(:,i-1,:) + global_dz_interface(:,i-1,:)
-                    dz_interface(:,i,:) =  dz_scl(i) !(dz(i) + dz_scl(i) )/2   ! to mitigate the jump in dz at max_level+1: (dz+dz_scl)/2 iso dz
-                    if (i/=this%grid%kme)   z_interface(:,i+1,:) = z_interface(:,i,:) + dz(i) ! (dz(i) + dz_scl( i) )/2 !test in icar_s5T
-
-                    z_u(:,i,:)  = z_u(:,i-1,:)  + ((dz(i)/2 * zr_u(:,i,:) + dz(i-1)/2 * zr_u(:,i-1,:))) ! zr_u only relevant for first i above max level, aferwards both zr_u(i) AND zr_u(i-1) are 1
-                    z_v(:,i,:)  = z_v(:,i-1,:)  + ((dz(i)/2 * zr_v(:,i,:) + dz(i-1)/2 * zr_v(:,i-1,:)))
-
+                if (options%physics%windtype == kLINEAR_ITERATIVE_WINDS .or. options%physics%windtype == kITERATIVE_WINDS) then
+                    this%dzdxz(:,i,:) = (db1_mass*(h1_u(ims+1:ime+1,jms:jme)-h1_u(ims:ime,jms:jme)) + db2_mass*(h2_u(ims+1:ime+1,jms:jme)-h2_u(ims:ime,jms:jme)))/this%dx
+                    this%dzdyz(:,i,:) = (db1_mass*(h1_v(ims:ime,jms+1:jme+1)-h1_v(ims:ime,jms:jme)) + db2_mass*(h2_v(ims:ime,jms+1:jme+1)-h2_v(ims:ime,jms:jme)))/this%dx
                 endif
-
-                dz_mass(:,i,:)   =  dz_interface(:,i-1,:) / 2  +  dz_interface(:,i,:) / 2
-                z(:,i,:)         =  z(:,i-1,:)           + dz_mass(:,i,:)
-
-                jacobian(:,i,:) = dz_interface(:,i,:)/dz_scl(i)
-                neighbor_jacobian(:,i,:) = global_dz_interface(this%ihs:this%ihe,i,this%jhs:this%jhe)/dz_scl(i)
-
             enddo
-
+            
+            !Finishing touch
             i=kme+1
             global_z_interface(:,i,:)  = global_z_interface(:,i-1,:) + global_dz_interface(:,i-1,:)
+            
+            ! this is on the subset grid:
+            dz_interface = global_dz_interface(ims:ime,:,jms:jme)
+            z_interface  = global_z_interface(ims:ime,:,jms:jme)
+            z            = neighbor_z(ims:ime,:,jms:jme)
+            jacobian     = neighbor_jacobian(ims:ime,:,jms:jme)
 
-            if (allocated(temp)) deallocate(temp)
-            allocate(temp(this%ihs:this%ihe+1, this%khs:this%khe, this%jhs:this%jhe+1))
-
-            temp(this%ihs,:,this%jhs:this%jhe) = neighbor_jacobian(this%ihs,:,this%jhs:this%jhe)
-            temp(this%ihe+1,:,this%jhs:this%jhe) = neighbor_jacobian(this%ihe,:,this%jhs:this%jhe)
-            temp(this%ihs+1:this%ihe,:,this%jhs:this%jhe) = (neighbor_jacobian(this%ihs+1:this%ihe,:,this%jhs:this%jhe) + &
-                                                                neighbor_jacobian(this%ihs:this%ihe-1,:,this%jhs:this%jhe))/2
-            jacobian_u = temp(ims:ime+1,:,jms:jme)
-
-            temp(this%ihs:this%ihe,:,this%jhs) = neighbor_jacobian(this%ihs:this%ihe,:,this%jhs)
-            temp(this%ihs:this%ihe,:,this%jhe+1) = neighbor_jacobian(this%ihs:this%ihe,:,this%jhe)
-            temp(this%ihs:this%ihe,:,this%jhs+1:this%jhe) = (neighbor_jacobian(this%ihs:this%ihe,:,this%jhs+1:this%jhe) + &
-                                                neighbor_jacobian(this%ihs:this%ihe,:,this%jhs:this%jhe-1))/2
-            jacobian_v = temp(ims:ime,:,jms:jme+1)
-
-            jacobian_w(:,this%kme,:) = jacobian(:,this%kme,:)
-            jacobian_w(:,this%kms:this%kme-1,:) = (dz_interface(:,this%kms:this%kme-1,:)* jacobian(:,this%kms:this%kme-1,:) + &
-                                                   dz_interface(:,this%kms+1:this%kme,:)* jacobian(:,this%kms+1:this%kme,:))/ &
-                                                                                (dz_interface(:,this%kms:this%kme-1,:)+dz_interface(:,this%kms+1:this%kme,:))
-            call setup_dzdxy(this, options, neighbor_jacobian)
+            !call setup_dzdxy(this, options, neighbor_jacobian)
 
 
         end associate
@@ -2060,7 +1884,7 @@ contains
         class(domain_t), intent(inout)  :: this
         type(options_t), intent(in)     :: options
 
-        real, allocatable :: temp(:,:,:), global_jacobian(:,:,:)
+        real, allocatable :: temp(:,:,:), temp_offset(:,:), global_jacobian(:,:,:)
         integer :: i, max_level
 
         associate(  ims => this%ims,      ime => this%ime,                        &
@@ -2075,8 +1899,6 @@ contains
                     dz_mass               => this%dz_mass%data_3d,                &
                     dz_interface          => this%dz_interface%data_3d,           &
                     terrain               => this%terrain%data_2d,                &
-                    terrain_u             => this%terrain_u,                      &
-                    terrain_v             => this%terrain_v,                      &
                     global_z_interface    => this%global_z_interface,             &
                     global_dz_interface   => this%global_dz_interface,            &
                     neighbor_terrain      => this%neighbor_terrain,               &
@@ -2086,9 +1908,7 @@ contains
                     dzdy                  => this%dzdy,                           &
                     jacobian              => this%jacobian,                       &
                     smooth_height         => this%smooth_height,                  &
-                    dz_scl                => this%dz_scl,                         &
-                    zr_u                  => this%zr_u,                           &
-                    zr_v                  => this%zr_v)
+                    dz_scl                => this%dz_scl)
 
             ! Start with a separate calculation for the lowest model level z=1
             i = this%grid%kms
@@ -2114,13 +1934,9 @@ contains
                 jacobian(:,i,:) = (smooth_height - terrain) / smooth_height ! sum(dz(1:max_level))
                 global_jacobian(:,i,:) = (smooth_height - global_z_interface(:,i,:) ) /smooth_height !sum(dz(1:max_level))
 
-                zr_u(:,i,:) = (smooth_height - z_u(:,i,:)) / smooth_height !sum(dz(1:max_level))
-                zr_v(:,i,:) = (smooth_height - z_v(:,i,:)) / smooth_height !sum(dz(1:max_level))
             else
                 jacobian = 1
                 global_jacobian = 1
-                zr_u = 1
-                zr_v = 1
             endif
 
             dz_mass(:,i,:)      = dz(i) / 2 * jacobian(:,i,:)
@@ -2130,29 +1946,14 @@ contains
 
             global_dz_interface(:,i,:) = dz(i) * global_jacobian(:,i,:)
             
-
-            terrain_u =  z_u(:,i,:)  ! save for later on.
-            terrain_v =  z_v(:,i,:)  ! save for later on
-
-            ! for the u and v grids, z(1) was already initialized with terrain.
-            ! but the first level needs to be offset, and the rest of the levels need to be created
-            z_u(:,i,:)          = z_u(:,i,:) + dz(i) / 2 * zr_u(:,i,:)
-            z_v(:,i,:)          = z_v(:,i,:) + dz(i) / 2 * zr_v(:,i,:)
-
             ! Now the higher (k!=1) levels can be calculated:
             do i = this%grid%kms+1, this%grid%kme
                 if (i<=max_level) then
                     jacobian(:,i,:) = jacobian(:,i-1,:)
-                    zr_u(:,i,:) = zr_u(:,i-1,:)
-                    zr_v(:,i,:) = zr_v(:,i-1,:)
-
                     global_jacobian(:,i,:) = global_jacobian(:,i-1,:)
 
                 else
                     jacobian(:,i,:) = 1
-                    zr_u(:,i,:) = 1
-                    zr_v(:,i,:) = 1
-
                     global_jacobian(:,i,:) = 1
                 endif
 
@@ -2163,9 +1964,6 @@ contains
 
                 global_dz_interface(:,i,:) = dz(i) * global_jacobian(:,i,:)
                 global_z_interface(:,i,:)  = global_z_interface(:,i-1,:) + global_dz_interface(:,i-1,:)
-
-                z_u(:,i,:)         = z_u(:,i-1,:)         + ((dz(i)/2 * zr_u(:,i,:) + dz(i-1)/2 * zr_u(:,i-1,:)))
-                z_v(:,i,:)         = z_v(:,i-1,:)         + ((dz(i)/2 * zr_v(:,i,:) + dz(i-1)/2 * zr_v(:,i-1,:)))
 
                 jacobian(:,i,:) = dz_interface(:,i,:)/dz(i)
                 global_jacobian(:,i,:) = global_dz_interface(:,i,:)/dz(i)
@@ -2191,10 +1989,34 @@ contains
             jacobian_v = temp(ims:ime,:,jms:jme+1)
 
             jacobian_w(:,this%kme,:) = jacobian(:,this%kme,:)
-            jacobian_w(:,this%kms:this%kme-1,:) = (dz_interface(:,this%kms:this%kme-1,:)* jacobian(:,this%kms:this%kme-1,:) + &
-                                                   dz_interface(:,this%kms+1:this%kme,:)* jacobian(:,this%kms+1:this%kme,:))/ &
+            jacobian_w(:,this%kms:this%kme-1,:) = (dz_interface(:,this%kms+1:this%kme,:)* jacobian(:,this%kms:this%kme-1,:) + &
+                                                   dz_interface(:,this%kms:this%kme-1,:)* jacobian(:,this%kms+1:this%kme,:))/ &
                                                                                 (dz_interface(:,this%kms:this%kme-1,:)+dz_interface(:,this%kms+1:this%kme,:))
+                                                                                
+
+            call array_offset_x(terrain, temp_offset)
+            z_u(:,1,:) = temp_offset
+            call array_offset_y(terrain, temp_offset)
+            z_v(:,1,:) = temp_offset
+
+            z_u(:,1,:)          = z_u(:,1,:) + dz(1) / 2 * jacobian_u(:,1,:)
+            z_v(:,1,:)          = z_v(:,1,:) + dz(1) / 2 * jacobian_v(:,1,:)
+
+            do i = this%grid%kms+1, this%grid%kme
+                z_u(:,i,:) = z_u(:,i-1,:)  + ((dz(i)/2 * jacobian_u(:,i,:) + dz(i-1)/2 * jacobian_u(:,i-1,:)))
+                z_v(:,i,:) = z_v(:,i-1,:)  + ((dz(i)/2 * jacobian_v(:,i,:) + dz(i-1)/2 * jacobian_v(:,i-1,:)))  
+            enddo
+                                                                                
             call setup_dzdxy(this, options, global_jacobian)
+            
+            jacobian = jacobian*smooth_height
+            jacobian_u = jacobian_u*smooth_height
+            jacobian_v = jacobian_v*smooth_height
+            jacobian_w = jacobian_w*smooth_height
+            where(jacobian==smooth_height) jacobian=1
+            where(jacobian_u==smooth_height) jacobian_u=1
+            where(jacobian_v==smooth_height) jacobian_v=1
+            where(jacobian_w==smooth_height) jacobian_w=1
 
         end associate
 
@@ -2216,46 +2038,31 @@ contains
 
         call read_core_variables(this, options)
 
+        !setup geo_u/v here, because their z arrays will be calculated in the setup methods below
+        call setup_geo(this%geo_u,   this%u_latitude%data_2d,   this%u_longitude%data_2d, options%parameters%longitude_system)
+        call setup_geo(this%geo_v,   this%v_latitude%data_2d,   this%v_longitude%data_2d, options%parameters%longitude_system)
+        allocate( this%geo_u%z(this%u_grid%ims:this%u_grid%ime, this%u_grid%nz, this%u_grid%jms:this%u_grid%jme))
+        allocate( this%geo_v%z(this%v_grid%ims:this%v_grid%ime, this%v_grid%nz, this%v_grid%jms:this%v_grid%jme))
+
         call allocate_z_arrays(this, options)
 
-        ! Setup the vertical grid structure, either as a SLEVE coordinate, or a more 'simple' vertical structure:
-        if (options%parameters%sleve) then
-
-            call split_topography(this, options)  ! here h1 and h2 are calculated
-            call setup_sleve(this, options)
-
-        else
-            ! This will set up either a Gal-Chen terrainfollowing coordinate, or no terrain following.
-            call setup_simple_z(this, options)
-
-        endif
-
-
-        ! z_u and zr_u are on the v/u_grid2d_ext; move to vu_grid2d
-        temp =  this%zr_u
-        deallocate(this%zr_u)
-        allocate(this%zr_u( this%u_grid% ims : this%u_grid% ime,   &
-                       this%u_grid% kms : this%u_grid% kme,   &
-                       this%u_grid% jms : this%u_grid% jme) )
-        this%zr_u = temp(this%u_grid%ims:this%u_grid%ime, :, this%u_grid%jms:this%u_grid%jme)
-        deallocate(temp)
-
-        temp =  this%zr_v
-        deallocate(this%zr_v)
-        allocate(this%zr_v( this%v_grid% ims : this%v_grid% ime,   &
-                       this%v_grid% kms : this%v_grid% kme,   &
-                       this%v_grid% jms : this%v_grid% jme) )
-        this%zr_v = temp(this%v_grid%ims:this%v_grid%ime, :, this%v_grid%jms:this%v_grid%jme)
-        deallocate(temp)
-
-        call setup_geo(this%geo,   this%latitude%data_2d,   this%longitude%data_2d,   this%z%data_3d, options%parameters%longitude_system)
-        call setup_geo(this%geo_agl,   this%latitude%data_2d,   this%longitude%data_2d,   this%z%data_3d, options%parameters%longitude_system)
-        
-        call setup_grid_rotations(this, options)
-        
         do i=this%grid%kms, this%grid%kme
             this%advection_dz(:,i,:) = options%parameters%dz_levels(i)
         enddo
+
+        ! Setup the vertical grid structure, either as a SLEVE coordinate, or a more 'simple' vertical structure:
+        if (options%parameters%sleve) then
+            call setup_sleve(this, options)
+        else
+            ! This will set up either a Gal-Chen terrainfollowing coordinate, or no terrain following.
+            call setup_simple_z(this, options)
+        endif
+        
+        call setup_geo(this%geo,   this%latitude%data_2d,   this%longitude%data_2d, options%parameters%longitude_system,  this%z%data_3d)
+        call setup_geo(this%geo_agl,   this%latitude%data_2d,   this%longitude%data_2d, options%parameters%longitude_system,  this%z%data_3d)
+
+        call setup_grid_rotations(this, options)
+        
         
         ! Setup variables applicable to near-surface wind modifications
         if (options%wind%Sx) then
@@ -2289,15 +2096,14 @@ contains
             call io_read(options%parameters%init_conditions_file, options%parameters%cosalpha_var, lon)
             this%costheta = lon(ims:ime, jms:jme)
 
-            deallocate(lon)
         else
 
-            call load_data(options%parameters%init_conditions_file,   &
+            call io_read(options%parameters%init_conditions_file,   &
                            options%parameters%lat_hi,                 &
-                           lat, this%grid)
-            call load_data(options%parameters%init_conditions_file,   &
+                           lat)
+            call io_read(options%parameters%init_conditions_file,   &
                            options%parameters%lon_hi,                 &
-                           lon, this%grid)
+                           lon)
 
             ims = this%ims
             ime = this%ime
@@ -2339,10 +2145,7 @@ contains
             enddo
             this%costheta(ims:ime,jms:jme) = costheta(ims:ime,jms:jme)
             this%sintheta(ims:ime,jms:jme) = sintheta(ims:ime,jms:jme)
-            
-            deallocate(costheta)
-            deallocate(sintheta)
- 
+             
         endif
         if (options%parameters%debug .and.(this_image()==1)) then
             print*, ""
@@ -2383,43 +2186,95 @@ contains
         neighbor_dzdy = 0
 
         !For dzdx
-        neighbor_dzdx(this%ihs+1:this%ihe-1,:,:) = (neighbor_z(this%ihs+2:this%ihe,:,:) - &
-                                                           neighbor_z(this%ihs:this%ihe-2,:,:))/(2*this%dx)
-                                                                                                          
-        neighbor_dzdx(this%ihs,:,:) = (-3*neighbor_z(this%ihs,:,:) + &
-                                          4*neighbor_z(this%ihs+1,:,:) - neighbor_z(this%ihs+2,:,:)) / (2*this%dx)
-                                          
-        neighbor_dzdx(this%ihe,:,:) = (3*neighbor_z(this%ihe,:,:) - &
-                                         4*neighbor_z(this%ihe-1,:,:) + neighbor_z(this%ihe-2,:,:)) / (2*this%dx)
-        this%dzdx(:,:,:) = neighbor_dzdx(this%ims:this%ime,:,this%jms:this%jme)
-                  
+        ! neighbor_dzdx(this%ihs+1:this%ihe-1,:,:) = (neighbor_z(this%ihs+2:this%ihe,:,:) - &
+        !                                                    neighbor_z(this%ihs:this%ihe-2,:,:))/(2*this%dx)
+        !                                                                                                   
+        ! neighbor_dzdx(this%ihs,:,:) = (-3*neighbor_z(this%ihs,:,:) + &
+        !                                   4*neighbor_z(this%ihs+1,:,:) - neighbor_z(this%ihs+2,:,:)) / (2*this%dx)
+        !                                   
+        ! neighbor_dzdx(this%ihe,:,:) = (3*neighbor_z(this%ihe,:,:) - &
+        !                                  4*neighbor_z(this%ihe-1,:,:) + neighbor_z(this%ihe-2,:,:)) / (2*this%dx)
+        ! this%dzdx(:,:,:) = neighbor_dzdx(this%ims:this%ime,:,this%jms:this%jme)
+        ! 
         
-        neighbor_dzdx(this%ihs+1:this%ihe,:,:) = (neighbor_dzdx(this%ihs+1:this%ihe,:,:) + neighbor_dzdx(this%ihs:this%ihe-1,:,:))/2.0
+        
+        ! neighbor_dzdx(this%ims+1:this%ime-1,:,this%jms:this%jme) = (this%z%data_3d(this%ims+2:this%ime,:,:) - &
+        !                                                   this%z%data_3d(this%ims:this%ime-2,:,:))/(2*this%dx)
+        !                                                                                                   
+        ! neighbor_dzdx(this%ims,:,this%jms:this%jme) = (-3*this%z%data_3d(this%ims,:,:) + &
+        !                                   4*this%z%data_3d(this%ims+1,:,:) - this%z%data_3d(this%ims+2,:,:)) / (2*this%dx)
+        !                                   
+        ! neighbor_dzdx(this%ime,:,this%jms:this%jme) = (3*this%z%data_3d(this%ime,:,:) - &
+        !                                  4*this%z%data_3d(this%ime-1,:,:) + this%z%data_3d(this%ime-2,:,:)) / (2*this%dx)
+        ! this%dzdx(:,:,:) = neighbor_dzdx(this%ims:this%ime,:,this%jms:this%jme)
+        ! 
+! 
+        ! neighbor_dzdx(this%ims+1:this%ime,:,this%jms:this%jme) = (this%geo_u%z(this%ims+2:this%ime+1,:,:) - &
+        !                                                    this%geo_u%z(this%ims:this%ime-1,:,:))/(2*this%dx)
+        !                                                                                                   
+        ! neighbor_dzdx(this%ims,:,this%jms:this%jme) = (-3*this%geo_u%z(this%ims,:,:) + &
+        !                                   4*this%geo_u%z(this%ims+1,:,:) - this%geo_u%z(this%ims+2,:,:)) / (2*this%dx)
+        !                                   
+        ! neighbor_dzdx(this%ime+1,:,this%jms:this%jme) = (3*this%geo_u%z(this%ime+1,:,:) - &
+        !                                  4*this%geo_u%z(this%ime,:,:) + this%geo_u%z(this%ime-1,:,:)) / (2*this%dx)
+        ! this%dzdx_u(:,:,:) = neighbor_dzdx(this%ims:this%ime+1,:,this%jms:this%jme)
+        
+        
+        this%dzdx(:,:,:) = (this%geo_u%z(this%ims+1:this%ime+1,:,:) - this%geo_u%z(this%ims:this%ime,:,:))/(this%dx)
+
+        neighbor_dzdx(this%ihs+1:this%ihe,:,:) = (neighbor_z(this%ihs+1:this%ihe,:,:) - neighbor_z(this%ihs:this%ihe-1,:,:))/this%dx
         neighbor_dzdx(this%ihs,:,:) = neighbor_dzdx(this%ihs+1,:,:) 
         neighbor_dzdx(this%ihe+1,:,:) = neighbor_dzdx(this%ihe,:,:)
-                
-        this%dzdx_u(:,:,:) = neighbor_dzdx(this%ims:this%ime+1,:,this%jms:this%jme)
-
-        !For dzdy
-        neighbor_dzdy(:,:,this%jhs+1:this%jhe-1) = (neighbor_z(:,:,this%jhs+2:this%jhe) - &
-                                                           neighbor_z(:,:,this%jhs:this%jhe-2))/(2*this%dx)
-        neighbor_dzdy(:,:,this%jhs) = (-3*neighbor_z(:,:,this%jms) + &
-                                          4*neighbor_z(:,:,this%jms+1) - neighbor_z(:,:,this%jms+2)) / (2*this%dx)
-                                          
-        neighbor_dzdy(:,:,this%jhe) = (3*neighbor_z(:,:,this%jhe) - &
-                                         4*neighbor_z(:,:,this%jhe-1) + neighbor_z(:,:,this%jhe-2)) / (2*this%dx)
-        this%dzdy(:,:,:) = neighbor_dzdy(this%ims:this%ime,:,this%jms:this%jme)
+        this%dzdx_u(this%ims+1:this%ime,:,:) = neighbor_dzdx(this%ims+1:this%ime,:,this%jms:this%jme)
         
-        neighbor_dzdy(:,:,this%jhs+1:this%jhe) = (neighbor_dzdy(:,:,this%jhs+1:this%jhe) + neighbor_dzdy(:,:,this%jhs:this%jhe-1))/2.0
+        this%dzdx_u(this%ims,:,:)   = this%dzdx(this%ims,:,:)*1.5 - this%dzdx(this%ims+1,:,:)*0.5
+        this%dzdx_u(this%ime+1,:,:) = this%dzdx(this%ime,:,:)*1.5 - this%dzdx(this%ime-1,:,:)*0.5
+        
+        
+        !For dzdy
+        ! neighbor_dzdy(:,:,this%jhs+1:this%jhe-1) = (neighbor_z(:,:,this%jhs+2:this%jhe) - &
+        !                                                    neighbor_z(:,:,this%jhs:this%jhe-2))/(2*this%dx)
+        ! neighbor_dzdy(:,:,this%jhs) = (-3*neighbor_z(:,:,this%jms) + &
+        !                                   4*neighbor_z(:,:,this%jms+1) - neighbor_z(:,:,this%jms+2)) / (2*this%dx)
+        !                                   
+        ! neighbor_dzdy(:,:,this%jhe) = (3*neighbor_z(:,:,this%jhe) - &
+        !                                  4*neighbor_z(:,:,this%jhe-1) + neighbor_z(:,:,this%jhe-2)) / (2*this%dx)
+        ! this%dzdy(:,:,:) = neighbor_dzdy(this%ims:this%ime,:,this%jms:this%jme)
+
+        !  neighbor_dzdy(this%ims:this%ime,:,this%jms+1:this%jme-1) = (this%z%data_3d(:,:,this%jms+2:this%jme) - &
+        !                                                     this%z%data_3d(:,:,this%jms:this%jme-2))/(2*this%dx)
+        !  neighbor_dzdy(this%ims:this%ime,:,this%jms) = (-3*this%z%data_3d(:,:,this%jms) + &
+        !                                    4*this%z%data_3d(:,:,this%jms+1) - this%z%data_3d(:,:,this%jms+2)) / (2*this%dx)
+        !                                    
+        !  neighbor_dzdy(this%ims:this%ime,:,this%jme) = (3*this%z%data_3d(:,:,this%jme) - &
+        !                                   4*this%z%data_3d(:,:,this%jme-1) + this%z%data_3d(:,:,this%jme-2)) / (2*this%dx)
+        !  this%dzdy(:,:,:) = neighbor_dzdy(this%ims:this%ime,:,this%jms:this%jme)
+!  
+!  
+        !  neighbor_dzdy(this%ims:this%ime,:,this%jms+1:this%jme) = (this%geo_v%z(:,:,this%jms+2:this%jme+1) - &
+        !                                                     this%geo_v%z(:,:,this%jms:this%jme-1))/(2*this%dx)
+        !  neighbor_dzdy(this%ims:this%ime,:,this%jms) = (-3*this%geo_v%z(:,:,this%jms) + &
+        !                                    4*this%geo_v%z(:,:,this%jms+1) - this%geo_v%z(:,:,this%jms+2)) / (2*this%dx)
+        !                                    
+        !  neighbor_dzdy(this%ims:this%ime,:,this%jme+1) = (3*this%geo_v%z(:,:,this%jme+1) - &
+        !                                   4*this%geo_v%z(:,:,this%jme) + this%geo_v%z(:,:,this%jme-1)) / (2*this%dx)
+        !  this%dzdy_v(:,:,:) = neighbor_dzdy(this%ims:this%ime,:,this%jms:this%jme+1)
+
+        if (this%east_boundary .and. this%grid%yimg==8) then
+            call io_write("dzdx_u_in_domain.nc", "dzdx_u", this%dzdx_u)
+            call io_write("jacobian_u_in_domain.nc", "jacobian_u", this%jacobian_u)
+            call io_write("geo_u_z_in_domain.nc", "geo_u_z", this%geo_u%z)
+        endif
+
+        this%dzdy(:,:,:) = (this%geo_v%z(:,:,this%jms+1:this%jme+1) - this%geo_v%z(:,:,this%jms:this%jme))/(this%dx)
+
+        neighbor_dzdy(:,:,this%jhs+1:this%jhe) = (neighbor_z(:,:,this%jhs+1:this%jhe) - neighbor_z(:,:,this%jhs:this%jhe-1))/this%dx
         neighbor_dzdy(:,:,this%jhs) = neighbor_dzdy(:,:,this%jhs+1) 
         neighbor_dzdy(:,:,this%jhe+1) = neighbor_dzdy(:,:,this%jhe)
                 
-        this%dzdy_v(:,:,:) = neighbor_dzdy(this%ims:this%ime,:,this%jms:this%jme+1)
-
-
-        deallocate(neighbor_z)
-        deallocate(neighbor_dzdx)
-        deallocate(neighbor_dzdy)
+        this%dzdy_v(:,:,this%jms+1:this%jme) = neighbor_dzdy(this%ims:this%ime,:,this%jms+1:this%jme)
+        this%dzdy_v(:,:,this%jms)   = this%dzdy(:,:,this%jms)*1.5 - this%dzdy(:,:,this%jms+1)*0.5
+        this%dzdy_v(:,:,this%jme+1) = this%dzdy(:,:,this%jme)*1.5 - this%dzdy(:,:,this%jme-1)*0.5
 
     end subroutine setup_dzdxy
 
@@ -2435,19 +2290,15 @@ contains
     !!
     !> -------------------------------
 
-    subroutine split_topography(this, options)
+    subroutine split_topography(this, global_terr, options)
         implicit none
         class(domain_t), intent(inout)  :: this
+        real, dimension(this%ids:this%ide,this%jds:this%jde), intent(in)   :: global_terr
         type(options_t), intent(in)     :: options
 
-        real, allocatable :: h_u(:,:), h_v(:,:), temp(:,:), temp_offset(:,:)  ! temporary_data(:,:),
-        integer :: i !, nflt, windowsize,
+        real, allocatable :: temp(:,:)
+        integer :: i
 
-        allocate(h_u( this% ihs : this% ihe+1,   &
-                      this% jhs : this% jhe) )
-
-        allocate(h_v( this% ihs : this% ihe,   &
-                      this% jhs : this% jhe+1) )
 
         allocate(this%h1( this% ihs : this% ihe, &
                           this% jhs : this% jhe) )
@@ -2455,44 +2306,29 @@ contains
         allocate(this%h2( this% ihs : this% ihe, &
                           this% jhs : this% jhe) )
 
-        allocate(this%h1_u( this% ihs : this% ihe+1,   &
-                            this% jhs : this% jhe) )
+        allocate(this%h1_u( this%u_grid2d% ims : this%u_grid2d% ime,   &
+                            this%u_grid2d% jms : this%u_grid2d% jme) )
 
-        allocate(this%h1_v( this% ihs : this% ihe,   &
-                            this% jhs : this% jhe+1) )
+        allocate(this%h1_v( this%v_grid2d% ims : this%v_grid2d% ime,   &
+                            this%v_grid2d% jms : this%v_grid2d% jme) )
 
-        allocate(this%h2_u( this% ihs : this% ihe+1,   &
-                            this% jhs : this% jhe) )
+        allocate(this%h2_u( this%u_grid2d% ims : this%u_grid2d% ime,   &
+                            this%u_grid2d% jms : this%u_grid2d% jme) )
 
-        allocate(this%h2_v( this% ihs : this% ihe,   &
-                            this% jhs : this% jhe+1) )
-
-
-
+        allocate(this%h2_v( this%v_grid2d% ims : this%v_grid2d% ime,   &
+                            this%v_grid2d% jms : this%v_grid2d% jme) )
+                            
         associate(ims => this%ims,      ime => this%ime,                        &
                   jms => this%jms,      jme => this%jme,                        &
                   kms => this%kms,      kme => this%kme,                        &
-                  z_u                   => this%geo_u%z,                        &
-                  z_v                   => this%geo_v%z,                        &
                   h1                    => this%h1,                             &
                   h2                    => this%h2,                             &
                   h1_u                  => this%h1_u,                           &
                   h2_u                  => this%h2_u,                           &
                   h1_v                  => this%h1_v,                           &
                   h2_v                  => this%h2_v,                           &
-                  neighbor_terrain      => this%neighbor_terrain,                 &
                   terrain               => this%terrain%data_2d)
 
-
-        ! ! ! ! Using the zr_u ratios to accelearte winds makes little sence with sleve coordinates, as these ratios are
-        !!!!!!!   all over the place due to excessive stretching.   (This warning can also go somewhere else)
-        if( (options%parameters%sleve) .and.                              &
-            (options%parameters%use_terrain_difference.eqv..FALSE.) .and.    &
-            (options%physics%windtype==2) .and.                           &  ! kCONSERVE_MASS
-            (this_image()==1)) then
-          write(*,*) "  WARNING: When using SLEVE coordinates and wind=2 it is adviced to set  use_terrain_difference = TRUE"
-          ! error stop
-        endif
 
         if ((this_image()==1)) then
           write(*,*) "  Setting up the SLEVE vertical coordinate:"
@@ -2503,91 +2339,54 @@ contains
 
 
         ! create a separate variable that will be smoothed later on:
-        h1 =  neighbor_terrain
+        allocate(temp(this%ids:this%ide,this%jds:this%jde))
+        temp =  global_terr
+
+
+        h2 = temp(this%ihs:this%ihe,this%jhs:this%jhe)
+        ! Smooth the terrain to attain the large-scale contribution h1 (_u/v):
+        
+        do i =1,options%parameters%terrain_smooth_cycles
+          call smooth_array( temp, windowsize  =  options%parameters%terrain_smooth_windowsize)
+        enddo
+        
+        h1   =  temp(this%ihs:this%ihe,this%jhs:this%jhe)
+        h2   =  h2 - h1
 
         ! offset the global terrain for the h_(u/v) calculations:
-        call array_offset_x(neighbor_terrain, temp_offset)
-        h_u = temp_offset
-        h1_u = temp_offset
-        if (allocated(temp_offset)) deallocate(temp_offset)
-
-        call array_offset_y(neighbor_terrain, temp_offset)
-        h_v = temp_offset
-        h1_v = temp_offset
-
-        ! Smooth the terrain to attain the large-scale contribution h1 (_u/v):
+        deallocate(temp)
+        allocate(temp(this%ids:this%ide+1,this%jds:this%jde))
+        call array_offset_x(global_terr, temp)
+        h2_u = temp(this%u_grid2d%ims:this%u_grid2d%ime, this%u_grid2d%jms:this%u_grid2d%jme)
+        
         do i =1,options%parameters%terrain_smooth_cycles
-          call smooth_array( h1, windowsize  =  options%parameters%terrain_smooth_windowsize)
-          call smooth_array( h1_u, windowsize = options%parameters%terrain_smooth_windowsize)
-          call smooth_array( h1_v, windowsize = options%parameters%terrain_smooth_windowsize)
+          call smooth_array( temp, windowsize = options%parameters%terrain_smooth_windowsize)
         enddo
+        
+        h1_u = temp(this%u_grid2d%ims:this%u_grid2d%ime, this%u_grid2d%jms:this%u_grid2d%jme)
+        h2_u =  h2_u  - h1_u
 
-        ! Subract the large-scale terrain from the full topography to attain the small-scale contribution:
-        h2   =  neighbor_terrain - h1
-        h2_u =  h_u  - h1_u
-        h2_v =  h_v  - h1_v
-
-        ! In case one wants to see how the terrain is split by smoothing, activate the block below and run in debug:
-        ! if ((this_image()==1).and.(options%parameters%debug)) then
-        !   call io_write("terrain_smooth_h1.nc", "h1", h1(:,:) )
-        !   call io_write("terrain_smooth_h2.nc", "h2", h2(:,:) )
-        !   call io_write("h1_u.nc", "h1_u", h1_u(:,:) )
-        !   call io_write("h2_u.nc", "h2_u", h2_u(:,:) )
-        ! endif
-
-        if (this_image()==1) then
-           write(*,*) "       Max of full topography", MAXVAL(neighbor_terrain )
-           write(*,*) "       Max of large-scale topography (h1)  ", MAXVAL(h1)
-           write(*,*) "       Max of small-scale topography (h2)  ", MAXVAL(h2)
-        end if
+        
+        ! offset the global terrain for the h_(u/v) calculations:
+        deallocate(temp)
+        allocate(temp(this%ids:this%ide,this%jds:this%jde+1))
+        call array_offset_y(global_terr, temp)
+        h2_v = temp(this%v_grid2d%ims:this%v_grid2d%ime, this%v_grid2d%jms:this%v_grid2d%jme)
+        
+        do i =1,options%parameters%terrain_smooth_cycles
+          call smooth_array( temp, windowsize = options%parameters%terrain_smooth_windowsize)
+        enddo
+        
+        h1_v = temp(this%v_grid2d%ims:this%v_grid2d%ime, this%v_grid2d%jms:this%v_grid2d%jme)
+        h2_v =  h2_v  - h1_v
+        
+        !if (this_image()==1) then
+        !   write(*,*) "       Max of full topography", MAXVAL(neighbor_terrain )
+        !   write(*,*) "       Max of large-scale topography (h1)  ", MAXVAL(h1)
+        !   write(*,*) "       Max of small-scale topography (h2)  ", MAXVAL(h2)
+        !end if
 
         end associate
-
-        ! Subset onto paralellized 2d grid  (h1 and h2 are kept on the global grid so we can calculate the global jacobian)
-
-        ! temp =  this%h1
-        ! deallocate(this%h1)
-        ! allocate(this%h1( this%grid2d% ims : this%grid2d% ime,   &
-        !                  this%grid2d% jms : this%grid2d% jme) )
-        ! this%h1 = temp(this%grid2d%ims:this%grid2d%ime, this%grid2d%jms:this%grid2d%jme)
-        ! deallocate(temp)
-
-        ! temp =  this%h2
-        ! deallocate(this%h2)
-        ! allocate(this%h2( this%grid2d% ims : this%grid2d% ime,   &
-        !                  this%grid2d% jms : this%grid2d% jme) )
-        ! this%h2 = temp(this%grid2d%ims:this%grid2d%ime, this%grid2d%jms:this%grid2d%jme)
-        ! deallocate(temp)
-
-        ! same for u and v:
-        temp =  this%h1_u
-        deallocate(this%h1_u)
-        allocate(this%h1_u( this%u_grid2d_ext% ims : this%u_grid2d_ext% ime,   &
-                            this%u_grid2d_ext% jms : this%u_grid2d_ext% jme) )
-        this%h1_u = temp(this%u_grid2d_ext%ims:this%u_grid2d_ext%ime, this%u_grid2d_ext%jms:this%u_grid2d_ext%jme)
-        deallocate(temp)
-
-        temp =  this%h2_u
-        deallocate(this%h2_u)
-        allocate(this%h2_u( this%u_grid2d_ext% ims : this%u_grid2d_ext% ime,   &
-                            this%u_grid2d_ext% jms : this%u_grid2d_ext% jme) )
-        this%h2_u = temp(this%u_grid2d_ext%ims:this%u_grid2d_ext%ime, this%u_grid2d_ext%jms:this%u_grid2d_ext%jme)
-        deallocate(temp)
-
-
-        temp =  this%h1_v
-        deallocate(this%h1_v)
-        allocate(this%h1_v( this%v_grid2d_ext% ims : this%v_grid2d_ext% ime,   &
-                            this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
-        this%h1_v = temp(this%v_grid2d_ext%ims:this%v_grid2d_ext%ime, this%v_grid2d_ext%jms:this%v_grid2d_ext%jme)
-        deallocate(temp)
-
-        temp =  this%h2_v
-        deallocate(this%h2_v)
-        allocate(this%h2_v( this%v_grid2d_ext% ims : this%v_grid2d_ext% ime,   &
-                            this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
-        this%h2_v = temp(this%v_grid2d_ext%ims:this%v_grid2d_ext%ime, this%v_grid2d_ext%jms:this%v_grid2d_ext%jme)
-        deallocate(temp)
 
     end subroutine split_topography
 
@@ -3062,8 +2861,18 @@ contains
         if (associated(this%canopy_vapor_pressure%data_2d)) this%canopy_vapor_pressure%data_2d=2000
         if (associated(this%canopy_temperature%data_2d)) this%canopy_temperature%data_2d=init_surf_temp
         if (associated(this%coeff_momentum_drag%data_2d)) this%coeff_momentum_drag%data_2d=0.01
-        if (associated(this%coeff_heat_exchange%data_2d)) this%coeff_heat_exchange%data_2d=0.01
+        if (associated(this%chs%data_2d)) this%chs%data_2d=0.01
+        if (associated(this%chs2%data_2d)) this%chs2%data_2d=0.01
+        if (associated(this%cqs2%data_2d)) this%cqs2%data_2d=0.01
+        if (associated(this%qfx%data_2d)) this%qfx%data_2d=0.0
+        if (associated(this%br%data_2d)) this%br%data_2d=0.0
+        if (associated(this%psim%data_2d)) this%psim%data_2d=0.0
+        if (associated(this%psih%data_2d)) this%psih%data_2d=0.0
+        if (associated(this%fm%data_2d)) this%fm%data_2d=0.0
+        if (associated(this%fh%data_2d)) this%fh%data_2d=0.0
+        if (associated(this%hpbl%data_2d)) this%hpbl%data_2d=100.0
         if (associated(this%coeff_heat_exchange_3d%data_3d)) this%coeff_heat_exchange_3d%data_3d=0.01
+        if (associated(this%coeff_momentum_exchange_3d%data_3d)) this%coeff_momentum_exchange_3d%data_3d=0.01
         if (associated(this%canopy_fwet%data_2d)) this%canopy_fwet%data_2d=0
         if (associated(this%snow_water_eq_prev%data_2d)) this%snow_water_eq_prev%data_2d=0
         if (associated(this%snow_albedo_prev%data_2d)) this%snow_albedo_prev%data_2d=0.65
@@ -3085,6 +2894,8 @@ contains
         if (associated(this%rainfall_tstep%data_2d))      this%rainfall_tstep%data_2d=0.
         if (associated(this%snowfall_tstep%data_2d))      this%snowfall_tstep%data_2d=0.
         if (associated(this%meltflux_out_tstep%data_2d))  this%meltflux_out_tstep%data_2d=0.
+        if (associated(this%svf%data_2d))                 this%svf%data_2d=1.
+        if (associated(this%hlm%data_2d))                 this%hlm%data_2d=90.
         if (associated(this%shortwave_direct%data_2d))  this%shortwave_direct%data_2d=0.
         if (associated(this%shortwave_diffuse%data_2d))  this%shortwave_diffuse%data_2d=0.
         if (associated(this%shortwave_direct_above%data_2d))  this%shortwave_direct_above%data_2d=0.
@@ -3092,60 +2903,7 @@ contains
         if (associated(this%Sliq_out%data_2d))  this%Sliq_out%data_2d=0.
     end subroutine read_land_variables
 
-    
-    !> -------------------------------
-    !! Initialize various internal variables that need forcing data first, e.g. temperature, pressure on interface, exner, ...
-    !!
-    !! -------------------------------
-    subroutine initialize_internal_variables(this, options)
-        implicit none
-        class(domain_t), intent(inout)  :: this
-        type(options_t), intent(in)     :: options
 
-        integer :: i
-
-        associate(pressure              => this%pressure%data_3d,               &
-                  exner                 => this%exner%data_3d,                  &
-                  pressure_interface    => this%pressure_interface%data_3d,     &
-                  temperature_interface => this%temperature_interface%data_3d,     &
-                  psfc                  => this%surface_pressure%data_2d,       &
-                  temperature           => this%temperature%data_3d,            &
-                  potential_temperature => this%potential_temperature%data_3d )
-
-                  exner = exner_function(pressure)
-
-                  if (associated(this%pressure_interface%data_3d)) then
-                      ! this isn't exactly correct, should be distance weighted...
-                      ! weight one = (dz2) / (dz1+dz2)
-                      ! weight two = (dz1) / (dz1+dz2)
-                      pressure_interface(:,1,:) = ( pressure(:,1,:) * 2 - pressure(:,2,:) )
-                      do i = 2, size(pressure_interface, 2)
-                          pressure_interface(:,i,:) = ( pressure(:,i-1,:) + pressure(:,i,:) ) / 2
-                      enddo
-
-                      if (associated(this%surface_pressure%data_2d)) then
-                          psfc = pressure_interface(:,1,:)
-                      endif
-                  endif
-
-                  if (associated(this%temperature%data_3d)) then
-                      temperature = potential_temperature * exner
-                  endif
-
-                  if (associated(this%temperature_interface%data_3d)) then
-                    ! this isn't exactly correct, should be distance weighted...
-                    ! weight one = (dz2) / (dz1+dz2)
-                    ! weight two = (dz1) / (dz1+dz2)
-                    temperature_interface(:,1,:) = ( temperature(:,1,:) * 2 - temperature(:,2,:) )
-                    do i = 2, size(temperature_interface, 2)
-                        temperature_interface(:,i,:) = ( temperature(:,i-1,:) + temperature(:,i,:) ) / 2
-                    enddo
-                ENDIF
-        end associate
-
-        if (allocated(this%znw).or.allocated(this%znu)) call init_znu(this)
-
-    end subroutine initialize_internal_variables
 
     !> -------------------------------
     !! Populare the metadata structure in the domain for later output
@@ -3194,10 +2952,6 @@ contains
         call this%info%add_attribute("adv", a_string )
         write(a_string,*) options%physics%windtype
         call this%info%add_attribute("wind", a_string )
-        if(options%physics%windtype==2 .and. options%parameters%use_terrain_difference )then ! kCONSERVE_MASS
-           write(a_string,*) options%parameters%use_terrain_difference
-          call this%info%add_attribute("terrain_difference for wind acceleration:",a_string )
-        endif
 
 
         call this%info%add_attribute("ids",str(this%grid%ids))
@@ -3305,7 +3059,8 @@ contains
         !If using MPDATA, we need a halo of size 2 to support the difference stencil
         if (options%physics%advection==kADV_MPDATA) adv_order = 4
 
-        call this%grid%set_grid_dimensions(   nx_global, ny_global, nz_global,adv_order=adv_order)
+        call this%grid%set_grid_dimensions(     nx_global, ny_global, nz_global,adv_order=adv_order)
+        call this%grid8w%set_grid_dimensions(   nx_global, ny_global, nz_global+1,adv_order=adv_order)
 
         call this%u_grid%set_grid_dimensions( nx_global, ny_global, nz_global,adv_order=adv_order, nx_extra = 1)
         call this%v_grid%set_grid_dimensions( nx_global, ny_global, nz_global,adv_order=adv_order, ny_extra = 1)
@@ -3317,21 +3072,9 @@ contains
         ! This just sets up the fields to interpolate u and v to so that the input data are handled on an extended
         ! grid.  They are then subset to the u_grid and v_grids above before actual use.
         call this%u_grid2d%set_grid_dimensions(     nx_global, ny_global, 0,adv_order=adv_order, nx_extra = 1)
-        call this%u_grid2d_ext%set_grid_dimensions( nx_global, ny_global, 0,adv_order=adv_order, nx_extra = 1)
-        ! extend by nsmooth, but bound to the domain grid
-        this%u_grid2d_ext%ims = max(this%u_grid2d%ims - nsmooth, this%u_grid2d%ids)
-        this%u_grid2d_ext%ime = min(this%u_grid2d%ime + nsmooth, this%u_grid2d%ide)
-        this%u_grid2d_ext%jms = max(this%u_grid2d%jms - nsmooth, this%u_grid2d%jds)
-        this%u_grid2d_ext%jme = min(this%u_grid2d%jme + nsmooth, this%u_grid2d%jde)
 
         ! handle the v-grid too
         call this%v_grid2d%set_grid_dimensions(     nx_global, ny_global, 0,adv_order=adv_order, ny_extra = 1)
-        call this%v_grid2d_ext%set_grid_dimensions( nx_global, ny_global, 0,adv_order=adv_order, ny_extra = 1)
-        ! extend by nsmooth, but bound to the domain grid
-        this%v_grid2d_ext%ims = max(this%v_grid2d%ims - nsmooth, this%v_grid2d%ids)
-        this%v_grid2d_ext%ime = min(this%v_grid2d%ime + nsmooth, this%v_grid2d%ide)
-        this%v_grid2d_ext%jms = max(this%v_grid2d%jms - nsmooth, this%v_grid2d%jds)
-        this%v_grid2d_ext%jme = min(this%v_grid2d%jme + nsmooth, this%v_grid2d%jde)
         
         call this%grid_soil%set_grid_dimensions(         nx_global, ny_global, kSOIL_GRID_Z,adv_order=adv_order)
         call this%grid_snow%set_grid_dimensions(         nx_global, ny_global, kSNOW_GRID_Z,adv_order=adv_order)
@@ -3347,8 +3090,6 @@ contains
         call this%grid_hlm%set_grid_dimensions(     nx_global, ny_global, 90,adv_order=adv_order) !! MJ added
 
 
-        deallocate(temporary_data)
-
         this%north_boundary = (this%grid%yimg == this%grid%yimages)
         this%south_boundary = (this%grid%yimg == 1)
         this%east_boundary  = (this%grid%ximg == this%grid%ximages)
@@ -3362,13 +3103,18 @@ contains
         this%jme = this%grid%jme; this%jte = this%grid%jte; this%jde = this%grid%jde
         
         !Calculate neighborhood indexes. These are used to store terrain in the local neighborhood for non-local wind calculations
+        this%neighborhood_max = max(nsmooth,8)
         
         !Considering blocking terrain...
-        this%neighborhood_max = int(max(4000.0/this%dx,1.0))
-
+        if (options%physics%windtype == kLINEAR_ITERATIVE_WINDS .or. options%physics%windtype ==  kITERATIVE_WINDS) then
+            this%neighborhood_max = int(max(4000.0/this%dx,1.0))
+        endif
+        
         !Considering TPI...
-        this%neighborhood_max = max(this%neighborhood_max,floor(max(1.0,options%wind%TPI_dmax/this%dx)))
-
+        if (options%wind%Sx) then
+            this%neighborhood_max = max(this%neighborhood_max,floor(max(1.0,(options%wind%TPI_dmax+options%wind%Sx_dmax)/this%dx)))
+        endif
+        
         this%ihs=max(this%grid%ims-this%neighborhood_max,this%grid%ids); this%ihe=min(this%grid%ime+this%neighborhood_max,this%grid%ide)
         this%jhs=max(this%grid%jms-this%neighborhood_max,this%grid%jds); this%jhe=min(this%grid%jme+this%neighborhood_max,this%grid%jde)
         this%khs=this%grid%kms;                                          this%khe=this%grid%kme
@@ -3531,17 +3277,16 @@ contains
 
         type(interpolable_type) :: forc_u_from_mass, forc_v_from_mass
 
-        integer :: nx, ny, nz, i, j, k
+        integer :: nx, ny, nz, i, j, k, ims, ime, jms, jme
         real, allocatable, dimension(:,:) :: AGL_cap, AGL_u_cap, AGL_v_cap, AGL_n, AGL_u_n, AGL_v_n
 
         ! this%geo and forcing%geo have to be of class interpolable
         ! which means they must contain lat, lon, z, geolut, and vLUT components
 
+        call geo_LUT(this%geo_agl,forcing%geo_agl)
+        call geo_LUT(this%geo,forcing%geo)
         call geo_LUT(this%geo_u,  forcing%geo_u)
         call geo_LUT(this%geo_v,  forcing%geo_v)
-        call geo_LUT(this%geo_agl,forcing%geo_agl)
-        call geo_LUT(this%geo,    forcing%geo)
-
 
         if (allocated(forcing%z)) then  ! In case of external 2D forcing data, skip the VLUTs.
 
@@ -3551,26 +3296,33 @@ contains
             forc_v_from_mass%lon = forcing%geo%lon
 
             call geo_LUT(this%geo_u, forc_u_from_mass)
+            
             call geo_LUT(this%geo_v, forc_v_from_mass)
             
-            nz = size(forcing%z,  2)
-            nx = size(this%geo_u%z, 1)
-            ny = size(this%geo_u%z, 3)
-            allocate(forcing%geo_u%z(nx,nz,ny))            
+            nz = ubound(forcing%z,  2)
+            ims = lbound(this%geo_u%z,1)
+            ime = ubound(this%geo_u%z,1)
+            jms = lbound(this%geo_u%z,3)
+            jme = ubound(this%geo_u%z,3)
+            allocate(forcing%geo_u%z(ims:ime, forcing%kts:forcing%kte, jms:jme))            
+
+            ims = lbound(this%geo_v%z,1)
+            ime = ubound(this%geo_v%z,1)
+            jms = lbound(this%geo_v%z,3)
+            jme = ubound(this%geo_v%z,3)            
+            allocate(forcing%geo_v%z(ims:ime, forcing%kts:forcing%kte, jms:jme))
             
-            nx = size(this%geo_v%z, 1)
-            ny = size(this%geo_v%z, 3)
-            allocate(forcing%geo_v%z(nx,nz,ny))
-            
-            nx = size(this%geo%z, 1)
-            ny = size(this%geo%z, 3)
-            allocate(forcing%geo%z(nx, nz, ny))            
-            allocate(forcing%geo_agl%z(nx, nz, ny))            
+
+            ims = lbound(this%geo%z,1)
+            ime = ubound(this%geo%z,1)
+            jms = lbound(this%geo%z,3)
+            jme = ubound(this%geo%z,3)
+            allocate(forcing%geo%z(ims:ime, forcing%kts:forcing%kte, jms:jme))            
+            allocate(forcing%geo_agl%z(ims:ime, forcing%kts:forcing%kte, jms:jme))            
 
             call geo_interp(forcing%geo%z, forcing%z, forcing%geo%geolut)
             call vLUT(this%geo,   forcing%geo)
 
-            
             call geo_interp(forcing%geo_agl%z, forcing%z, forcing%geo%geolut)
             call geo_interp(forcing%geo_u%z, forcing%z, forc_u_from_mass%geolut)
             call geo_interp(forcing%geo_v%z, forcing%z, forc_v_from_mass%geolut)
@@ -3680,34 +3432,34 @@ contains
             if (this%west_boundary) then
                 relax_filter(this%ims:this%ims+hs-1,this%jms:this%jme) = 1.0
                 do k=this%jms,this%jme
-                    relax_filter(this%ims+hs:this%ims+hs+nr-1,k) = rs(:nr)
+                    relax_filter(this%ims+hs:this%ims+hs+nr-1,k) = rs(1:nr)
                 enddo
             else if (this%east_boundary) then
                 relax_filter(this%ime-hs+1:this%ime,this%jms:this%jme) = 1.0
                 do k=this%jms,this%jme
-                    relax_filter(this%ime-hs-nr+1:this%ime-hs,k) = rs_r(:nr)        
+                    relax_filter(this%ime-hs-nr+1:this%ime-hs,k) = rs_r(1:nr)        
                 enddo
             else if (this%north_boundary) then
-                relax_filter(this%ims:this%ime,this%jme-hs-1:this%jme) = 1.0
+                relax_filter(this%ims:this%ime,this%jme-hs+1:this%jme) = 1.0
                 do k=this%ims,this%ime
-                    relax_filter(k,this%jme-hs-nr+1:this%jme-hs) = rs_r(:nr)
+                    relax_filter(k,this%jme-hs-nr+1:this%jme-hs) = rs_r(1:nr)
                 enddo
             else if (this%south_boundary) then
                 relax_filter(this%ims:this%ime,this%jms:this%jms+hs-1) = 1.0
                 do k=this%ims,this%ime
-                    relax_filter(k,this%jms+hs:this%jms+hs+nr-1) = rs(:nr)
+                    relax_filter(k,this%jms+hs:this%jms+hs+nr-1) = rs(1:nr)
                 enddo
             endif
         else
             if (this%north_boundary .and. this%west_boundary) then
                 relax_filter(this%ims:this%ims+hs-1,this%jms:this%jme) = 1.0
-                relax_filter(this%ims:this%ime,this%jme-hs-1:this%jme) = 1.0
+                relax_filter(this%ims:this%ime,this%jme-hs+1:this%jme) = 1.0
 
                 do k=this%jms,this%jme-hs
-                    relax_filter(this%ims+hs:this%ims+hs+nr-1,k) = rs(:nr)
+                    relax_filter(this%ims+hs:this%ims+hs+nr-1,k) = rs(1:nr)
                 enddo
                 do k=this%ims+hs,this%ime
-                    relax_filter(k,this%jme-hs-nr+1:this%jme-hs) = rs_r(:nr)
+                    relax_filter(k,this%jme-hs-nr+1:this%jme-hs) = rs_r(1:nr)
                 enddo
                 do i = 1, nr
                     do k = 1, nr
@@ -3716,13 +3468,13 @@ contains
                 enddo
             else if (this%north_boundary .and. this%east_boundary) then
                 relax_filter(this%ime-hs+1:this%ime,this%jms:this%jme) = 1.0   
-                relax_filter(this%ims:this%ime,this%jme-hs-1:this%jme) = 1.0
+                relax_filter(this%ims:this%ime,this%jme-hs+1:this%jme) = 1.0
 
                 do k=this%jms,this%jme-hs
-                    relax_filter(this%ime-hs-nr+1:this%ime-hs,k) = rs_r(:nr)        
+                    relax_filter(this%ime-hs-nr+1:this%ime-hs,k) = rs_r(1:nr)        
                 enddo        
                 do k=this%ims,this%ime-hs
-                    relax_filter(k,this%jme-hs-nr+1:this%jme-hs) = rs_r(:nr)
+                    relax_filter(k,this%jme-hs-nr+1:this%jme-hs) = rs_r(1:nr)
                 enddo
                 do i = 1, nr
                     do k = 1, nr
@@ -3734,10 +3486,10 @@ contains
                 relax_filter(this%ims:this%ime,this%jms:this%jms+hs-1) = 1.0
 
                 do k=this%jms+hs,this%jme
-                    relax_filter(this%ims+hs:this%ims+hs+nr-1,k) = rs(:nr)
+                    relax_filter(this%ims+hs:this%ims+hs+nr-1,k) = rs(1:nr)
                 enddo
                 do k=this%ims+hs,this%ime
-                    relax_filter(k,this%jms+hs:this%jms+hs+nr-1) = rs(:nr)
+                    relax_filter(k,this%jms+hs:this%jms+hs+nr-1) = rs(1:nr)
                 enddo
                 do i = 1, nr
                     do k = 1, nr
@@ -3749,10 +3501,10 @@ contains
                 relax_filter(this%ims:this%ime,this%jms:this%jms+hs-1) = 1.0
             
                 do k=this%jms+hs,this%jme
-                    relax_filter(this%ime-hs-nr+1:this%ime-hs,k) = rs_r(:nr)        
+                    relax_filter(this%ime-hs-nr+1:this%ime-hs,k) = rs_r(1:nr)        
                 enddo        
                 do k=this%ims,this%ime-hs
-                    relax_filter(k,this%jms+hs:this%jms+hs+nr-1) = rs(:nr)
+                    relax_filter(k,this%jms+hs:this%jms+hs+nr-1) = rs(1:nr)
                 enddo
                 do i = 1, nr
                     do k = 1, nr
@@ -3763,7 +3515,7 @@ contains
         endif
 
         do k=this%kms,this%kme
-            relax_filter_3d(:,k,:) = relax_filter
+            relax_filter_3d(this%ims:this%ime,k,this%jms:this%jme) = relax_filter
         enddo
         
         end associate
@@ -3822,7 +3574,7 @@ contains
     module subroutine apply_forcing(this, forcing, options, dt)
         implicit none
         class(domain_t),    intent(inout) :: this
-        class(boundary_t),  intent(in)    :: forcing
+        class(boundary_t),  intent(inout) :: forcing
         type(options_t), intent(in)       :: options
         real, intent(in)                  :: dt
         integer :: ims, ime, jms, jme
@@ -3845,18 +3597,23 @@ contains
             
             forcing_hi = forcing%variables_hi%get_var(var_to_update%forcing_var)
 
+            ims = var_to_update%grid%ims
+            ime = var_to_update%grid%ime
+            jms = var_to_update%grid%jms
+            jme = var_to_update%grid%jme
+
             if (var_to_update%two_d) then
                 ! apply forcing throughout the domain for 2D diagnosed variables (e.g. SST, SW)
                 if (.not.(var_to_update%force_boundaries)) then
-                    do j = this%jms,this%jme
-                        do i = this%ims,this%ime
+                    do j = jms,jme
+                        do i = ims,ime
                             var_to_update%data_2d(i,j) = var_to_update%data_2d(i,j) + (var_to_update%dqdt_2d(i,j) * dt)
                         enddo
                     enddo
                 else if (any(this%relax_filter_2d > 0.0)) then
                     !Update forcing data to current time step
-                    do j = this%jms,this%jme
-                        do i = this%ims,this%ime
+                    do j = jms,jme
+                        do i = ims,ime
                             if (this%relax_filter_2d(i,j) > 0.0) then
                                 forcing_hi%data_2d(i,j) = forcing_hi%data_2d(i,j) + (forcing_hi%dqdt_2d(i,j) * dt)
                                 if (this%relax_filter_2d(i,j) == 1.0) then
@@ -3875,9 +3632,9 @@ contains
                 ! only apply forcing data on the boundaries for advected scalars (e.g. temperature, humidity)
                 ! applying forcing to the edges has already been handeled when updating dqdt using the relaxation filter
                 if (.not.(var_to_update%force_boundaries)) then
-                    do j = this%jms,this%jme
+                    do j = jms,jme
                         do k = this%kms,this%kme
-                            do i = this%ims,this%ime
+                            do i = ims,ime
                                 forcing_hi%data_3d(i,k,j) = forcing_hi%data_3d(i,k,j) + (forcing_hi%dqdt_3d(i,k,j) * dt)
                                 var_to_update%data_3d(i,k,j) = var_to_update%data_3d(i,k,j) + &
                                                               (var_to_update%dqdt_3d(i,k,j) * dt)
@@ -3886,9 +3643,9 @@ contains
                     enddo
                 else if (any(this%relax_filter_3d > 0.0)) then
                     !Update forcing data to current time step
-                    do j = this%jms,this%jme
+                    do j = jms,jme
                         do k = this%kms,this%kme
-                            do i = this%ims,this%ime
+                            do i = ims,ime
                                 if (this%relax_filter_3d(i,k,j) > 0.0) then
                                     forcing_hi%data_3d(i,k,j) = forcing_hi%data_3d(i,k,j) + (forcing_hi%dqdt_3d(i,k,j) * dt)
                                     if (this%relax_filter_3d(i,k,j) == 1.0) then
@@ -3910,9 +3667,9 @@ contains
         ! w has to be handled separately because it is the only variable that can be updated using the delta fields but is not
         ! actually read from disk. Note that if we move to balancing winds every timestep, then it doesn't matter.
         if (.not.(options%parameters%advect_density)) then
-            do j = this%jms,this%jme
+            do j = jms,jme
                 do k = this%kms,this%kme
-                    do i = this%ims,this%ime
+                    do i = ims,ime
                         this%w%meta_data%data_3d(i,k,j) = this%w%meta_data%data_3d(i,k,j) + (this%w%meta_data%dqdt_3d(i,k,j) * dt)
                     enddo
                 enddo
@@ -4099,7 +3856,7 @@ contains
                     call interpolate_variable(forcing_hi%dqdt_3d, input_data, forcing, this, &
                                     interpolate_agl_in=agl_interp, var_is_u=var_is_u, var_is_v=var_is_v, nsmooth=this%nsmooth)
                     !If this variable is forcing the whole domain, we can copy the next forcing step directly over to domain
-                    if (.not.(var_to_interpolate%force_boundaries)) var_to_interpolate%dqdt_3d = forcing_hi%dqdt_3d
+                    if (.not.(var_to_interpolate%force_boundaries).and..not.var_is_u.and..not.var_is_v) var_to_interpolate%dqdt_3d = forcing_hi%dqdt_3d
                 else
                     call interpolate_variable(forcing_hi%data_3d, input_data, forcing, this, &
                                     interpolate_agl_in=agl_interp, var_is_u=var_is_u, var_is_v=var_is_v, nsmooth=this%nsmooth)
@@ -4122,7 +3879,6 @@ contains
             !this%w_real%dqdt_3d = 0
         else
             call adjust_pressure_temp(pressure%data_3d,potential_temp%data_3d, forcing%geo%z, this%geo%z)
-            pressure%data_3d = pressure%data_3d
             this%pressure%data_3d = pressure%data_3d
             this%potential_temperature%data_3d = potential_temp%data_3d
             !this%w_real%data_3d = 0
@@ -4159,10 +3915,10 @@ contains
                         !Assume lapse rate of -6.5ºC/1km
                         !potential_temp(i,k,j) = potential_temp(i,k,j) + 6.5*dz/1000.0
                         
-                        !estimate pressure difference 1200 Pa for each 100m difference for exner function
-                        p_guess = pressure(i,k,j) + 1200*dz/100.0
+                        !estimate pressure difference 1100 Pa for each 100m difference for exner function
+                        p_guess = pressure(i,k,j) + 1100*dz/100.0
                         t = exner_function(p_guess) * potential_temp(i,k,j)
-                        pressure(i,k,j) = pressure(i,k,j) * exp( ((gravity/Rd) * dz) / t )
+                        pressure(i,k,j) = pressure(i,k,j) * exp( ((gravity/R_d) * dz) / t )
                     else
                         exit
                     endif
@@ -4230,7 +3986,6 @@ contains
         ! update pressure for the change in height between the closest GCM model level and each ICAR level.
         call update_pressure(pressure, temp_z, output_z, temp_t)
 
-        deallocate(temp_p, temp_z)
     end subroutine
 
     !> -------------------------------
@@ -4240,7 +3995,7 @@ contains
     !! -------------------------------
     subroutine interpolate_variable(var_data, input_data, forcing, dom, interpolate_agl_in, var_is_u, var_is_v, nsmooth)
         implicit none
-        real,               intent(inout) :: var_data(:,:,:)
+        real,            intent(inout) :: var_data(:,:,:)
         type(variable_t),   intent(in) :: input_data
         type(boundary_t),   intent(in)    :: forcing
         type(domain_t),     intent(in)    :: dom
@@ -4250,9 +4005,9 @@ contains
 
         ! note that 3D variables have a different number of vertical levels, so they have to first be interpolated
         ! to the high res horizontal grid, then vertically interpolated to the actual icar domain
-        real, allocatable :: temp_3d(:,:,:), pre_smooth(:,:,:)
+        real, allocatable :: temp_3d(:,:,:)
         logical :: interpolate_agl, uvar, vvar
-        integer :: nx, ny, nz
+        integer :: nx, ny, nz, ims, ime, jms, jme
         integer :: windowsize, z
 
         interpolate_agl=.False.
@@ -4264,14 +4019,19 @@ contains
         windowsize = 0
         if (present(nsmooth)) windowsize = nsmooth
 
+        ims = lbound(var_data,1)
+        ime = ubound(var_data,1)
+        jms = lbound(var_data,3)
+        jme = ubound(var_data,3)
+
+        ! allocate a temporary variable to hold the horizontally interpolated data before vertical interpolation
+        allocate(temp_3d(ims:ime, size(input_data%data_3d,2), jms:jme ))
 
         ! Sequence of if statements to test if this variable needs to be interpolated onto the staggared grids
         ! This could all be combined by passing in the geo data to use, along with a smoothing flag.
 
         ! Interpolate to the Mass grid
         if ((size(var_data,1) == size(forcing%geo%geolut%x,2)).and.(size(var_data,3) == size(forcing%geo%geolut%x,3))) then
-            ! allocate a temporary variable to hold the horizontally interpolated data before vertical interpolation
-            allocate(temp_3d(size(var_data,1), size(input_data%data_3d,2), size(var_data,3) ))
 
             call geo_interp(temp_3d, input_data%data_3d, forcing%geo%geolut)
 
@@ -4284,330 +4044,28 @@ contains
         ! Interpolate to the u staggered grid
         else if (uvar) then
 
-            ! use the alternate allocate below to vertically interpolate to this first, then smooth, then subset to the actual variable
-            allocate(temp_3d(size(forcing%geo_u%geolut%x,2), size(var_data,2), size(forcing%geo_u%geolut%x,3)))
-            allocate(pre_smooth(size(forcing%geo_u%geolut%x,2), size(input_data%data_3d,2), size(forcing%geo_u%geolut%x,3) ))
-
-            nx = size(forcing%geo_u%geolut%x,2)
-            ny = size(forcing%geo_u%geolut%x,3)
-            nz = size(var_data,2)
-
             ! One grid cell smoothing of original input data
             if (windowsize > 0) call smooth_array(input_data%data_3d, windowsize=1, ydim=3)
-            call geo_interp(pre_smooth, input_data%data_3d, forcing%geo_u%geolut)
+            call geo_interp(temp_3d, input_data%data_3d, forcing%geo_u%geolut)
 
-            call vinterp(temp_3d, pre_smooth, forcing%geo_u%vert_lut)
+            call vinterp(var_data, temp_3d, forcing%geo_u%vert_lut)
             ! temp_3d = pre_smooth(:,:nz,:) ! no vertical interpolation option
-
-            if (windowsize > 0) call smooth_array(temp_3d, windowsize=windowsize, ydim=3)
+            if (windowsize > 0) call smooth_array(var_data, windowsize=windowsize, ydim=3)
                         
-            var_data = temp_3d(dom%u_grid%ims-dom%u_grid2d_ext%ims+1 : dom%u_grid%ime-dom%u_grid2d_ext%ims+1,    &
-                               :,   &
-                               dom%u_grid%jms-dom%u_grid2d_ext%jms+1 : dom%u_grid%jme-dom%u_grid2d_ext%jms+1)
         ! Interpolate to the v staggered grid
         else if (vvar) then
 
-            ! use the alternate allocate below to vertically interpolate to this first, then smooth, then subset to the actual variable
-            allocate(temp_3d(size(forcing%geo_v%geolut%x,2), size(var_data,2), size(forcing%geo_v%geolut%x,3)))
-            allocate(pre_smooth(size(forcing%geo_v%geolut%x,2), size(input_data%data_3d,2), size(forcing%geo_v%geolut%x,3) ))
-
-            nx = size(forcing%geo_v%geolut%x,2)
-            ny = size(forcing%geo_v%geolut%x,3)
-            nz = size(var_data,2)
-
             ! One grid cell smoothing of original input data
             if (windowsize > 0) call smooth_array(input_data%data_3d, windowsize=1, ydim=3)
-            call geo_interp(pre_smooth, input_data%data_3d, forcing%geo_v%geolut)
-            call vinterp(temp_3d, pre_smooth, forcing%geo_v%vert_lut)
+            call geo_interp(temp_3d, input_data%data_3d, forcing%geo_v%geolut)
+            
+            call vinterp(var_data, temp_3d, forcing%geo_v%vert_lut)
             ! temp_3d = pre_smooth(:,:nz,:) ! no vertical interpolation option
-            if (windowsize > 0) call smooth_array(temp_3d, windowsize=windowsize, ydim=3)
-
-            var_data = temp_3d(dom%v_grid%ims-dom%v_grid2d_ext%ims+1 : dom%v_grid%ime-dom%v_grid2d_ext%ims+1,    &
-                                :,   &
-                               dom%v_grid%jms-dom%v_grid2d_ext%jms+1 : dom%v_grid%jme-dom%v_grid2d_ext%jms+1)
+            if (windowsize > 0) call smooth_array(var_data, windowsize=windowsize, ydim=3)
         endif
-
+        
     end subroutine
 
-
-    !> -------------------------------
-    !! This is used to calculate the dzdz slopes based on the difference between forcing terrain and hi-res terrain.
-    !!  Usefull for hi-res simulations over complex terrain, where the forcing data already resolves significant terrain influence.
-    !!
-    !!
-    !! Bert Kruyt may 2020
-    !! -------------------------------
-    module subroutine calculate_delta_terrain(this, forcing, options)
-        implicit none
-        class(domain_t),  intent(inout) :: this
-        type(boundary_t), intent(in) :: forcing
-        type(options_t), intent(in)     :: options
-
-
-        real, allocatable ::  delta_terrain(:,:)!, delta_dzdx_sc(:,:,:), delta_dzdy_sc(:,:,:)
-        real, allocatable :: zf_interface(:,:,:), dzf_interface(:,:,:), zf(:,:,:), dzf_mass(:,:,:), dzfdx(:,:,:), dzfdy(:,:,:)!, delta_dzdx(:,:,:)
-        real, allocatable :: temp_offset(:,:), temp(:,:,:), temp2(:,:)
-
-        real :: wind_top, s1, s2, s, e
-        integer :: i
-
-        call read_forcing_terrain(this, options, forcing)
-
-        allocate(this%zfr_u( this%u_grid2d_ext% ims : this%u_grid2d_ext% ime,   &  ! can go to calculate delta terrain ?
-                             this%u_grid% kms : this%u_grid% kme,   &
-                             this%u_grid2d_ext% jms : this%u_grid2d_ext% jme) )
-
-        allocate(this%zfr_v( this%v_grid2d_ext% ims : this%v_grid2d_ext% ime,   &
-                             this%v_grid% kms : this%v_grid% kme,   &
-                             this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
-
-        associate(ims => this%ims,      ime => this%ime,                        &
-                  jms => this%jms,      jme => this%jme,                        &
-                  kms => this%kms,      kme => this%kme,                        &
-                  terrain               => this%terrain%data_2d,                &
-                  neighbor_terrain      => this%neighbor_terrain,                 &
-                  terrain_u             => this%terrain_u,                      &
-                  terrain_v             => this%terrain_v,                      &
-                  forcing_terrain       => this%forcing_terrain%data_2d,        &
-                  forcing_terrain_u    => this%forcing_terrain_u,               &
-                  forcing_terrain_v    => this%forcing_terrain_v,               &
-                  n                     => options%parameters%sleve_n,          &
-                  dz                    => options%parameters%dz_levels,        &
-                  dzdx                  => this%dzdx,                           &
-                  dzdy                  => this%dzdy,                           &
-                  dz_scl                => this%dz_scl,                         &
-                  smooth_height         => this%smooth_height,                  &
-                  ! delta_dzdx_lc         => this%delta_dzdx,                     &
-                  ! delta_dzdy_lc         => this%delta_dzdy,                     &
-                  delta_dzdx_sc         => this%delta_dzdx,                     &
-                  delta_dzdy_sc         => this%delta_dzdy,                     &
-                  zfr_u                 => this%zfr_u,                          &
-                  zfr_v                 => this%zfr_v )
-
-
-        ! s  =  H / options%parameters%sleve_decay_factor
-        s1 =  smooth_height / options%parameters%decay_rate_L_topo
-        s2 =  smooth_height / options%parameters%decay_rate_S_topo
-        s = s1 ! only for the -currently unused- delta_dzdx_sc calculation (1B)
-        ! wind_top = (s1+s2)/2 ! Experiment, lets see what this does.
-
-        ! To prevent the wind_top (the height below which we hor.accelerate winds) from becoming too low, thus creating
-        !   very large acceleration, we introduce this check.
-        e = 1.2  ! <- first guess
-        if (MAXVAL(neighbor_terrain) *e < s1 ) then
-            wind_top = s1
-            if (this_image()==1) write(*,*) "  horizontally accelerating winds below:", wind_top, "m. " !,"(Factor H/s:", H/s ,")"
-        else
-            wind_top = MAXVAL(neighbor_terrain) * e !**2
-            if (this_image()==1 )   write(*,*) "  adjusting wind top upward from ",s1 ," to ", wind_top  ,"m. Horizontally accelerating winds below this level."
-        endif
-        ! if (this_image()==1) write(*,*) "  s_accel max: ", wind_top, "  - h max:", MAXVAL(global_terrain)
-
-
-        !_________ 1. Calculate delta_dzdx for w_real calculation - CURRENTLY NOT USED- reconsider  _________
-        allocate(delta_terrain(this% ims : this% ime, &
-                                this% jms : this% jme) )
-
-        if (options%parameters%sleve)then  ! ############# Hybrid or SLEVE coordinates  ##############################
-
-            ! #----------------------- option 1A: calc z levels from forcing terrain -------------------
-            ! do i = this%grid%kms, this%grid%kme
-            !   if (i<=max_level) then
-            !     if (i==this%grid%kms)    zf_interface(:,i,:)   =  forcing_terrain
-            !     if (i==this%grid%kme)    dzf_interface(:,i,:)  =  H - zf_interface(:,i,:)
-            !     zf_interface(:,i+1,:)  = sum(dz_scl(1:i))   &
-            !                            + forcing_terrain  *  SINH( (H/s)**n - (sum(dz_scl(1:i))/s)**n ) / SINH((H/s)**n)
-            !     if (i/=this%grid%kme)  dzf_interface(:,i,:)  =  zf_interface(:,i+1,:) - zf_interface(:,i,:)
-            !     if (i==this%grid%kms) then
-            !         dzf_mass(:,i,:)       = dzf_interface(:,i,:) / 2           ! Diff for k=1
-            !         zf(:,i,:)             = forcing_terrain + dzf_mass(:,i,:)          ! Diff for k=1
-            !     endif
-            !   else  ! i.e. above flat_z_height
-            !     dzf_interface(:,i,:) =   dz(i)
-            !     if (i/=this%grid%kme)   zf_interface(:,i+1,:) = zf_interface(:,i,:) + dz(i)
-            !   endif
-            !   if (i/=this%grid%kms) then
-            !         dzf_mass(:,i,:)   =  dzf_interface(:,i-1,:) / 2  +  dzf_interface(:,i,:) / 2
-            !         zf(:,i,:)         =  zf(:,i-1,:)           + dzf_mass(:,i,:)
-            !   endif
-            !   dzfdx(:,i,:) = (zf(ims+1:ime,i,:) - zf(ims:ime-1,i,:)) / this%dx
-            !   dzfdy(:,i,:) = (zf(:,i,jms+1:jme) - zf(:,i,jms:jme-1)) / this%dx
-            ! enddo
-
-            ! ! Then finally:
-            ! delta_dzdx_lc(:,:,:) = dzdx(:,:,:)  -  dzfdx(:,:,:)  ! use this for w_real calculation.
-            ! delta_dzdy_lc(:,:,:) = dzdy(:,:,:)  -  dzfdy(:,:,:)  ! use this for w_real calculation.
-
-
-            ! _______________ option 1B: the same as the above, but way shorter. ________________
-
-            delta_terrain = (terrain - forcing_terrain)
-
-            do  i = this%grid%kms, this%grid%kme
-
-              delta_dzdx_sc(:,i,:) =   ( delta_terrain(ims+1:ime,:) - delta_terrain(ims:ime-1,:) )    &
-                                      * SINH( (smooth_height/s)**n - (sum(dz_scl(1:i))/s)**n ) / SINH((smooth_height/s)**n)  / this%dx
-
-              delta_dzdy_sc(:,i,:) =   ( delta_terrain(:,jms+1:jme) - delta_terrain(:, jms:jme-1) )    &
-                                      * SINH( (smooth_height/s)**n - (sum(dz_scl(1:i))/s)**n ) / SINH((smooth_height/s)**n)  / this%dx
-
-                   !!! s no longer an input parameter in real SLEVE implementation ! ! ! ????
-
-            enddo
-
-
-
-            !_________ 2. Calculate the ratio bewteen z levels from hi-res and forcing data for wind acceleration  _________
-
-
-            do i = this%grid%kms, this%grid%kme
-
-              ! a = sum(dz_scl(1:i))
-              if ( sum(dz_scl(1:i)) <= wind_top) then
-                ! Terrain-induced acceleration only occurs in the lower atmosphere, hence wind_top - h, iso H - h
-                zfr_u(:,i,:)  =  (wind_top - terrain_u(:,:) * SINH( (wind_top/s2)**n - (sum(dz_scl(1:i))/s2)**n ) / SINH((wind_top/s2)**n)  ) &
-                      /  (wind_top - forcing_terrain_u(:,:) * SINH( (wind_top/s2)**n - (sum(dz_scl(1:i))/s2)**n ) / SINH((wind_top/s2)**n)  )
-
-                zfr_v(:,i,:)  =  (wind_top - terrain_v * SINH( (wind_top/s2)**n - (sum(dz_scl(1:i))/s2)**n ) / SINH((wind_top/s2)**n)  ) &
-                      /  (wind_top - forcing_terrain_v * SINH( (wind_top/s2)**n - (sum(dz_scl(1:i))/s2)**n ) / SINH((wind_top/s2)**n)  )
-              else
-                    zfr_u(:,i,:) = 1
-                    zfr_v(:,i,:) = 1
-              endif
-
-              ! zfr_u(:,i,:)  =  (H - terrain_u(:,:)  * SINH( (H/s)**n - (sum(dz_scl(1:i))/s)**n ) / SINH((H/s)**n)  ) &
-              !       /  (H - forcing_terrain_u(:,:)  * SINH( (H/s)**n - (sum(dz_scl(1:i))/s)**n ) / SINH((H/s)**n)  )
-
-              ! zfr_v(:,i,:)  =  (H - terrain_v  * SINH( (H/s)**n - (sum(dz_scl(1:i))/s)**n ) / SINH((H/s)**n)  ) &
-              !       /  (H - forcing_terrain_v  * SINH( (H/s)**n - (sum(dz_scl(1:i))/s)**n ) / SINH((H/s)**n)  )
-
-                  ! MAy need to split forcing terrain_u/v into large-scale and small-scale as well for this to work..
-
-            enddo
-
-            ! if (this_image()==1)  call io_write("zfr_u_SLEVE.nc", "zfr_u", zfr_u(:,:,:) )
-            ! if ((this_image()==1).and.(options%parameters%debug))  call io_write("zfr_u_SLEVE.nc", "zfr_u", zfr_u(:,:,:) ) ! check in plot
-            ! if ((this_image()==1))  call io_write("zfr_v_SLEVE.nc", "zfr_v", zfr_v(:,:,:) ) ! check in plot
-
-
-        else !########################### no hybrid / SLEVE coordinates:  ###########################
-          !_________ 2. Calculate the ratio bewteen z levels from hi-res and forcing data for wind acceleration  _________
-
-          i=kms
-
-          zfr_u(:,i,:) = (smooth_height - terrain_u(:,:)) / (smooth_height - forcing_terrain_u(:,:))
-          zfr_v(:,i,:) = (smooth_height - terrain_v(:,:)) / (smooth_height - forcing_terrain_v(:,:))
-
-          do i = kms+1, kme
-
-              zfr_u(:,i,:) = zfr_u(:,i-1,:)
-              zfr_v(:,i,:) = zfr_v(:,i-1,:)
-          enddo
-
-          ! if ((this_image()==1))  call io_write("zfr_u_ns.nc", "zfr_u", zfr_u(:,:,:) ) ! check in plot
-          ! if ((this_image()==1).and.(options%parameters%debug))  call io_write("zfr_u_ns.nc", "zfr_u", zfr_u(:,:,:) ) ! check in plot
-
-        endif
-
-
-        ! all calculations are done on the extended grid (because this%geo_u%z=z_u is on the ext grid).
-        !   Here the extended boundaries are cut off again
-        temp =  this%zfr_u
-        deallocate(this%zfr_u)
-        allocate(this%zfr_u( this%u_grid% ims : this%u_grid% ime,   &
-                       this%u_grid% kms : this%u_grid% kme,   &
-                       this%u_grid% jms : this%u_grid% jme) )
-        this%zfr_u = temp(this%u_grid%ims:this%u_grid%ime, :, this%u_grid%jms:this%u_grid%jme)
-        deallocate(temp)
-
-        temp =  this%zfr_v
-        deallocate(this%zfr_v)
-        allocate(this%zfr_v( this%v_grid% ims : this%v_grid% ime,   &
-                       this%v_grid% kms : this%v_grid% kme,   &
-                       this%v_grid% jms : this%v_grid% jme) )
-        this%zfr_v = temp(this%v_grid%ims:this%v_grid%ime, :, this%v_grid%jms:this%v_grid%jme)
-        deallocate(temp)
-
-
-
-        !# - - - - - - - - - Write output for debugging   - - - - - - - - - - - - - - - - - - - - - - - - - - -
-        ! if ((this_image()==1).and.(options%parameters%debug)) then  ! Print some diagnostics. Useful for development.
-        !   call io_write("terrain_u.nc", "terrain_u", terrain_u(:,:) ) ! check in plot
-        !   ! call io_write("forcing_terrain.nc", "forcing_terrain", forcing_terrain(:,:) ) ! check in plot
-        !   call io_write("terrain.nc", "terrain", terrain(:,:) ) ! check in plot
-        !   call io_write("delta_dzdx_sc.nc", "delta_dzdx_sc", delta_dzdx_sc(:,:,:) )
-        !   call io_write("delta_dzdx_lc.nc", "delta_dzdx_lc", delta_dzdx_lc(:,:,:) )
-        !   call io_write("dzdx.nc", "dzdx", dzdx(:,:,:) )
-        !   call io_write("dzfdx.nc", "dzfdx", dzfdx(:,:,:) )
-        !   ! call io_write("zfr_u.nc", "zfr_u", zfr_u(:,:,:) ) ! check in plot
-        ! endif
-
-        end associate
-
-    end subroutine
-
-
-    !> -------------------------------
-    !!  forcing terrain needs to be interpolated, then offset onto u and v grids.
-    !!
-    !> -------------------------------
-
-    subroutine read_forcing_terrain(this, options, forcing)
-        implicit none
-        class(domain_t), intent(inout)  :: this
-        type(options_t), intent(in)     :: options
-        type(boundary_t), intent(in) :: forcing
-        type(interpolable_type) :: forc_u_from_mass, forc_v_from_mass
-
-        type(variable_t) :: forcing_terr
-
-        allocate(this%forcing_terrain_u( this%u_grid2d_ext% ims : this%u_grid2d_ext% ime,   &  ! was u_grid2d_ext
-                                         this%u_grid2d_ext% jms : this%u_grid2d_ext% jme) )
-
-        allocate(this%forcing_terrain_v( this%v_grid2d_ext% ims : this%v_grid2d_ext% ime,   &
-                                         this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
-
-        ! set up Geo Lookup tables for interpolation:
-        forc_u_from_mass%lat = forcing%geo%lat
-        forc_u_from_mass%lon = forcing%geo%lon
-        forc_v_from_mass%lat = forcing%geo%lat
-        forc_v_from_mass%lon = forcing%geo%lon
-
-        call geo_LUT(this%geo_u, forc_u_from_mass)
-        call geo_LUT(this%geo_v, forc_v_from_mass)
-
-        ! Read the forcing terrain data
-        forcing_terr = forcing%variables%get_var(options%parameters%hgtvar)
-
-        !  ------- Interpolate onto (hi-res) u, v and mass grids:  ------
-        call geo_interp2d(this%forcing_terrain_u, forcing_terr%data_2d, forc_u_from_mass%geolut) ! interpolate onto u grid
-        call geo_interp2d(this%forcing_terrain_v, forcing_terr%data_2d, forc_v_from_mass%geolut) ! interpolate onto v grid
-        call geo_interp2d(this%forcing_terrain%data_2d, forcing_terr%data_2d, forcing%geo%geolut) ! interpolate onto mass grid
-
-        !if ((this_image()==1).and.(options%parameters%debug))  call io_write("forcing_terrain.nc", "forcing_terrain", this%forcing_terrain%data_2d(:,:) )
-        !if ((this_image()==1).and.(options%parameters%debug))  call io_write("forcing_terrain_u.nc", "forcing_terrain_u", this%forcing_terrain_u(:,:) ) ! check in plot
-
-    end subroutine
-
-
-    !> -------------------------------
-    !! Used to interpolate an exchangeable type, just gets the meta_data structure from it and uses interpolate_variable
-    !!
-    !! This is not used presently since the meta_data structures are added directly to the variables_to_force dictionary
-    !!
-    !! -------------------------------
-    ! subroutine interpolate_exchangeable(var, forcing)
-    !     implicit none
-    !     class(exchangeable_t), intent(inout) :: var
-    !     class(boundary_t),     intent(in)    :: forcing
-    !
-    !     type(variable_t) :: input_data
-    !
-    !     input_data = forcing%variables%get_var(var%meta_data%forcing_var)
-    !     ! exchangeables all have a meta_data variable_t component with a pointer to the 3D local data
-    !     ! call interpolate_variable(var%meta_data%data_3d, input_data, forcing)
-    !
-    ! end subroutine
 
 
 end submodule

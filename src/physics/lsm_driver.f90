@@ -47,7 +47,7 @@ module land_surface
     use domain_interface,    only : domain_t
     use module_ra_simple,    only : calc_solar_elevation_corr
     use ieee_arithmetic
-
+    use mod_wrf_constants,   only : gravity, KARMAN, cp, R_d, XLV, rcp, STBOLT, epsilon
     use module_sf_FSMdrv,   only : sm_FSM_init, sm_FSM
 
     implicit none
@@ -63,13 +63,13 @@ module land_surface
     ! LOTS of variables required by Noah, placed here "temporarily", this may be where some stay.
     ! Keeping them at the module level prevents having to allocate/deallocate every call
     ! also avoids adding LOTS of LSM variables to the main domain datastrucurt
-    real,allocatable, dimension(:,:)    :: SMSTAV,SFCRUNOFF,UDRUNOFF,                               &
-                                           SNOW,SNOWC,SNOWH, ACSNOW, ACSNOM, SNOALB, QFX,           &
-                                           QGH, GSW, ALBEDO, ALBBCK, Z0, XICE, EMISS,               &
-                                           EMBCK, QSFC, CHS, CHS2, CQS2, CPM, SR,                   &
+    real,allocatable, dimension(:,:)    :: SMSTAV,SFCRUNOFF,UDRUNOFF, SW,                           &
+                                           SNOW,SNOWC,SNOWH, ACSNOW, ACSNOM, SNOALB,           &
+                                           QGH, GSW, ALBEDO, ALBBCK, Z0, XICE,               &
+                                           EMBCK, QSFC, CPM, SR, CHS, CHS2, CQS2,                   &
                                            CHKLOWQ, LAI, QZ0, VEGFRAC, SHDMIN,SHDMAX,SNOTIME,SNOPCX,&
                                            POTEVP,RIB, NOAHRES,FLX4_2D,FVB_2D,FBUR_2D,              &
-                                           FGSN_2D, z_atm,lnz_atm_term,Ri,base_exchange_term,       &
+                                           FGSN_2D, z_atm,Ri,       &
                                            current_precipitation, nmp_snow, nmp_snowh
     double precision,allocatable, dimension(:,:)    :: RAINBL
 
@@ -85,7 +85,7 @@ module land_surface
 
 !     real, parameter :: kappa=0.4 ! this should be karman from data_structure
     real, parameter :: freezing_threshold=273.15
-    real, parameter :: SMALL_PRESSURE=0.1 !note: 0.1Pa is very small 1e-10 wouldn't affect a single-precision float
+    real, parameter :: SMALL_PRESSURE=0.1 ! note: 0.1Pa is very small 1e-10 wouldn't affect a single-precision float
     real, parameter :: SMALL_QV=1e-10
     real, parameter :: MAX_EXCHANGE_C = 0.5
     real, parameter :: MIN_EXCHANGE_C = 0.004
@@ -134,8 +134,9 @@ contains
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%ustar,        &
+                         kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2,                                                  &
                          kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg, kVARS%albedo,                          &
-                         kVARS%veg_type, kVARS%soil_type, kVARS%land_mask])
+                         kVARS%veg_type, kVARS%soil_type, kVARS%land_mask, kVARS%land_emissivity])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
 
@@ -145,7 +146,7 @@ contains
                          kVARS%longwave, kVARS%canopy_water, kVARS%snow_water_equivalent,                               &
                          kVARS%skin_temperature, kVARS%soil_water_content, kVARS%soil_temperature, kVARS%terrain,       &
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
-                         kVARS%snow_height,                                                                             &  ! BK 2020/10/26
+                         kVARS%snow_height, kVARS%QFX,  kVARS%land_emissivity,                                          &  ! BK 2020/10/26
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0])!, kVARS%veg_type])    ! BK uncommented 2021/03/20
                          ! kVARS%soil_type, kVARS%land_mask, kVARS%vegetation_fraction]
@@ -162,7 +163,7 @@ contains
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%ustar,        &
                          kVARS%snow_height, kVARS%canopy_vapor_pressure, kVARS%canopy_temperature,                      &
-                         kVARS%veg_leaf_temperature, kVARS%coeff_momentum_drag, kVARS%coeff_heat_exchange,              &
+                         kVARS%veg_leaf_temperature, kVARS%coeff_momentum_drag, kVARS%hpbl,                             &
                          kVARS%canopy_fwet, kVARS%snow_water_eq_prev, kVARS%water_table_depth, kVARS%water_aquifer,     &
                          kVARS%mass_leaf, kVARS%mass_root, kVARS%mass_stem, kVARS%mass_wood, kVARS%soil_carbon_fast,    &
                          kVARS%soil_carbon_stable, kVARS%eq_soil_moisture, kVARS%smc_watertable_deep, kVARS%recharge,   &
@@ -192,14 +193,15 @@ contains
                          kVARS%snow_layer_ice, kVARS%snow_layer_liquid_water, kVARS%soil_texture_1, kVARS%gecros_state, &
                          kVARS%soil_texture_2, kVARS%soil_texture_3, kVARS%soil_texture_4, kVARS%soil_sand_and_clay,    &
                          kVARS%vegetation_fraction_out, kVARS%latitude, kVARS%longitude, kVARS%cosine_zenith_angle,     &
-                         kVARS%veg_type, kVARS%soil_type, kVARS%land_mask])
+                         kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2,                                                  &
+                         kVARS%veg_type, kVARS%soil_type, kVARS%land_mask, kVARS%land_emissivity])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
 
              call options%restart_vars( &
                          [kVARS%water_vapor, kVARS%potential_temperature, kVARS%precipitation, kVARS%temperature,       &
-                         kVARS%density, kVARS%pressure_interface, kVARS%shortwave,                                      &
-                         kVARS%longwave, kVARS%canopy_water, kVARS%snow_water_equivalent,                               &
+                         kVARS%density, kVARS%pressure_interface, kVARS%shortwave,  kVARS%hpbl, kVARS%land_emissivity,  &
+                         kVARS%longwave, kVARS%canopy_water, kVARS%snow_water_equivalent, kVARS%QFX,                    &
                          kVARS%skin_temperature, kVARS%soil_water_content, kVARS%soil_temperature, kVARS%terrain,       &
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
                          kVARS%snow_height, kVARS%canopy_water_ice, kVARS%canopy_vapor_pressure, kVARS%canopy_temperature,    &  ! BK 2020/10/26
@@ -219,7 +221,8 @@ contains
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%ustar,        &
-                         kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg, kVARS%coeff_heat_exchange,             &
+                         kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg,                                        &
+                         kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2, kVARS%land_emissivity,                           &
                          kVARS%veg_type, kVARS%soil_type, kVARS%land_mask, kVARS%snowfall, kVARS%albedo,                &
                          kVARS%runoff_tstep, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow,   &
                          kVARS%rainfall_tstep, kVARS%shd, kVARS%snowfall_tstep, kVARS%meltflux_out_tstep, kVARS%Sliq_out, &
@@ -235,7 +238,7 @@ contains
                          kVARS%longwave, kVARS%canopy_water, kVARS%snow_water_equivalent,                               &
                          kVARS%skin_temperature, kVARS%soil_water_content, kVARS%soil_temperature, kVARS%terrain,       &
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
-                         kVARS%snow_height,  kVARS%snowfall, kVARS%albedo,                                              &
+                         kVARS%snow_height,  kVARS%snowfall, kVARS%albedo, kVARS%QFX, kVARS%land_emissivity,            &
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0,                     &
                          kVARS%runoff_tstep, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow  ])
@@ -244,7 +247,8 @@ contains
        if (options%physics%watersurface > 1) then
             call options%alloc_vars( &
                          [kVARS%sst, kVARS%ustar, kVARS%surface_pressure, kVARS%water_vapor,            &
-                         kVARS%temperature, kVARS%sensible_heat, kVARS%latent_heat, kVARS%land_mask,kVARS%coeff_heat_exchange,    &
+                         kVARS%temperature, kVARS%sensible_heat, kVARS%latent_heat, kVARS%land_mask,    &
+                         kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2,                                            &
                          kVARS%humidity_2m, kVARS%temperature_2m, kVARS%skin_temperature, kVARS%u_10m, kVARS%v_10m])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
@@ -252,6 +256,7 @@ contains
              call options%restart_vars( &
                          [kVARS%sst, kVARS%potential_temperature, kVARS%water_vapor, kVARS%skin_temperature,        &
                          kVARS%surface_pressure, kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m,  &
+                         kVARS%QFX,                                                                                 &
                          kVARS%humidity_2m, kVARS%temperature_2m])
         endif
 
@@ -263,6 +268,7 @@ contains
             kVARS%ground_heat_flux, kVARS%snow_water_equivalent, kVARS%t_lake3d, kVARS%dz_lake3d,                   &
             kVARS%t_soisno3d, kVARS%h2osoi_ice3d, kVARS%h2osoi_liq3d, kVARS%h2osoi_vol3d, kVARS%z3d,                &
             kVARS%dz3d, kVARS%watsat3d, kVARS%csol3d, kVARS%tkmg3d, kVARS%lakemask, kVARS%zi3d,                     &
+            kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2, kVARS%land_emissivity,                                    &
             kVARS%tksatu3d, kVARS%tkdry3d, kVARS%snl2d, kVARS%t_grnd2d,  kVARS%savedtke12d, kVARS%lakedepth2d,      & !  kVARS%snowdp2d, kVARS%h2osno2d,
             kVARS%lake_icefrac3d, kVARS%z_lake3d,kVARS%water_vapor, kVARS%potential_temperature     ])
 
@@ -275,6 +281,7 @@ contains
             kVARS%ground_heat_flux, kVARS%snow_water_equivalent, kVARS%t_lake3d, kVARS%dz_lake3d,                   &
             kVARS%t_soisno3d, kVARS%h2osoi_ice3d, kVARS%h2osoi_liq3d, kVARS%h2osoi_vol3d, kVARS%z3d,                &
             kVARS%dz3d, kVARS%watsat3d, kVARS%csol3d, kVARS%tkmg3d, kVARS%lakemask, kVARS%zi3d,                     &
+            kVARS%QFX, kVARS%land_emissivity,                                                                       &
             kVARS%tksatu3d, kVARS%tkdry3d, kVARS%snl2d, kVARS%t_grnd2d, kVARS%savedtke12d, kVARS%lakedepth2d,       & !kVARS%snowdp2d, kVARS%h2osno2d,
             kVARS%lake_icefrac3d, kVARS%z_lake3d,kVARS%water_vapor, kVARS%potential_temperature ])
         endif
@@ -283,17 +290,22 @@ contains
 
     end subroutine lsm_var_request
 
-    subroutine calc_exchange_coefficient(wind,tskin,airt,exchange_C)
+    subroutine calc_exchange_coefficient(wind,tskin,z0,airt,exchange_C)
         implicit none
-        real, dimension(:,:),intent(inout) :: wind,tskin
-        real, dimension(:,:,:),intent(inout) :: airt
-        real,dimension(:,:),intent(inout) :: exchange_C
+        real, dimension(ims:ime,jms:jme),intent(in) :: wind, tskin, z0
+        real, dimension(ims:ime,kms:kme,jms:jme),intent(in) :: airt
+        real,dimension(ims:ime,jms:jme),intent(inout) :: exchange_C
+        
+        real, dimension(ims:ime,jms:jme)  :: lnz_atm_term, base_exchange_term
+        
+        lnz_atm_term = log((z_atm+z0)/z0)
+        base_exchange_term=(75*karman**2 * sqrt((z_atm+z0)/z0)) / (lnz_atm_term**2)
+        lnz_atm_term=(karman/lnz_atm_term)**2
 
         ! Richardson number
-        where(wind==0) wind=1e-5
         exchange_C = 0
 
-        Ri = gravity/airt(:,1,:) * (airt(:,1,:)-tskin)*z_atm/(wind**2)
+        Ri = gravity/airt(:,1,:) * (airt(:,1,:)-tskin)*z_atm/(wind**2+epsilon)
         ! Ri now is a function in atm_utlilities:
         ! calc_Richardson_nr(Ri, airt, tskin, z_atm, wind)
 
@@ -308,13 +320,18 @@ contains
 
 
 ! eqn A11 in Appendix A.2 of Chen et al 1997 (see below for reference)
-    subroutine F2_formula(F2, z_atm, zo, Ri)
-        real, dimension(:,:), intent(inout) :: F2, z_atm, zo, Ri
+    subroutine F2_formula(F2, z0, Ri)
+        real, dimension(ims:ime,jms:jme), intent(inout) :: F2
+        real, dimension(ims:ime,jms:jme), intent(in)    :: z0, Ri
+        
+        real, dimension(ims:ime,jms:jme)  :: lnz_atm_term
+        
+        lnz_atm_term = log((z_atm+z0)/z0)
 
         ! for the stable case from Mahrt (1987)
         where(Ri>=0) F2=exp(-Ri)
         ! for the unstable case from Holtslag and Beljaars (1989)
-        where(Ri<0)  F2=(1-(15*Ri)/(1+((70.5*karman**2 * sqrt(-Ri * z_atm/zo))/(lnz_atm_term**2))) )
+        where(Ri<0)  F2=(1-(15*Ri)/(1+((70.5*karman**2 * sqrt(-Ri * z_atm/z0))/(lnz_atm_term**2))) )
 
     end subroutine F2_formula
     
@@ -348,42 +365,27 @@ contains
 !From Appendix A.2 in Chen et al 1997
 ! Impact of Atmospheric Surface-layer Parameterizations in the new Land-surface Scheme of the Ncep Mesoscale ETA Model
 ! Boundary-Layer Meteorology 85:391-421
-    subroutine calc_mahrt_holtslag_exchange_coefficient(wind,tskin,airt,znt, exchange_C)
+    subroutine calc_mahrt_holtslag_exchange_coefficient(wind,tskin,airt,znt,exchange_C)
         implicit none
-        real, dimension(:,:),intent(inout) :: wind,tskin
-        real, dimension(:,:,:),intent(inout) :: airt
-        real,dimension(:,:),intent(inout) :: exchange_C, znt
-
+        real, dimension(:,:),intent(in) :: wind,tskin,znt
+        real, dimension(:,:,:),intent(in) :: airt
+        real,dimension(:,:),intent(inout) :: exchange_C
+        
+        real, dimension(ims:ime,jms:jme)  :: lnz_atm_term, base_exchange_term
+        
+        lnz_atm_term = log((z_atm+znt)/znt)
+        
         ! Richardson number
-        where(wind==0) wind=1e-10
-        Ri = gravity/airt(:,1,:) * (airt(:,1,:)-tskin)*z_atm/(wind**2)
+        Ri = gravity/airt(:,1,:) * (airt(:,1,:)-tskin)*z_atm/(wind**2+epsilon)
 
-        call F2_formula(base_exchange_term, z_atm,znt,Ri)
+        call F2_formula(base_exchange_term,znt,Ri)
 
         exchange_C = karman**2 * base_exchange_term / lnz_atm_term**2
 
         where(exchange_C > MAX_EXCHANGE_C) exchange_C=MAX_EXCHANGE_C
         where(exchange_C < MIN_EXCHANGE_C) exchange_C=MIN_EXCHANGE_C
     end subroutine calc_mahrt_holtslag_exchange_coefficient
-    
-    
-    subroutine calc_revised_MM5_coefficient(wind,tskin,airt,znt, exchange_C)
-        implicit none
-        real, dimension(:,:),intent(inout) :: wind,tskin
-        real, dimension(:,:,:),intent(inout) :: airt
-        real,dimension(:,:),intent(inout) :: exchange_C, znt
 
-        real :: a, b, c, d
-        real, dimension(:,:,:), allocatable :: psi_m, psi_h
-
-        !psi_m = 
-        !psi_h = 
-
-        ! Richardson number
-        where(wind==0) wind=1e-10
-        Ri = gravity/airt(:,1,:) * (airt(:,1,:)-tskin)*z_atm/(wind**2)
-   
-    end subroutine calc_revised_MM5_coefficient
 
     subroutine surface_diagnostics(HFX, QFX, TSK, QSFC, CHS2, CQS2,T2, Q2, PSFC, &
                                     VEGFRAC, veg_type, land_mask, T2veg, T2bare, Q2veg, Q2bare)
@@ -402,8 +404,8 @@ contains
         integer :: i,j
         real :: rho
 
-        !$omp parallel default(shared), private(i,j,rho)
-        !$omp do
+        ! !$omp parallel default(shared), private(i,j,rho)
+        ! !$omp do
         do j=jts,jte
             do i=its,ite
 
@@ -423,7 +425,7 @@ contains
                         T2(i,j) = T2bare(i,j)
                         Q2(i,j) = Q2bare(i,j)
                     else
-                        RHO = PSFC(I,J)/(Rd * TSK(I,J))
+                        RHO = PSFC(I,J)/(R_d * TSK(I,J))
 
                         if(CQS2(I,J).lt.1.E-3) then
                            Q2(I,J) = QSFC(I,J)
@@ -443,8 +445,8 @@ contains
                 ! TH2(I,J) = T2(I,J)*(1.E5/PSFC(I,J))**ROVCP
             enddo
         enddo
-        !$omp end do
-        !$omp end parallel
+        ! !$omp end do
+        ! !$omp end parallel
     end subroutine surface_diagnostics
     
 
@@ -467,7 +469,7 @@ contains
         !$omp do
         do j=jts,jte
             do i=its,ite
-                RHO = PSFC(I,J)/(Rd * TSK(I,J))
+                RHO = PSFC(I,J)/(R_d * TSK(I,J))
                 !if(CQS2(I,J).lt.1.E-3) then
                 !   Q2(I,J) = QSFC(I,J)
                 !else
@@ -535,7 +537,7 @@ contains
 
             ! convert latent heat flux to a mixing ratio tendancy term
             ! (J/(s*m^2) * s / (J/kg) => kg/m^2) ... / (kg/m^3 * m) => kg/kg
-            lhdQV(i,j) = (lh_feedback_fraction * latent_heat(i,j) / LH_vaporization * dt) &
+            lhdQV(i,j) = (lh_feedback_fraction * latent_heat(i,j) / XLV * dt) &
                     / (density(i,k,j) * sfc_layer_thickness)
             ! add water vapor in kg/kg
             qv(i,k,j) = qv(i,k,j) + lhdQV(i,j) * layer_fraction
@@ -558,7 +560,7 @@ contains
         integer :: i
 
         ITIMESTEP=1
-
+        
         allocate(SMSTAV(ims:ime,jms:jme))
         SMSTAV = 0.5 !average soil moisture available for transp (between SMCWLT and SMCMAX)
         allocate(SFCRUNOFF(ims:ime,jms:jme))
@@ -589,8 +591,6 @@ contains
         ALBBCK = 0.17 !?
         allocate(XICE(ims:ime,jms:jme))
         XICE = 0
-        allocate(EMISS(ims:ime,jms:jme))
-        EMISS = 0.99
         allocate(EMBCK(ims:ime,jms:jme))
         EMBCK = 0.99
         allocate(CPM(ims:ime,jms:jme))
@@ -694,6 +694,8 @@ contains
         sh_feedback_fraction = options%lsm_options%sh_feedback_fraction
         sfc_layer_thickness = options%lsm_options%sfc_layer_thickness
 
+        allocate(SW(ims:ime,jms:jme))
+
         allocate(dTemp(its:ite,jts:jte))
         dTemp = 0
         allocate(lhdQV(its:ite,jts:jte))
@@ -707,15 +709,6 @@ contains
         allocate(z_atm(ims:ime,jms:jme))
         z_atm = 50
 
-        allocate(lnz_atm_term(ims:ime,jms:jme))
-        lnz_atm_term = 0.1
-
-        allocate(base_exchange_term(ims:ime,jms:jme))
-        base_exchange_term = 0.01
-
-        allocate(QFX(ims:ime,jms:jme))
-        QFX = 0
-
         allocate(current_precipitation(ims:ime,jms:jme))
         current_precipitation = 0
 
@@ -725,40 +718,35 @@ contains
         ! NOTE, these fields have probably not been initialized yet...
         ! windspd = sqrt(domain%u10**2+domain%v10**2)
 
-        allocate(CHS(ims:ime,jms:jme))
-        CHS = 0.01
+        if (options%physics%landsurface > kLSM_BASIC) then
+            if (options%physics%microphysics == 0) then
+                write(*,*) "Land Surface models need microphysics to run"
+                stop "Land Surface models need microphysics to run"
+            endif
+            allocate(RAINBL(ims:ime,jms:jme))
+            RAINBL = domain%accumulated_precipitation%data_2dd  ! used to store last time step accumulated precip so that it can be subtracted from the current step
+                                ! set to domain%rain incase this is a restart run and rain is non-zero to start
+            allocate(rain_bucket(ims:ime,jms:jme))
+            rain_bucket = domain%precipitation_bucket  ! used to store last time step accumulated precip so that it can be subtracted from the current step
 
-        allocate(CHS2(ims:ime,jms:jme))
-        CHS2 = 0.01
+            ! MJ added:
+            allocate(current_snow(ims:ime,jms:jme)) ! MJ added 
+            current_snow = 0
 
-        allocate(CQS2(ims:ime,jms:jme))
-        CQS2 = 0.01
+            allocate(current_rain(ims:ime,jms:jme)) ! MJ added 
+            current_rain = 0
 
+            allocate(SNOWBL(ims:ime,jms:jme))! for snowfall:
+            SNOWBL = domain%accumulated_snowfall%data_2dd  ! used to store last time step accumulated precip so that it can be subtracted from the current step
 
-        allocate(RAINBL(ims:ime,jms:jme))
-        RAINBL = domain%accumulated_precipitation%data_2dd  ! used to store last time step accumulated precip so that it can be subtracted from the current step
-                            ! set to domain%rain incase this is a restart run and rain is non-zero to start
-        allocate(rain_bucket(ims:ime,jms:jme))
-        rain_bucket = domain%precipitation_bucket  ! used to store last time step accumulated precip so that it can be subtracted from the current step
-
-        ! MJ added:
-        allocate(current_snow(ims:ime,jms:jme)) ! MJ added 
-        current_snow = 0
+            allocate(snow_bucket(ims:ime,jms:jme))
+            snow_bucket = domain%snowfall_bucket
+        endif
         
-        allocate(current_rain(ims:ime,jms:jme)) ! MJ added 
-        current_rain = 0
-        
-        allocate(SNOWBL(ims:ime,jms:jme))! for snowfall:
-        SNOWBL = domain%accumulated_snowfall%data_2dd  ! used to store last time step accumulated precip so that it can be subtracted from the current step
-
-        allocate(snow_bucket(ims:ime,jms:jme))
-        snow_bucket = domain%snowfall_bucket
-
         if (options%physics%landsurface==kLSM_NOAH .or. options%physics%landsurface==kLSM_NOAHMP .or. options%physics%snowmodel==kSM_FSM) then
             num_soil_layers=4 ! to .nml?
             call allocate_noah_data(num_soil_layers)
         endif
-
         ! initial guesses (not needed?)
         domain%temperature_2m%data_2d = domain%temperature%data_3d(:,kms,:)
         domain%humidity_2m%data_2d = domain%water_vapor%data_3d(:,kms,:)
@@ -792,6 +780,11 @@ contains
                 FNDSNOWH=.False. ! calculate SNOWH from SNOW
             endif
 
+            !These are still needed for NoahLSM, since it assumes that the exchange coefficients are multiplied by windspeed
+            allocate(CHS(ims:ime,jms:jme))
+            allocate(CHS2(ims:ime,jms:jme))
+            allocate(CQS2(ims:ime,jms:jme))
+
             FNDSOILW=.False. ! calculate SOILW (this parameter is ignored in LSM_NOAH_INIT)
             RDMAXALB=.False.
 
@@ -819,7 +812,7 @@ contains
             cur_vegmonth = domain%model_time%month
 
             ! save the canopy water in a temporary variable in case this is a restart run because lsm_init resets it to 0
-            CQS2 = domain%canopy_water%data_2d
+            domain%cqs2%data_2d = domain%canopy_water%data_2d
             ! prevents init from failing when processing water points that may have "soil_t"=0
             where(domain%soil_temperature%data_3d<200) domain%soil_temperature%data_3d=200
             where(domain%soil_water_content%data_3d<0.0001) domain%soil_water_content%data_3d=0.0001
@@ -854,8 +847,8 @@ contains
                                 ims,ime, jms,jme, kms,kme,           &
                                 its,ite, jts,jte, kts,kte  )
 
-            domain%canopy_water%data_2d = CQS2
-            CQS2=0.01
+            domain%canopy_water%data_2d = domain%cqs2%data_2d
+            domain%cqs2%data_2d=0.01
             ! where(domain%veg_type==ISWATER) domain%land_mask=kLC_WATER ! ensure VEGTYPE (land cover) and land-sea mask are consistent
             where((domain%veg_type==ISWATER) .OR. (domain%veg_type==ISLAKE)) domain%land_mask=kLC_WATER  ! include lakes.
         endif
@@ -910,7 +903,7 @@ contains
             cur_vegmonth = domain%model_time%month
 
             ! save the canopy water in a temporary variable in case this is a restart run because lsm_init resets it to 0
-            CQS2 = domain%canopy_water%data_2d
+            domain%cqs2%data_2d = domain%canopy_water%data_2d
             ! prevents init from failing when processing water points that may have "soil_t"=0
             where(domain%soil_temperature%data_3d<200) domain%soil_temperature%data_3d=200
             where(domain%soil_water_content%data_3d<0.0001) domain%soil_water_content%data_3d=0.0001
@@ -937,7 +930,7 @@ contains
             IOPT_IRRM = options%lsm_options%nmp_opt_irrm
             IOPT_TDRN = options%lsm_options%nmp_opt_tdrn
             IOPT_NMPOUTPUT = options%lsm_options%noahmp_output
-            IZ0TLND = options%lsm_options%nmp_iz0tlnd
+            IZ0TLND = options%sfc_options%iz0tlnd
             NMP_SOILTSTEP = options%lsm_options%nmp_soiltstep
             SF_URBAN_PHYSICS = options%lsm_options%sf_urban_phys
 
@@ -971,7 +964,7 @@ contains
                                 domain%canopy_vapor_pressure%data_2d,   &
                                 domain%canopy_temperature%data_2d,      &
                                 domain%coeff_momentum_drag%data_2d,     &
-                                domain%coeff_heat_exchange%data_2d,     &
+                                domain%chs%data_2d,                     &
                                 domain%canopy_fwet%data_2d,             &
                                 domain%snow_water_eq_prev%data_2d,      &
                                 domain%snow_albedo_prev%data_2d,        &
@@ -1027,8 +1020,8 @@ contains
   !                                   rechclim,                                                             &      ! Optional groundwater
   !                                   gecros_state)                                                                ! Optional gecros crop
 
-            domain%canopy_water%data_2d = CQS2
-            CQS2=0.01
+            domain%canopy_water%data_2d = domain%cqs2%data_2d
+            domain%cqs2%data_2d=0.01
             ! where(domain%veg_type==ISWATER) domain%land_mask=kLC_WATER ! ensure VEGTYPE (land cover) and land-sea mask are consistent (BK 202208: this does not include lakes!!)
             where((domain%veg_type==ISWATER) .OR. (domain%veg_type==ISLAKE)) domain%land_mask=kLC_WATER
 
@@ -1156,17 +1149,10 @@ contains
             !allocate(Zs(num_soil_layers))
             !allocate(DZs(num_soil_layers))
             !!
-            !allocate(EMISS(ims:ime,jms:jme))
-            !EMISS = 0.95
         endif
         
         ! defines the height of the middle of the first model level
         z_atm = domain%z%data_3d(:,kts,:) - domain%terrain%data_2d
-        lnz_atm_term = log((z_atm+Z0)/Z0)
-        if (exchange_term==1) then
-            base_exchange_term=(75*karman**2 * sqrt((z_atm+Z0)/Z0)) / (lnz_atm_term**2)
-            lnz_atm_term=(karman/lnz_atm_term)**2
-        endif
 
         update_interval=options%lsm_options%update_interval
         last_model_time=-999
@@ -1181,22 +1167,18 @@ contains
         type(options_t),intent(in)    :: options
         real, intent(in) :: dt
         real :: lsm_dt
-        real, allocatable :: SW(:,:)
-        integer :: nx,ny,i,j
-
+        integer :: i,j
+        
         if (options%physics%landsurface == 0) return
 
         if (last_model_time==-999) then
             last_model_time = domain%model_time%seconds()-update_interval
         endif
-        nx=size(domain%water_vapor%data_3d,1)
-        ny=size(domain%water_vapor%data_3d,3)
 
         if ((domain%model_time%seconds() - last_model_time) >= update_interval) then
             lsm_dt = domain%model_time%seconds() - last_model_time
             last_model_time = domain%model_time%seconds()
 
-            allocate(SW(nx,ny))
             if (options%physics%radiation_downScaling==1  .and. options%physics%radiation>1) then
                 SW = domain%shortwave_total%data_2d
             else
@@ -1207,11 +1189,19 @@ contains
 
             ! exchange coefficients
             windspd = sqrt(domain%u_10m%data_2d**2 + domain%v_10m%data_2d**2)
-            if (exchange_term==1) then
-                call calc_exchange_coefficient(windspd,domain%skin_temperature%data_2d,domain%temperature%data_3d,CHS)
-            elseif (exchange_term==2) then
-                call calc_mahrt_holtslag_exchange_coefficient(windspd,domain%skin_temperature%data_2d,domain%temperature%data_3d,domain%roughness_z0%data_2d,CHS)
+            
+            !If there is no surface layer scheme, then we should compute exchange coefficients here. Assign CHS to CHS2 and CQS2 as well...
+            if (options%physics%surfacelayer ==  0) then
+                if (exchange_term==1) then
+                    call calc_exchange_coefficient(windspd,domain%skin_temperature%data_2d,domain%roughness_z0%data_2d,domain%temperature%data_3d,domain%chs%data_2d)
+                elseif (exchange_term==2) then
+                    call calc_mahrt_holtslag_exchange_coefficient(windspd,domain%skin_temperature%data_2d,domain%temperature%data_3d,domain%roughness_z0%data_2d,domain%chs%data_2d)
+                endif
+                
+                domain%chs2%data_2d = domain%chs%data_2d
+                domain%cqs2%data_2d = domain%chs%data_2d
             endif
+
 
             ! --------------------------------------------------
             ! First handle the open water surface options
@@ -1241,12 +1231,13 @@ contains
                                       domain%temperature%data_3d(its:ite,kms,jts:jte),       &
                                       domain%sensible_heat%data_2d(its:ite,jts:jte),         &
                                       domain%latent_heat%data_2d(its:ite,jts:jte),           &
-                                      z_atm, domain%roughness_z0%data_2d(its:ite,jts:jte),   &
+                                      z_atm(its:ite,jts:jte),                                &
+                                      domain%roughness_z0%data_2d(its:ite,jts:jte),          &
                                       domain%land_mask(its:ite,jts:jte),                     &
                                       QSFC(its:ite,jts:jte),                                 &
-                                      QFX(its:ite,jts:jte),                                  &
+                                      domain%qfx%data_2d(its:ite,jts:jte),                   &
                                       domain%skin_temperature%data_2d(its:ite,jts:jte),      &
-                                      domain%coeff_heat_exchange%data_2d(its:ite,jts:jte),   &
+                                      domain%chs%data_2d(its:ite,jts:jte),   &
                                       domain%veg_type(its:ite,jts:jte),                      &
                                       its, ite, kts, kte, jts, jte)
                                 !   ,domain%terrain%data_2d               & ! terrain height [m] if ht(i,j)>=lake_min_elev -> lake (in case no lake category is provided, but lake model is selected, we need to not run the simple water as well - left comment in for future reference)
@@ -1263,13 +1254,13 @@ contains
 
                 call lake( &
                     t_phy=domain%temperature%data_3d                            & !-- t_phy         temperature (K)     !Temprature at the mid points (K)
-                    ,p8w=domain%pressure_interface%data_3d                      & !-- p8w           pressure at full levels (Pa) ! Naming convention: 8~at => p8w reads as "p-at-w" (w=full levels)
+                    ,p8w=domain%pressure_interface%data_3d(:,kms:kme,:)         & !-- p8w           pressure at full levels (Pa) ! Naming convention: 8~at => p8w reads as "p-at-w" (w=full levels)
                     ,dz8w=domain%dz_interface%data_3d                           & !-- dz8w          dz between full levels (m)
                     ,qvcurr=domain%water_vapor%data_3d                          &  !i
                     ,u_phy=domain%u_mass%data_3d                                & !-- u_phy         u-velocity interpolated to theta points (m/s)
                     ,v_phy=domain%v_mass%data_3d                                & !-- v_phy         v-velocity interpolated to theta points (m/s)
                     ,glw=domain%longwave%data_2d                                & !-- GLW           downward long wave flux at ground surface (W/m^2)
-                    ,emiss=EMISS                                                & !-- EMISS         surface emissivity (between 0 and 1)
+                    ,emiss=domain%land_emissivity%data_2d                       & !-- EMISS         surface emissivity (between 0 and 1)
                     ,rainbl=current_precipitation                               & ! RAINBL in mm (Accumulation between PBL calls)
                     ,dtbl=lsm_dt                                                & !-- dtbl          timestep (s) or ITIMESTEP?
                     ,swdown=SW                                                  & !-- SWDOWN        downward short wave flux at ground surface (W/m^2)
@@ -1311,7 +1302,7 @@ contains
                     ,lh=domain%latent_heat%data_2d                              & !(OUT)-- LH          net upward latent heat flux at surface (W/m^2)
                     ,grdflx=domain%ground_heat_flux%data_2d                     & !(OUT)-- GRDFLX(I,J) ground heat flux (W m-2)
                     ,tsk=domain%skin_temperature%data_2d                        & !(OUT)-- TSK          skin temperature [K]
-                    ,qfx=QFX                                                    & !(OUT)-- QFX        upward moisture flux at the surface (kg/m^2/s) in
+                    ,qfx=domain%qfx%data_2d                                     & !(OUT)-- QFX        upward moisture flux at the surface (kg/m^2/s) in
                     ,t2= domain%temperature_2m%data_2d                          & !(OUT)-- t2         diagnostic 2-m temperature from surface layer and lsm
                     ,th2=TH2                                                    & !(OUT)-- th2        diagnostic 2-m theta from surface layer and lsm
                     ,q2=domain%humidity_2m%data_2d                              & !(OUT)-- q2         diagnostic 2-m mixing ratio from surface layer and lsm
@@ -1321,10 +1312,8 @@ contains
 
 
             where(windspd<1) windspd=1 ! minimum wind speed to prevent the exchange coefficient from blowing up
-            CHS = CHS * windspd !* 2            
-            CHS2 = CHS
-            CQS2 = CHS
-
+            
+            
             ! --------------------------------------------------
             ! Now handle the land surface options
             ! --------------------------------------------------
@@ -1386,13 +1375,18 @@ contains
                 current_precipitation = (domain%accumulated_precipitation%data_2dd - RAINBL) !+(domain%precipitation_bucket-rain_bucket)*kPRECIP_BUCKET_SIZE
                 if (allocated(domain%rain_fraction)) current_precipitation = current_precipitation * domain%rain_fraction(:,:,domain%model_time%get_month())
 
+                CHS = domain%chs%data_2d*windspd
+                CHS2 = domain%chs2%data_2d*windspd
+                CQS2 = domain%cqs2%data_2d*windspd
+
+
                 call lsm_noah(domain%dz_interface%data_3d,                &
                             domain%water_vapor%data_3d,                   &
-                            domain%pressure_interface%data_3d,            &
+                            domain%pressure_interface%data_3d(:,kms:kme,:),&
                             domain%temperature%data_3d,                   &
                             domain%skin_temperature%data_2d,              &
                             domain%sensible_heat%data_2d,                 &
-                            QFX,                                          &
+                            domain%qfx%data_2d,                           &
                             domain%latent_heat%data_2d,                   &
                             domain%ground_heat_flux%data_2d,              &
                             QGH,                                          &
@@ -1415,7 +1409,7 @@ contains
                             domain%soil_deep_temperature%data_2d,         &
                             real(domain%land_mask),                       &
                             XICE,                                         &
-                            EMISS,                                        &
+                            domain%land_emissivity%data_2d,               &
                             EMBCK,                                        &
                             SNOWC,                                        &
                             QSFC,                                         &
@@ -1433,7 +1427,7 @@ contains
                             CHS2,                                         &
                             CQS2,                                         &
                             CPM,                                          &
-                            ROVCP,                                        &
+                            rcp,                                          &
                             SR,                                           &
                             chklowq,                                      &
                             domain%lai%data_2d,                           &
@@ -1458,12 +1452,6 @@ contains
 
                 where(domain%snow_water_equivalent%data_2d > options%lsm_options%max_swe) domain%snow_water_equivalent%data_2d = options%lsm_options%max_swe
                 ! now that znt (roughness_z0) has been updated, we need to recalculate terms
-                lnz_atm_term = log((z_atm+domain%roughness_z0%data_2d)/domain%roughness_z0%data_2d)
-                if (exchange_term==1) then
-                    base_exchange_term=(75*karman**2 * sqrt((z_atm+domain%roughness_z0%data_2d)/domain%roughness_z0%data_2d)) / (lnz_atm_term**2)
-                    lnz_atm_term=(karman/lnz_atm_term)**2
-                endif
-
             else if (options%physics%landsurface == kLSM_NOAHMP) then
             ! Call the Noah-MP Land Surface Model
 
@@ -1513,7 +1501,7 @@ contains
 
                     solar_elevation  = calc_solar_elevation_corr(date=domain%model_time, lon=domain%longitude%data_2d, &
                                      j=j, ims=ims,ime=ime,jms=jms,jme=jme,its=its,ite=ite,day_frac=day_frac)
-                    domain%cosine_zenith_angle%data_2d(its:ite,j)=sin(solar_elevation(its:ite))
+                    domain%cosine_zenith_angle%data_2d(ims:ime,j)=sin(solar_elevation(ims:ime))
                 enddo
 
                 if (options%physics%snowmodel==kSM_FSM) then
@@ -1523,6 +1511,7 @@ contains
                     nmp_snowh = 0.0
                     nmp_snow = 0.0
                 else
+                    SR = current_snow/(current_precipitation+epsilon)
                     nmp_snowh = domain%snow_height%data_2d
                     nmp_snow = domain%snow_water_equivalent%data_2d
                 endif
@@ -1569,7 +1558,7 @@ contains
                              domain%shortwave_direct%data_2d,          &  ! only used in urban modules, which are currently disabled
                              domain%shortwave_diffuse%data_2d,         &  ! only used in urban modules, which are currently disabled
                              domain%longwave%data_2d,                  &
-                             domain%pressure_interface%data_3d,        &
+                             domain%pressure_interface%data_3d(:,kms:kme,:),&
                              current_precipitation,                    &
                              SR,                                       &
                              domain%irr_frac_total%data_2d,            &  ! only used if iopt_irr > 0
@@ -1578,7 +1567,7 @@ contains
                              domain%irr_frac_flood%data_2d,            &  ! only used if iopt_irr > 0
                              domain%skin_temperature%data_2d,          &  ! TSK
                              domain%sensible_heat%data_2d,             &  !  HFX
-                             QFX,                                      &
+                             domain%qfx%data_2d,                       &
                              domain%latent_heat%data_2d,               &  ! LH
                              domain%ground_heat_flux%data_2d,          &  ! GRDFLX
                              SMSTAV,                                   &
@@ -1591,8 +1580,10 @@ contains
                              nmp_snow,                                 &
                              nmp_snowh,                                &
                              domain%canopy_water%data_2d,              &
-                             ACSNOM, ACSNOW, EMISS, QSFC, Z0,          &
+                             ACSNOM, ACSNOW,                           &
+                             domain%land_emissivity%data_2d, QSFC, Z0, &
                              domain%roughness_z0%data_2d,              &
+                             domain%hpbl%data_2d,                      &
                              domain%irr_eventno_sprinkler,             &  ! only used if iopt_irr > 0
                              domain%irr_eventno_micro,                 &  ! only used if iopt_irr > 0
                              domain%irr_eventno_flood,                 &  ! only used if iopt_irr > 0
@@ -1613,7 +1604,7 @@ contains
                              domain%canopy_vapor_pressure%data_2d,     &
                              domain%canopy_temperature%data_2d,        &
                              domain%coeff_momentum_drag%data_2d,       &
-                             domain%coeff_heat_exchange%data_2d,       &
+                             domain%chs%data_2d,                       &
                              domain%canopy_fwet%data_2d,               &
                              domain%snow_water_eq_prev%data_2d,        &
                              domain%snow_albedo_prev%data_2d,          &
@@ -1692,7 +1683,8 @@ contains
                              ids,ide,  jds,jde,  kds,kde,              &
                              ims,ime,  jms,jme,  kms,kme,              &
                              its,ite,  jts,jte,  kts,kte)
-
+                             
+                             
                 if (options%lsm_options%monthly_albedo) then
                     domain%albedo%data_3d(:, domain%model_time%month, :) = ALBEDO
                 else
@@ -1709,12 +1701,6 @@ contains
     !         TLE: OMITTING OPTIONAL PRECIP INPUTS FOR NOW
     !                         MP_RAINC, MP_RAINNC, MP_SHCV, MP_SNOW, MP_GRAUP, MP_HAIL     )
                 where(domain%snow_water_equivalent%data_2d > options%lsm_options%max_swe) domain%snow_water_equivalent%data_2d = options%lsm_options%max_swe
-                ! now that znt (roughness_z0) has been updated, we need to recalculate terms
-                lnz_atm_term = log((z_atm+domain%roughness_z0%data_2d)/domain%roughness_z0%data_2d)
-                if (exchange_term==1) then
-                    base_exchange_term=(75*karman**2 * sqrt((z_atm+domain%roughness_z0%data_2d)/domain%roughness_z0%data_2d)) / (lnz_atm_term**2)
-                    lnz_atm_term=(karman/lnz_atm_term)**2
-                endif
             endif
 
             !! MJ added: this block is for FSM as sm.
@@ -1725,16 +1711,12 @@ contains
                 !!
                 domain%windspd_10m%data_2d(its:ite,jts:jte)=windspd(its:ite,jts:jte)
                 !!
-                call sm_FSM(domain,options,lsm_dt,current_rain,current_snow,windspd,QFX)
+                call sm_FSM(domain,options,lsm_dt,current_rain,current_snow,windspd)
                 !!
                 
                 do i = 1, num_soil_layers              ! soil
                    SH2O(its:ite,i,jts:jte) =  domain%soil_water_content%data_3d(its:ite,i,jts:jte)    / (1000. * DZS(i))
                 end do
-
-                
-                CHS2=domain%coeff_heat_exchange%data_2d
-                CQS2=domain%coeff_heat_exchange%data_2d                    
                 
                 !if (.not. options%lsm_options%surface_diagnostics) then
                 !    domain%temperature_2m%data_2d = domain%temperature%data_3d(:,kms,:)
@@ -1749,7 +1731,7 @@ contains
                 SNOWBL = domain%accumulated_snowfall%data_2dd
                 snow_bucket = domain%snowfall_bucket
                 
-                domain%longwave_up%data_2d = stefan_boltzmann * EMISS * domain%skin_temperature%data_2d**4
+                domain%longwave_up%data_2d = STBOLT * domain%land_emissivity%data_2d * domain%skin_temperature%data_2d**4
                 ! accumulate soil moisture over the entire column
                 domain%soil_totalmoisture%data_2d = domain%soil_water_content%data_3d(:,1,:) * DZS(1) * 1000
                 do i = 2,num_soil_layers
@@ -1758,11 +1740,11 @@ contains
 
                 ! 2m Air T and Q are not well defined if Tskin is not coupled with the surface fluxes
                 call surface_diagnostics(domain%sensible_heat%data_2d,          &
-                                         QFX,                                   &
+                                         domain%qfx%data_2d,                    &
                                          domain%skin_temperature%data_2d,       &
                                          QSFC,                                  &
-                                         CHS2,                                  &
-                                         CQS2,                                  &
+                                         domain%chs2%data_2d,                   &
+                                         domain%cqs2%data_2d,                   &
                                          domain%temperature_2m%data_2d,         &
                                          domain%humidity_2m%data_2d,            &
                                          domain%surface_pressure%data_2d,       &
@@ -1781,8 +1763,7 @@ contains
         ! PBL scheme should handle the distribution of sensible and latent heat fluxes. If we are
         ! running the LSM without a PBL scheme, as may be done for High-resolution runs, then 
         ! run apply fluxes to still apply heat fluxes calculated by LSM
-        if ( (options%physics%landsurface>0 .or. options%physics%watersurface>0 ).and. &
-            .not.(options%physics%boundarylayer==0)) then
+        if ( (options%physics%landsurface>0 .or. options%physics%watersurface>0 ) .and. (options%physics%boundarylayer==0)) then
             call apply_fluxes(domain, dt)
         endif
 

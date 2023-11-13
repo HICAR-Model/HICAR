@@ -17,6 +17,7 @@ module options_types
         integer::advection
         integer::boundarylayer
         integer::landsurface
+        integer::surfacelayer
         integer::snowmodel
         integer::watersurface
         integer::radiation
@@ -146,6 +147,23 @@ module options_types
         real :: tend_qi_fraction
     end type cu_options_type
 
+    ! ------------------------------------------------
+    ! store PBL parameter options
+    ! ------------------------------------------------
+    type pbl_options_type
+        integer :: ysu_topdown_pblmix
+    end type pbl_options_type
+
+    ! ------------------------------------------------
+    ! store sfc parameter options
+    ! ------------------------------------------------
+    type sfc_options_type
+        integer :: isfflx
+        integer :: scm_force_flux
+        integer :: iz0tlnd
+        integer :: isftcflx
+        real    :: sbrlim
+    end type sfc_options_type
 
     ! ------------------------------------------------
     ! store Online Bias Correction options
@@ -200,7 +218,6 @@ module options_types
         integer :: nmp_opt_irr
         integer :: nmp_opt_irrm
         integer :: nmp_opt_tdrn
-        integer :: nmp_iz0tlnd
         integer :: noahmp_output
         real    :: nmp_soiltstep
 
@@ -213,6 +230,7 @@ module options_types
        integer :: update_interval_rrtmg                ! how ofen to update the radiation in seconds.
                                                        ! RRTMG scheme is expensive. Default is 1800s (30 minutes)
        integer :: icloud                               ! How RRTMG interact with clouds
+       integer :: cldovrlp                             ! how RRTMG considers cloud overlapping (1 = random, 2 = maximum-random, 3 = maximum, 4 = exponential, 5 = exponential-random)
        logical :: read_ghg                             ! Eihter use default green house gas mixing ratio, or read the in from file
        real    :: tzone !! MJ adedd,tzone is UTC Offset and 1 here for centeral Erupe
        logical :: use_simple_sw
@@ -295,7 +313,7 @@ module options_types
         ! Filenames for files to read various physics options from
         character(len=MAXFILELENGTH) :: mp_options_filename, lt_options_filename, adv_options_filename, &
                                         lsm_options_filename, bias_options_filename, block_options_filename, &
-                                        cu_options_filename, rad_options_filename
+                                        cu_options_filename, rad_options_filename, pbl_options_filename, sfc_options_filename
         character(len=MAXFILELENGTH) :: calendar
 
 
@@ -364,7 +382,6 @@ module options_types
 
         ! real    :: sleve_decay_factor   ! The ratio H/s (model top or flat_z_height over decay height s). Schär: "the single scale parameter s plays the role of a scale height; that is, the underlying terrain features ap- proximately decay by a factor 1/e over a depth s. With s=H, the resulting coordinate structure is qualitatively comparable to sigma coordinates. With s < H, a hybridlike setting is obtained"
         real    :: sleve_n              ! Additional parameter introduced by Leuenberger 2009.
-        logical :: use_terrain_difference ! calculate dzdx from the differenec between hi- and lo-res terrain, rather than from hi-res terrain only. For use when forcing data is of a resolution that it resolves signigicant terrain influence (on wind field mainly)
 
         ! logical :: nudging   ! constrain the solution of certain variables (QV,QS,QC,QI,QR,QG) to be close (nudge_factor) to the forcing data
 
@@ -379,6 +396,8 @@ module options_types
         logical :: use_adv_options
         logical :: use_lsm_options
         logical :: use_rad_options
+        logical :: use_pbl_options
+        logical :: use_sfc_options
         logical :: use_bias_correction
 
         integer :: warning_level        ! level of warnings to issue when checking options settings 0-10.

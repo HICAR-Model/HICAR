@@ -22,28 +22,28 @@
 !    REAL    , PARAMETER :: cp           = 1004.6
 ! #else
    REAL    , PARAMETER :: r_d          = 287.
-   REAL    , PARAMETER :: wrf_cp           = 7.*r_d/2.
+   REAL    , PARAMETER :: cp           = 7.*r_d/2.
 ! #endif
 
    REAL    , PARAMETER :: r_v          = 461.6
-   REAL    , PARAMETER :: cv           = wrf_cp-r_d
+   REAL    , PARAMETER :: cv           = cp-r_d
    REAL    , PARAMETER :: cpv          = 4.*r_v
    REAL    , PARAMETER :: cvv          = cpv-r_v
-   REAL    , PARAMETER :: cvpm         = -cv/wrf_cp
+   REAL    , PARAMETER :: cvpm         = -cv/cp
    REAL    , PARAMETER :: cliq         = 4190.
    REAL    , PARAMETER :: cice         = 2106.
    REAL    , PARAMETER :: psat         = 610.78
    REAL    , PARAMETER :: rcv          = r_d/cv
-   REAL    , PARAMETER :: rcp          = r_d/wrf_cp
-   REAL    , PARAMETER :: wrf_gravity  = 9.81
-   REAL    , PARAMETER :: rovg         = r_d/wrf_gravity
-   REAL    , PARAMETER :: c2           = wrf_cp * rcv
+   REAL    , PARAMETER :: rcp          = r_d/cp
+   REAL    , PARAMETER :: gravity  = 9.81
+   REAL    , PARAMETER :: rovg         = r_d/gravity
+   REAL    , PARAMETER :: c2           = cp * rcv
    real    , parameter :: mwdry        = 28.966 ! molecular weight of dry air (g/mole)
 
    REAL    , PARAMETER :: p1000mb      = 100000.
    REAL    , PARAMETER :: t0           = 300.
    REAL    , PARAMETER :: p0           = p1000mb
-   REAL    , PARAMETER :: cpovcv       = wrf_cp/(wrf_cp-r_d)
+   REAL    , PARAMETER :: cpovcv       = cp/(cp-r_d)
    REAL    , PARAMETER :: cvovcp       = 1./cpovcv
    REAL    , PARAMETER :: rvovrd       = r_v/r_d
 
@@ -77,13 +77,13 @@
    REAL    , PARAMETER :: DEGRAD       = piconst/180.
    REAL    , PARAMETER :: DPD          = 360./365.
 
-   ! REAL    , PARAMETER ::  SVP1=0.6112
-   ! REAL    , PARAMETER ::  SVP2=17.67
-   ! REAL    , PARAMETER ::  SVP3=29.65
-   ! REAL    , PARAMETER ::  SVPT0=273.15
-   ! REAL    , PARAMETER ::  EP_1=R_v/R_d-1.
+   REAL    , PARAMETER ::  SVP1=0.6112
+   REAL    , PARAMETER ::  SVP2=17.67
+   REAL    , PARAMETER ::  SVP3=29.65
+   REAL    , PARAMETER ::  SVPT0=273.15
+   REAL    , PARAMETER ::  EP_1=R_v/R_d-1.
    REAL    , PARAMETER ::  EP_2=R_d/R_v
-   ! REAL    , PARAMETER ::  KARMAN=0.4
+   REAL    , PARAMETER ::  KARMAN=0.4
    REAL    , PARAMETER ::  EOMEG=7.2921E-5
    REAL    , PARAMETER ::  STBOLT=5.67051E-8
 
@@ -124,7 +124,7 @@
        REAL , PARAMETER ::  plomd=64200.0
        REAL , PARAMETER ::  pmdhi=35000.0
        REAL , PARAMETER ::  q2ini=0.50
-       REAL , PARAMETER ::  rfcp=0.25/wrf_cp
+       REAL , PARAMETER ::  rfcp=0.25/cp
        REAL , PARAMETER ::  rhcrit_land=0.75
        REAL , PARAMETER ::  rhcrit_sea=0.80
        REAL , PARAMETER ::  rlag=14.8125

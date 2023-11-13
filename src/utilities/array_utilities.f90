@@ -58,7 +58,7 @@ contains
         real, allocatable :: temporary_data(:,:)
 
         if (size(dataarray,2)==1) then
-
+            write(*,*) 'make_2d!!!'
             ims = lbound(dataarray,1)
             ime = ubound(dataarray,1)
             allocate(temporary_data(ims:ime, ms:me))
@@ -82,7 +82,7 @@ contains
         real, allocatable :: temporary_data(:,:)
 
         if (size(dataarray,2)==1) then
-
+            write(*,*) 'make_2d!!!'
             jms = lbound(dataarray,1)
             jme = ubound(dataarray,1)
             allocate(temporary_data(ms:me, jms:jme))
@@ -117,8 +117,6 @@ contains
 
         input = (temp_z(:,1:nz-1,:) + temp_z(:,2:nz,:))/2
 
-        deallocate(temp_z)
-
     end subroutine interpolate_in_z
 
     subroutine array_offset_x_3d(input_array, output_array)
@@ -136,7 +134,7 @@ contains
         allocate(output_array(nx+1, nz, ny))
 
         output_array(1,:,:)    = (1.5 * input_array(1,:,:)  - 0.5 * input_array(2,:,:))    ! extrapolate past the end
-        output_array(2:nx,:,:) = (input_array(1:nx-1,:,:) + input_array(2:nx,:,:) ) / 2    ! interpolate between points
+        output_array(2:nx,:,:) = (input_array(1:nx-1,:,:) + input_array(2:nx,:,:) ) * 0.5    ! interpolate between points
         output_array(nx+1,:,:) = (1.5 * input_array(nx,:,:)  - 0.5 * input_array(nx-1,:,:))! extrapolate past the end
 
     end subroutine
@@ -146,18 +144,20 @@ contains
         real,              intent(in)    :: input_array(:,:)
         real, allocatable, intent(inout) :: output_array(:,:)
 
-        integer :: nx,ny
+        integer :: ims,ime,jms,jme
 
-        nx = size(input_array,1)
-        ny = size(input_array,2)
-
+        ims = lbound(input_array,1)
+        ime = ubound(input_array,1)
+        jms = lbound(input_array,2)
+        jme = ubound(input_array,2)
+        
         if (allocated(output_array)) deallocate(output_array)
-        allocate(output_array(nx+1, ny))
-
-        output_array(1,:)    = (1.5 * input_array(1,:)  - 0.5 * input_array(2,:))    ! extrapolate past the end
-        output_array(2:nx,:) = (input_array(1:nx-1,:) + input_array(2:nx,:) ) / 2    ! interpolate between points
-        output_array(nx+1,:) = (1.5 * input_array(nx,:)  - 0.5 * input_array(nx-1,:))! extrapolate past the end
-
+        allocate(output_array(ims:ime+1,jms:jme))
+        
+        output_array(ims,jms:jme)    = (1.5 * input_array(ims,jms:jme)  - 0.5 * input_array(ims+1,jms:jme))    ! extrapolate past the end
+        output_array(ims+1:ime,jms:jme) = (input_array(ims:ime-1,jms:jme) + input_array(ims+1:ime,jms:jme) ) * 0.5    ! interpolate between points
+        output_array(ime+1,jms:jme) = (1.5 * input_array(ime,jms:jme)  - 0.5 * input_array(ime-1,jms:jme))! extrapolate past the end
+        
     end subroutine
 
     subroutine array_offset_y_2d(input_array, output_array)
@@ -165,24 +165,27 @@ contains
         real,              intent(in)    :: input_array(:,:)
         real, allocatable, intent(inout) :: output_array(:,:)
 
-        integer :: nx,nz,ny
+        integer :: ims,ime,jms,jme
 
-        nx = size(input_array,1)
-        ny = size(input_array,2)
+        ims = lbound(input_array,1)
+        ime = ubound(input_array,1)
+        jms = lbound(input_array,2)
+        jme = ubound(input_array,2)
 
         if (allocated(output_array)) deallocate(output_array)
-        if (ny > 1) then
-            allocate(output_array(nx, ny+1))
+        if (jme > 1) then
+            allocate(output_array(ims:ime,jms:jme+1))
 
-            output_array(:,1)    = (1.5 * input_array(:,1)  - 0.5 * input_array(:,2))    ! extrapolate past the end
-            output_array(:,2:ny) = (input_array(:,1:ny-1) + input_array(:,2:ny) ) / 2    ! interpolate between points
-            output_array(:,ny+1) = (1.5 * input_array(:,ny)  - 0.5 * input_array(:,ny-1))! extrapolate past the end
+            output_array(ims:ime,jms)    = (1.5 * input_array(ims:ime,jms)  - 0.5 * input_array(ims:ime,jms+1))    ! extrapolate past the end
+            output_array(ims:ime,jms+1:jme) = (input_array(ims:ime,jms:jme-1) + input_array(ims:ime,jms+1:jme) ) * 0.5 ! interpolate between points
+            output_array(ims:ime,jme+1) = (1.5 * input_array(ims:ime,jme)  - 0.5 * input_array(ims:ime,jme-1))! extrapolate past the end
+            
         else ! this came in as essentially a 1D array with y really being in the x position as a result
-            allocate(output_array(nx+1, ny))
+            allocate(output_array(ims:ime+1,jms:jme))
 
-            output_array(1,:)    = (1.5 * input_array(1,:)  - 0.5 * input_array(2,:))    ! extrapolate past the end
-            output_array(2:nx,:) = (input_array(1:nx-1,:) + input_array(2:nx,:) ) / 2    ! interpolate between points
-            output_array(nx+1,:) = (1.5 * input_array(nx,:)  - 0.5 * input_array(nx-1,:))! extrapolate past the end
+        output_array(ims,jms:jme)    = (1.5 * input_array(ims,jms:jme)  - 0.5 * input_array(ims+1,jms:jme))    ! extrapolate past the end
+        output_array(ims+1:ime,jms:jme) = (input_array(ims:ime-1,jms:jme) + input_array(ims+1:ime,jms:jme) ) * 0.5    ! interpolate between points
+        output_array(ime+1,jms:jme) = (1.5 * input_array(ime,jms:jme)  - 0.5 * input_array(ime-1,jms:jme))! extrapolate past the end
         endif
     end subroutine
 
@@ -202,7 +205,7 @@ contains
         allocate(output_array(nx, nz, ny+1))
 
         output_array(:,:,1)    = (1.5 * input_array(:,:,1)  - 0.5 * input_array(:,:,2))    ! extrapolate past the end
-        output_array(:,:,2:ny) = (input_array(:,:,1:ny-1) + input_array(:,:,2:ny) ) / 2    ! interpolate between points
+        output_array(:,:,2:ny) = (input_array(:,:,1:ny-1) + input_array(:,:,2:ny) ) * 0.5    ! interpolate between points
         output_array(:,:,ny+1) = (1.5 * input_array(:,:,ny)  - 0.5 * input_array(:,:,ny-1))! extrapolate past the end
 
     end subroutine
@@ -410,10 +413,8 @@ contains
             enddo
         enddo
         !$omp end do
-        deallocate(rowmeans,rowsums)
         !$omp end parallel
 
-        deallocate(inputwind)
     end subroutine smooth_array_3d
 
     subroutine smooth_array_2d(input,windowsize)
@@ -487,10 +488,8 @@ contains
             enddo
         enddo
         !$omp end do
-        deallocate(rowmeans,rowsums)
         !$omp end parallel
 
-        deallocate(inputtemp)
     end subroutine smooth_array_2d
 
 

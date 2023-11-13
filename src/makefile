@@ -208,7 +208,7 @@ endif
 
 # Cray fortran
 ifeq ($(COMPILER), cray)
-	COMP= -h omp -O2 -c -hfp2 -eI
+	COMP= -h noomp -O3 -hpl=my_program_O3.pl -c -eI
 	LINK= -fopenmp
 	PREPROC= -eZ
 	MODOUTPUT= -J $(BUILD) -em
@@ -226,7 +226,7 @@ ifeq ($(MODE), debugslow)
 		LINK=
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-h noomp -c -g -h develop -m 0 -R bcsp -M 399 -hfp0
+		COMP= -c -h noomp -eI -m 2 -O0 -hpl=my_program_debug.pl -g -R bcs 
 		LINK=-h noomp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
@@ -242,7 +242,7 @@ ifeq ($(MODE), debug)
 		LINK=
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-O2 -h noomp -c -g -hfp2
+		COMP=-h noomp -c -G1 -R cp
 		LINK=-h noomp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
@@ -259,7 +259,7 @@ ifeq ($(MODE), debugompslow)
 		LINK= -fopenmp -lgomp
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-c -g -m 0 -h develop -R bcsp -M 399 -hfp0
+		COMP=-h omp -c -g -m 0 -h develop -R csp -M 399 -hfp0
 		LINK=
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
@@ -450,6 +450,8 @@ OBJS=	\
 		$(BUILD)advection_driver.o	\
 		$(BUILD)advect.o			\
 		$(BUILD)adv_mpdata.o        \
+                $(BUILD)sfc_driver.o            \
+                $(BUILD)sfc_sfclayrev.o            \
 		$(BUILD)lsm_driver.o		\
 		$(BUILD)lsm_noahdrv.o		\
 		$(BUILD)lsm_noahlsm.o		\
@@ -710,7 +712,7 @@ $(BUILD)options_obj.o: $(OBJECTS)options_obj.f90 $(BUILD)options_h.o $(BUILD)tim
 						$(BUILD)time_delta_obj.o $(BUILD)io_routines.o $(BUILD)opt_types.o	\
 						$(BUILD)time_io.o $(BUILD)string.o $(BUILD)model_tracking.o			\
 						$(BUILD)mp_driver.o $(BUILD)advection_driver.o $(BUILD)ra_driver.o	\
-						$(BUILD)lsm_driver.o $(BUILD)pbl_driver.o $(BUILD)cu_driver.o 		\
+						$(BUILD)lsm_driver.o $(BUILD)pbl_driver.o $(BUILD)cu_driver.o $(BUILD)sfc_driver.o 	\
 						$(BUILD)wind.o $(BUILD)default_output_metadata.o
 
 ###################################################################
@@ -731,7 +733,7 @@ $(BUILD)variable_dict_obj.o: $(OBJECTS)variable_dict_obj.f90 $(BUILD)variable_di
 
 $(BUILD)grid_obj.o: $(OBJECTS)grid_obj.f90 $(BUILD)grid_h.o $(BUILD)assertions.o
 
-$(BUILD)grid_h.o: $(OBJECTS)grid_h.f90 $(BUILD)icar_constants.o
+$(BUILD)grid_h.o: $(OBJECTS)grid_h.f90 $(BUILD)icar_constants.o $(BUILD)wrf_constants.o $(BUILD)io_routines.o
 
 $(BUILD)exchangeable_obj.o: $(OBJECTS)exchangeable_obj.f90 $(BUILD)exchangeable_h.o $(BUILD)assertions.o
 
@@ -754,7 +756,7 @@ $(BUILD)output_obj.o: $(IO)output_obj.f90 $(BUILD)output_h.o $(BUILD)default_out
 
 $(BUILD)boundary_h.o: $(OBJECTS)boundary_h.f90 $(BUILD)options_h.o				\
 					$(BUILD)grid_h.o $(BUILD)meta_data_h.o $(BUILD)time_h.o 	\
-					$(BUILD)data_structures.o $(BUILD)time_delta_obj.o
+					$(BUILD)data_structures.o $(BUILD)time_delta_obj.o $(BUILD)variable_dict_obj.o
 
 $(BUILD)boundary_obj.o: $(OBJECTS)boundary_obj.f90 $(BUILD)boundary_h.o					\
 					$(BUILD)string.o $(BUILD)atm_utilities.o $(BUILD)time_io.o			\
@@ -778,12 +780,12 @@ $(BUILD)domain_obj.o: $(OBJECTS)domain_obj.f90 $(BUILD)domain_h.o $(BUILD)option
 
 $(BUILD)init.o:$(MAIN)init.f90 $(BUILD)data_structures.o $(BUILD)options_h.o $(BUILD)domain_h.o $(BUILD)boundary_h.o $(BUILD)icar_constants.o\
 	 				$(BUILD)mp_driver.o $(BUILD)time_step.o $(BUILD)advection_driver.o $(BUILD)atm_utilities.o $(BUILD)wind.o $(BUILD)ra_driver.o \
-					$(BUILD)pbl_driver.o $(BUILD)cu_driver.o $(BUILD)lsm_driver.o $(BUILD)io_routines.o $(BUILD)wind_iterative.o
+					$(BUILD)pbl_driver.o $(BUILD)cu_driver.o $(BUILD)lsm_driver.o $(BUILD)sfc_driver.o $(BUILD)io_routines.o $(BUILD)wind_iterative.o
 
 $(BUILD)time_step.o:$(MAIN)time_step.f90 $(BUILD)data_structures.o $(BUILD)wind.o $(BUILD)string.o 	\
 					$(BUILD)advection_driver.o $(BUILD)mp_driver.o $(BUILD)domain_h.o $(BUILD)boundary_h.o \
 					$(BUILD)options_h.o $(BUILD)atm_utilities.o $(BUILD)ra_driver.o $(BUILD)lsm_driver.o \
-					$(BUILD)debug_utils.o $(BUILD)pbl_driver.o $(BUILD)cu_driver.o $(BUILD)timer_h.o
+					$(BUILD)debug_utils.o $(BUILD)pbl_driver.o $(BUILD)cu_driver.o $(BUILD)sfc_driver.o $(BUILD)timer_h.o
 
 
 ###################################################################
@@ -861,7 +863,7 @@ $(BUILD)mp_simple.o:$(PHYS)mp_simple.f90 $(BUILD)data_structures.o $(BUILD)optio
 #	Convection code
 ###################################################################
 $(BUILD)cu_driver.o:$(PHYS)cu_driver.f90 $(BUILD)cu_tiedtke.o $(BUILD)cu_nsas.o $(BUILD)cu_bmj.o  \
-					$(BUILD)data_structures.o $(BUILD)icar_constants.o $(BUILD)domain_h.o $(BUILD)options_h.o
+					$(BUILD)data_structures.o $(BUILD)wrf_constants.o $(BUILD)domain_h.o $(BUILD)options_h.o
 
 $(BUILD)cu_tiedtke.o:$(PHYS)cu_tiedtke.f90
 
@@ -885,11 +887,18 @@ $(BUILD)ra_rrtmg_sw.o:$(PHYS)ra_rrtmg_sw.f90 $(BUILD)ra_clWRF_support.o $(BUILD)
 
 $(BUILD)ra_clWRF_support.o:$(PHYS)ra_clWRF_support.f90 $(BUILD)io_routines.o
 
-$(BUILD)ra_simple.o:$(PHYS)ra_simple.f90 $(BUILD)data_structures.o $(BUILD)atm_utilities.o $(BUILD)options_h.o $(BUILD)domain_h.o
+$(BUILD)ra_simple.o:$(PHYS)ra_simple.f90 $(BUILD)data_structures.o $(BUILD)atm_utilities.o $(BUILD)wrf_constants.o $(BUILD)options_h.o $(BUILD)domain_h.o
 
 ###################################################################
 #	Surface code
 ###################################################################
+$(BUILD)sfc_driver.o: $(PHYS)sfc_driver.f90 $(BUILD)data_structures.o   \
+                                                $(BUILD)sfc_sfclayrev.o             \
+                                                $(BUILD)domain_h.o $(BUILD)options_h.o                  \
+                                                $(BUILD)wrf_constants.o
+
+$(BUILD)sfc_sfclayrev.o: $(PHYS)sfc_sfclayrev.f90 $(BUILD)data_structures.o
+
 $(BUILD)lsm_driver.o: $(PHYS)lsm_driver.f90 $(BUILD)data_structures.o	\
 						$(BUILD)lsm_noahdrv.o $(BUILD)lsm_noahlsm.o		\
 						$(BUILD)lsm_noahmpdrv.o $(BUILD)lsm_noahmplsm.o \
@@ -933,7 +942,7 @@ $(BUILD)lsm_noahmpdrv.o: $(NOAHMP)lsm_noahmpdrv.f90 $(BUILD)lsm_noahmplsm.o \
 	          $(BUILD)lsm_noahmp_gecros.o $(BUILD)lsm_noahmp_glacier.o
 
 $(BUILD)lsm_noahmplsm.o: $(NOAHMP)lsm_noahmplsm.f90 $(BUILD)lsm_noahmp_gecros.o \
-	          $(BUILD)lsm_noahmp_glacier.o
+	          $(BUILD)lsm_noahmp_glacier.o $(BUILD)sfc_sfclayrev.o $(BUILD)wrf_constants.o
 
 $(BUILD)lsm_noahmp_gecros.o: $(NOAHMP)lsm_noahmp_gecros.f90
 

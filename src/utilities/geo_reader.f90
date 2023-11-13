@@ -467,10 +467,10 @@ contains
         else
             ! CASE 3 search every possible grid cell!
             ! naive search
-!           write(*,*) "using n^2 search..."
+           write(*,*) this_image(), ':   using n^2 search...'
 !           note which point this is for debugging purposes, we really shouldn't get here (often)
-!           write(*,*) lat,lon,lo%lat(xc,yc),lo%lon(xc,yc)
-!           write(*,*) xc,yc,nx,ny
+           write(*,*) this_image(), ':   ',lat,lon,lo%lat(xc,yc),lo%lon(xc,yc)
+           write(*,*) this_image(), ':   ',xc,yc,nx,ny
             mindist=9999.9
             do xw = ims, ime
                 do yw = jms, jme
@@ -769,8 +769,12 @@ contains
 
         if (find_surrounding%x(1) > -999) return
 
-        write(*,*) "ERROR: Failed to find point", lon, lat, " in a quadrant near:"
+        write(*,*) this_image(), ':   ERROR: Failed to find point", lon, lat, " in a quadrant near:'
         write(*,*) lo%lon(pos%x, pos%y), lo%lat(pos%x, pos%y)
+        write(*,*) search_point%x
+        write(*,*) search_point%y
+        write(*,*) current_err
+        write(*,*) best_err
         write(*,*) pos
         write(*,*) nx, ny
         error stop "Failed to find point"

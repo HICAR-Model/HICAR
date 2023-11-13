@@ -93,7 +93,8 @@ contains
         this%yimages = ys
 
         this%ximg = mod(image-1,  this%ximages)+1
-        this%yimg = floor(real(image-1) / this%ximages)+1
+        y = 100 * (real(image-1+epsilon) / real(this%ximages))
+        this%yimg = (floor(y+1)/100)+1
 
         x = (nx/float(xs))
         y = (ny/float(ys))

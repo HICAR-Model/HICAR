@@ -55,6 +55,7 @@ module linear_theory_winds
     use array_utilities,            only: smooth_array, calc_weight, &
                                           linear_space
     use icar_constants,             only: kMAX_FILE_LENGTH, DOM_IMG_INDX, kNUM_SERVERS, kNUM_COMPUTE, kNUM_PROC_PER_NODE
+    use mod_wrf_constants,          only: piconst
 
     implicit none
 
@@ -446,7 +447,7 @@ contains
         allocate(lt_data%ineta(nx,ny))
 
         ! Compute 2D k and l wavenumber fields
-        offset = pi / dx
+        offset = piconst / dx
         gain = 2 * offset / (nx-1)
 
         ! compute k wave numbers for the first row
@@ -697,7 +698,7 @@ contains
         ! if (options%parameters%debug) then
         if (this_image()==1) write(*,*) "Local Look up Table size:", 4*product(shape(hi_u_LUT))/real(2**20), "MB"
         if (this_image()==1) write(*,*) "Wind Speeds:",spd_values
-        if (this_image()==1) write(*,*) "Directions:",360*dir_values/(2*pi)
+        if (this_image()==1) write(*,*) "Directions:",360*dir_values/(2*piconst)
         if (this_image()==1) write(*,*) "Stabilities:",exp(nsq_values)
         ! endif
 

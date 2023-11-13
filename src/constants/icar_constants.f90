@@ -160,8 +160,17 @@ module icar_constants
         integer :: windspd_10m !! MJ added as sqrt(u_10m**2.+v_10m**2.)
         integer :: ustar
         integer :: coeff_momentum_drag
-        integer :: coeff_heat_exchange
+        integer :: chs
+        integer :: chs2
+        integer :: cqs2
         integer :: coeff_heat_exchange_3d
+        integer :: coeff_momentum_exchange_3d
+        integer :: QFX
+        integer :: br
+        integer :: psim
+        integer :: psih
+        integer :: fm
+        integer :: fh
         integer :: surface_rad_temperature
         integer :: temperature_2m
         integer :: humidity_2m
@@ -350,7 +359,8 @@ module icar_constants
                                                             241, 242, 243, 244, 245, 246, 247, 248, 249, 250,  &
                                                             251, 252, 253, 254, 255, 256, 257, 258, 259, 260,  &
                                                             261, 262, 263, 264, 265, 266, 267, 268, 269, 270,  &
-                                                            271, 272, 273, 274, 275, 276, 277, 278, 279, 280)
+                                                            271, 272, 273, 274, 275, 276, 277, 278, 279, 280,  &
+                                                            281, 282, 283, 284, 285, 286, 287, 288, 289)
 
     integer, parameter :: kINTEGER_BITS     = storage_size(kINTEGER_BITS)
     integer, parameter :: kMAX_STORAGE_VARS = storage_size(kVARS) / kINTEGER_BITS
@@ -423,6 +433,8 @@ module icar_constants
     integer, parameter :: kWATER_SIMPLE  = 2
     integer, parameter :: kWATER_LAKE    = 3
 
+    integer, parameter :: kSFC_MM5REV    = 1
+
     integer, parameter :: kLSM_BASIC     = 1
     integer, parameter :: kLSM_SIMPLE    = 2
     integer, parameter :: kLSM_NOAH      = 3
@@ -440,11 +452,10 @@ module icar_constants
     integer, parameter :: kFLUXCOR_MONO   = 1
 
     integer, parameter :: kWIND_LINEAR   = 1
-    integer, parameter :: kCONSERVE_MASS = 2
-    integer, parameter :: kOBRIEN_WINDS = 3
-    integer, parameter :: kITERATIVE_WINDS = 4
-    integer, parameter :: kLINEAR_OBRIEN_WINDS = 5
-    integer, parameter :: kLINEAR_ITERATIVE_WINDS = 6
+    integer, parameter :: kOBRIEN_WINDS  = 2
+    integer, parameter :: kITERATIVE_WINDS = 3
+    integer, parameter :: kLINEAR_OBRIEN_WINDS = 4
+    integer, parameter :: kLINEAR_ITERATIVE_WINDS = 5
 
     integer, parameter :: kLC_LAND       = 1
     integer, parameter :: kLC_WATER      = 2 ! 0  ! This should maybe become an argument in the namelist if we use different hi-es files?
@@ -468,40 +479,43 @@ module icar_constants
     ! only performed on output operations
     integer, parameter :: kPRECIP_BUCKET_SIZE=100
 
+! DR commented out September 2023, confusing to have these defined here AND in wrf_constants. Defer to WRF constants, since these are likely more robust
+! than the values here, if/when they differ.
+
 ! ------------------------------------------------
 ! Physical Constants
 ! ------------------------------------------------
-    real, parameter :: LH_vaporization=2260000.0 ! J/kg
-    ! could be calculated as 2.5E6 + (-2112.0)*temp_degC ?
-    real, parameter :: Rd  = 287   ! J/(kg K) specific gas constant for dry air
-    real, parameter :: Rw  = 461.6     ! J/(kg K) specific gas constant for moist air
-    real, parameter :: cp  = 1004.5    ! J/kg/K   specific heat capacity of moist STP air?
-    real, parameter :: gravity= 9.81   ! m/s^2    gravity
-    real, parameter :: pi  = 3.1415927 ! pi
-    real, parameter :: stefan_boltzmann = 5.67e-8 ! the Stefan-Boltzmann constant
-    real, parameter :: karman = 0.41   ! the von Karman constant
-    real, parameter :: solar_constant = 1366 ! W/m^2
+    !real, parameter :: LH_vaporization=2260000.0 ! J/kg
+    !! could be calculated as 2.5E6 + (-2112.0)*temp_degC ?
+    !real, parameter :: Rd  = 287   ! J/(kg K) specific gas constant for dry air
+    !real, parameter :: Rw  = 461.6     ! J/(kg K) specific gas constant for moist air
+    !real, parameter :: cp  = 1004.5    ! J/kg/K   specific heat capacity of moist STP air?
+    !real, parameter :: gravity= 9.81   ! m/s^2    gravity
+    !real, parameter :: pi  = 3.1415927 ! pi
+    !real, parameter :: stefan_boltzmann = 5.67e-8 ! the Stefan-Boltzmann constant
+    !real, parameter :: karman = 0.41   ! the von Karman constant
+    !real, parameter :: solar_constant = 1366 ! W/m^2
 
     ! convenience parameters for various physics packages
-    real, parameter :: rovcp = Rd/cp
-    real, parameter :: rovg  = Rd/gravity
+    !real, parameter :: rovcp = Rd/cp
+    !real, parameter :: rovg  = Rd/gravity
 
     ! from wrf module_model_constants
     ! parameters for calculating latent heat as a function of temperature for
     ! vaporization
-    real, parameter ::  XLV0 = 3.15E6
-    real, parameter ::  XLV1 = 2370.
+    !real, parameter ::  XLV0 = 3.15E6
+    !real, parameter ::  XLV1 = 2370.
     ! sublimation
-    real, parameter ::  XLS0 = 2.905E6
-    real, parameter ::  XLS1 = 259.532
+    !real, parameter ::  XLS0 = 2.905E6
+    !real, parameter ::  XLS1 = 259.532
 
     ! saturated vapor pressure parameters (?)
-    real, parameter ::  SVP1 = 0.6112
-    real, parameter ::  SVP2 = 17.67
-    real, parameter ::  SVP3 = 29.65
-    real, parameter ::  SVPT0= 273.15
+    !real, parameter ::  SVP1 = 0.6112
+    !real, parameter ::  SVP2 = 17.67
+    !real, parameter ::  SVP3 = 29.65
+    !real, parameter ::  SVPT0= 273.15
 
-    real, parameter ::  EP1  = Rw/Rd-1.
-    real, parameter ::  EP2  = Rd/Rw
+    !real, parameter ::  EP1  = Rw/Rd-1.
+    !real, parameter ::  EP2  = Rd/Rw
 
 end module

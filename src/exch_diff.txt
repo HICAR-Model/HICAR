@@ -1,0 +1,36 @@
+6,7c6,7
+<     create_date='09/25/23'
+<     create_time='15:45:19'
+---
+>     create_date='09/26/23'
+>     create_time='11:49:07'
+37c37
+<     cmdline='ftn_driver.exe -hcpu=broadwell -hnetwork=aries -hdynamic -D__CRAYXC -D__CRAY_BROADWELL -D__CRAYXT_COMPUTE_LINUX_TARGET -homp -O2 -hpl=my_program.pl -c -eI -eZ -DVERSION=&quot;FSM_merge-0-g9780c6f4-dirty&quot; -I/opt/cray/pe/netcdf-hdf5parallel/4.7.4.4/CRAYCLANG/10.0/include -I/opt/cray/pe/fftw/3.3.8.10/broadwell/lib/include -I/opt/cray/pe/petsc/3.13.3.0/real/CRAYCLANG/9.0/x86_64/include -I/opt/cray/pe/tpsl/20.03.2/CRAYCLANG/9.0/x86_64/include -I/opt/cray/pe/hdf5-parallel/1.12.0.0/crayclang/9.0/include -Jbuild/ -em -DUSE_ASSERTIONS=.true. -I/users/dreynold//include/FSM_interface/build objects/exchangeable_obj.f90 -obuild/exchangeable_obj.o -I/opt/cray/pe/cce/12.0.3/cce-clang/x86_64/lib/clang/12.0.0/include -I/opt/cray/pe/cce/12.0.3/cce/x86_64/include/craylibs -I/usr/include -I/opt/cray/pe/petsc/3.13.3.0/real/CRAYCLANG/9.0/haswell/include -I/opt/cray/pe/libsci/20.09.1/CRAYCLANG/9.0/x86_64/include -I/opt/cray/pe/fftw/3.3.8.10/broadwell/include -I/opt/cray/pe/mpt/7.7.18/gni/mpich-crayclang/10.0/include -I/opt/cray/pe/tpsl/20.03.2/CRAYCLANG/9.0/haswell/include -I/opt/cray/pe/hdf5-parallel/1.12.0.4/crayclang/10.0/include -I/opt/cray/pe/netcdf-hdf5parallel/4.7.4.4/crayclang/10.0/include -I/opt/cray/rca/2.2.20-7.0.3.1_3.15__g8e3fb5b.ari/include -I/opt/cray/alps/6.6.67-7.0.3.1_3.18__gb91cd181.ari/include -I/opt/cray/xpmem/default/include -I/opt/cray/gni-headers/default/include -I/opt/cray/dmapp/default/include -I/opt/cray/pe/pmi/5.0.17/include -I/opt/cray/ugni/default/include -I/opt/cray/udreg/default/include -I/opt/cray/pe/atp/3.14.5/include -I/opt/cray/wlm_detect/1.3.3-7.0.3.1_3.6__g7109084.ari/include -I/opt/cray/krca/2.2.8-7.0.3.1_3.14__g59af36e.ari/include -I/opt/cray-hss-devel/9.0.0/include -I/usr/include' 
+---
+>     cmdline='ftn_driver.exe -hcpu=broadwell -hnetwork=aries -hdynamic -D__CRAYXC -D__CRAY_BROADWELL -D__CRAYXT_COMPUTE_LINUX_TARGET -homp -O3 -hpl=my_program_O3.pl -c -eI -eZ -DVERSION=&quot;FSM_merge-0-g9780c6f4-dirty&quot; -I/opt/cray/pe/netcdf-hdf5parallel/4.7.4.4/CRAYCLANG/10.0/include -I/opt/cray/pe/fftw/3.3.8.10/broadwell/lib/include -I/opt/cray/pe/petsc/3.13.3.0/real/CRAYCLANG/9.0/x86_64/include -I/opt/cray/pe/tpsl/20.03.2/CRAYCLANG/9.0/x86_64/include -I/opt/cray/pe/hdf5-parallel/1.12.0.0/crayclang/9.0/include -Jbuild/ -em -DUSE_ASSERTIONS=.true. -I/users/dreynold//include/FSM_interface/build objects/exchangeable_obj.f90 -obuild/exchangeable_obj.o -I/opt/cray/pe/cce/12.0.3/cce-clang/x86_64/lib/clang/12.0.0/include -I/opt/cray/pe/cce/12.0.3/cce/x86_64/include/craylibs -I/usr/include -I/opt/cray/pe/petsc/3.13.3.0/real/CRAYCLANG/9.0/haswell/include -I/opt/cray/pe/libsci/20.09.1/CRAYCLANG/9.0/x86_64/include -I/opt/cray/pe/fftw/3.3.8.10/broadwell/include -I/opt/cray/pe/mpt/7.7.18/gni/mpich-crayclang/10.0/include -I/opt/cray/pe/tpsl/20.03.2/CRAYCLANG/9.0/haswell/include -I/opt/cray/pe/hdf5-parallel/1.12.0.4/crayclang/10.0/include -I/opt/cray/pe/netcdf-hdf5parallel/4.7.4.4/crayclang/10.0/include -I/opt/cray/rca/2.2.20-7.0.3.1_3.15__g8e3fb5b.ari/include -I/opt/cray/alps/6.6.67-7.0.3.1_3.18__gb91cd181.ari/include -I/opt/cray/xpmem/default/include -I/opt/cray/gni-headers/default/include -I/opt/cray/dmapp/default/include -I/opt/cray/pe/pmi/5.0.17/include -I/opt/cray/ugni/default/include -I/opt/cray/udreg/default/include -I/opt/cray/pe/atp/3.14.5/include -I/opt/cray/wlm_detect/1.3.3-7.0.3.1_3.6__g7109084.ari/include -I/opt/cray/krca/2.2.8-7.0.3.1_3.14__g59af36e.ari/include -I/opt/cray-hss-devel/9.0.0/include -I/usr/include' 
+40c40
+<     cmdline='-h scalar2,vector2,unroll2,fusion2,cache0,cblock0,noaggress -h ipa3,mpi0,pattern,modinline -h fp2=approx,flex_mp=default,alias=default:standard_restrict -h fma -h autoprefetch,noconcurrent,nooverindex,shortcircuit2 -h noadd_paren,nozeroinc,noheap_allocate -h align_arrays,nocontiguous,nocontiguous_pointer -h nocontiguous_assumed_shape -h thread2,nothread_do_concurrent,noautothread,safe_addr -h omp,caf,noacc -h nofunc_trace,noomp_analyze,noomp_trace,nopat_trace -h nobounds -h nomsgs,nonegmsgs,novector_classic -h dynamic (or -dynamic) -h cpu=x86-64,broadwell,network=aries -h nofp_trap -K trap=none -s default32 -e mIZ (user_specified) -d 0abcdefgijnopvxzBDEGNPQS (default) -e hqwACFKRTX (default) -J uild/        ' 
+---
+>     cmdline='-h scalar3,vector3,unroll2,fusion2,cache0,cblock0,noaggress -h ipa4,mpi0,pattern,modinline -h fp3=approx,flex_mp=default,alias=default:standard_restrict -h fma -h autoprefetch,noconcurrent,nooverindex,shortcircuit2 -h noadd_paren,nozeroinc,noheap_allocate -h align_arrays,nocontiguous,nocontiguous_pointer -h nocontiguous_assumed_shape -h thread2,nothread_do_concurrent,noautothread,safe_addr -h omp,caf,noacc -h nofunc_trace,noomp_analyze,noomp_trace,nopat_trace -h nobounds -h nomsgs,nonegmsgs,novector_classic -h dynamic (or -dynamic) -h cpu=x86-64,broadwell,network=aries -h nofp_trap -K trap=none -s default32 -e mIZ (user_specified) -d 0abcdefgijnopvxzBDEGNPQS (default) -e hqwACFKRTX (default) -J uild/        ' 
+32002c32002
+<     max_field_len='7931904'
+---
+>     max_field_len='5153792'
+32016,32017c32016,32017
+<     message_arg.1='0.1927'
+<     expanded_msg='Cray Fortran : Compile time:  0.1927 seconds'
+---
+>     message_arg.1='0.1373'
+>     expanded_msg='Cray Fortran : Compile time:  0.1373 seconds'
+32989,32990c32989,32990
+<     message_arg.1='Mon Sep 25, 2023  15:45:20'
+<     expanded_msg='Cray Fortran : Mon Sep 25, 2023  15:45:20'
+---
+>     message_arg.1='Tue Sep 26, 2023  11:49:07'
+>     expanded_msg='Cray Fortran : Tue Sep 26, 2023  11:49:07'
+33002,33003c33002,33003
+<     message_arg.1='1.4517'
+<     expanded_msg='Cray Fortran : Compile time:  1.4517 seconds'
+---
+>     message_arg.1='1.3860'
+>     expanded_msg='Cray Fortran : Compile time:  1.3860 seconds'

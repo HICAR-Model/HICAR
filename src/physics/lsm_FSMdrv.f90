@@ -125,7 +125,7 @@ contains
         lat_HICAR=TRANSPOSE(domain%latitude%data_2d(its:ite,jts:jte))
         lon_HICAR=TRANSPOSE(domain%longitude%data_2d(its:ite,jts:jte))
         terrain_HICAR=TRANSPOSE(domain%terrain%data_2d(its:ite,jts:jte))
-        slope_HICAR=TRANSPOSE(domain%slope_angle%data_2d(its:ite,jts:jte))*180.0/pi !Convert from radians to degrees
+        slope_HICAR=TRANSPOSE(domain%slope_angle%data_2d(its:ite,jts:jte))*180.0/piconst !Convert from radians to degrees
         shd_HICAR=TRANSPOSE(domain%shd%data_2d(its:ite,jts:jte))
 
         dx_HICAR=domain%dx
@@ -185,7 +185,7 @@ contains
         !SYNC ALL
     end subroutine sm_FSM_init
 
-    subroutine sm_FSM(domain,options,lsm_dt,current_rain,current_snow,windspd,QFX)
+    subroutine sm_FSM(domain,options,lsm_dt,current_rain,current_snow,windspd)
         implicit none
         type(domain_t), intent(inout) :: domain
         type(options_t),intent(in)    :: options
@@ -196,7 +196,6 @@ contains
             current_rain,                 &! rainfall in kg m-2
             current_snow,                 &! snowfall in kg m-2
             windspd                        ! Wind speed (m/s)
-        real, dimension(ims:ime,jms:jme), intent(out) :: QFX
 
         integer :: i,j,k, hj, hi, i_s, i_e, j_s, j_e
         real :: Delta_t
@@ -229,14 +228,8 @@ contains
         Ps=TRANSPOSE(domain%surface_pressure%data_2d(its:ite,jts:jte))
         Rf=TRANSPOSE(current_rain(its:ite,jts:jte))
         !!
-        if (options%physics%radiation_downScaling==1) then 
-            Sdir=TRANSPOSE(domain%shortwave_direct%data_2d(its:ite,jts:jte))  !Sdir=domain%shortwave%data_2d(its:ite,jts:jte)
-            Sdif=TRANSPOSE(domain%shortwave_diffuse%data_2d(its:ite,jts:jte)) !Sdif=0.0
-        endif
-        if (options%physics%radiation_downScaling==0) then 
-            Sdir=TRANSPOSE(domain%shortwave%data_2d(its:ite,jts:jte))
-            Sdif=0.0
-        endif
+        Sdir=TRANSPOSE(domain%shortwave_direct%data_2d(its:ite,jts:jte))  !Sdir=domain%shortwave%data_2d(its:ite,jts:jte)
+        Sdif=TRANSPOSE(domain%shortwave_diffuse%data_2d(its:ite,jts:jte)) !Sdif=0.0
         !!
         if (options%parameters%factor_p_var == "") then 
             !if (this_image()==1) write(*,*) "facto_p is not read...FSM"
@@ -345,8 +338,8 @@ contains
                     domain%fsnow%data_2d(hi,hj)=fsnow(j,i)
                     domain%Nsnow%data_2d(hi,hj)=Nsnow(j,i)
                     !
-                    QFX(hi,hj)=Esrf_(j,i)
-                    domain%coeff_heat_exchange%data_2d(hi,hj)=KH_(j,i)
+                    domain%qfx%data_2d(hi,hj)=Esrf_(j,i)
+                    domain%chs%data_2d(hi,hj)=KH_(j,i)
                     domain%roughness_z0%data_2d(hi,hj) = z0sn*fsnow(j,i)+(1-fsnow(j,i))*domain%roughness_z0%data_2d(hi,hj)
                     
                     do k=1,3

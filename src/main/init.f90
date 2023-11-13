@@ -27,9 +27,10 @@ module initialization
     use convection,                 only : init_convection
     use planetary_boundary_layer,   only : pbl_init
     use land_surface,               only : lsm_init
+    use surface_layer,              only : sfc_init
     use io_routines,          only : io_read, io_write
     use mod_atm_utilities,          only : init_atm_utilities
-    use wind,                       only : update_winds
+    use wind,                       only : update_winds, init_winds
     use linear_theory_winds,        only : setup_linwinds
     use wind_iterative,             only : init_iter_winds
     use icar_constants,             only : kITERATIVE_WINDS, kWIND_LINEAR
@@ -82,10 +83,10 @@ contains
         call boundary%init(options,domain%latitude%data_2d,domain%longitude%data_2d,domain%variables_to_force)
 
         call init_time_step()
-        
+
         ! initialize the atmospheric helper utilities
         call init_atm_utilities(options)
-        
+
         if (options%physics%windtype==kITERATIVE_WINDS .or. options%physics%windtype==kLINEAR_ITERATIVE_WINDS) then
             call init_iter_winds(domain)
         endif
@@ -94,7 +95,7 @@ contains
                  options%physics%windtype==kLINEAR_ITERATIVE_WINDS) then
             call setup_linwinds(domain, options, .False., options%parameters%advect_density)
         endif
-        
+
         if (this_image()==1) write(*,'(/ A)') "Finished basic initialization"
         if (this_image()==1) write(*,'(A /)') "---------------------------------------"
 
@@ -107,9 +108,11 @@ contains
         type(boundary_t),intent(in)    :: forcing
 
         if (this_image()==1) write(*,*) "Updating initial winds"
+        call init_winds(domain,options)
         call update_winds(domain, forcing, options)
-
+        
         call setup_bias_correction(options,domain)
+        
 
         ! initialize microphysics code (e.g. compute look up tables in Thompson et al)
         call mp_init(options) !this could easily be moved to init_model...
@@ -121,6 +124,8 @@ contains
         call radiation_init(domain,options)
 
         call lsm_init(domain,options)
+
+        call sfc_init(domain,options)
 
         call adv_init(domain,options)
 
@@ -157,17 +162,6 @@ contains
 
         endif
 
-        if(options%parameters%use_terrain_difference)  then
-
-            if (this_image()==1 .AND. options%physics%windtype==kCONSERVE_MASS) then
-                write(*,*) "Using the difference between hi- and lo-res terrain  for horizontal wind acceleration "
-            ! elseif (this_image()==1) then
-            !     write(*,*) "using the difference between hi- and lo-res terrain for u/v components of w_real "
-            endif
-
-            call domain%calculate_delta_terrain(boundary, options)
-
-        endif
     end subroutine init_model_state
 
     subroutine welcome_message()

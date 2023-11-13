@@ -137,7 +137,10 @@ contains
         
         variable = in_variable
         
-        if (variable%dim_len(3)<=0) variable%dim_len(3) = this%kte
+        if (variable%three_d.and.variable%dim_len(3)<=0) then
+            if (variable%dimensions(3)== "level")   variable%dim_len(3) = this%kte-1
+            if (variable%dimensions(3)== "level_i") variable%dim_len(3) = this%kte
+        endif
         if (this%n_vars == size(this%variables)) call this%increase_var_capacity()
 
         this%n_vars = this%n_vars + 1

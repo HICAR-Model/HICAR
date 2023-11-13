@@ -19,9 +19,8 @@ module domain_interface
 
   type domain_t
     type(meta_data_t)    :: info
-    type(grid_t)         :: grid,   u_grid,   v_grid
+    type(grid_t)         :: grid,   grid8w,  u_grid,   v_grid
     type(grid_t)         :: grid2d, u_grid2d, v_grid2d
-    type(grid_t)         :: u_grid2d_ext, v_grid2d_ext!, grid2d_ext ! extended grids for u and v fields pre smoothing (grid_2d_ext is for SLEVE topography smoothing)
     type(grid_t)         :: grid_monthly, grid_soil
     type(grid_t)         :: grid_snow, grid_snowsoil
     type(grid_t)         :: grid_soilcomp, grid_gecros, grid_croptype
@@ -99,7 +98,16 @@ module domain_interface
     type(variable_t) :: v_10m
     type(variable_t) :: windspd_10m
     type(variable_t) :: coeff_momentum_drag
-    type(variable_t) :: coeff_heat_exchange
+    type(variable_t) :: chs
+    type(variable_t) :: chs2
+    type(variable_t) :: cqs2
+    type(variable_t) :: br
+    type(variable_t) :: qfx
+    type(variable_t) :: psim
+    type(variable_t) :: psih
+    type(variable_t) :: fm
+    type(variable_t) :: fh
+    type(variable_t) :: coeff_momentum_exchange_3d ! used in YSU pbl
     type(variable_t) :: coeff_heat_exchange_3d ! used in YSU pbl
     integer,allocatable :: kpbl(:,:)  ! used in YSU pbl / BMJ cu
     type(variable_t) :: hpbl          ! used in YSU pbl /NSAS cu
@@ -328,23 +336,14 @@ module domain_interface
     real,                       allocatable :: jacobian_u(:,:,:)
     real,                       allocatable :: jacobian_v(:,:,:)
     real,                       allocatable :: jacobian_w(:,:,:)
-    real,                       allocatable :: zr_u(:,:,:)
-    real,                       allocatable :: zr_v(:,:,:)
     real,                       allocatable :: dzdx(:,:,:) ! change in height with change in x/y position (used to calculate w_real vertical motions)
     real,                       allocatable :: dzdy(:,:,:) ! change in height with change in x/y position (used to calculate w_real vertical motions)
     real,                       allocatable :: dzdx_u(:,:,:) ! change in height with change in x/y position on u-grid
     real,                       allocatable :: dzdy_v(:,:,:) ! change in height with change in x/y position on v-grid
+    real,                       allocatable :: dzdxz(:,:,:) ! change in height with change in x/y position with change in transformed vertical coordinate
+    real,                       allocatable :: dzdyz(:,:,:) ! change in height with change in x/y position with change in transformed vertical coordinate
     ! BK 2020/05
-    real,                       allocatable :: delta_dzdx(:,:,:) ! change in height difference (between hi and lo-res data) with change in x/y position (used to calculate w_real vertical motions)
-    real,                       allocatable :: delta_dzdy(:,:,:) ! change in height difference (between hi and lo-res data) with change in x/y position (used to calculate w_real vertical motions)
-    real,                       allocatable :: zfr_u(:,:,:)     ! ratio between z levels (on grid)
-    real,                       allocatable :: zfr_v(:,:,:)
     real,                       allocatable :: froude_terrain(:,:,:,:) ! Terrain length-scale to use at each point for Froude Number calculation
-    real,                       allocatable :: terrain_u(:,:)
-    real,                       allocatable :: terrain_v(:,:)
-    real,                       allocatable :: forcing_terrain_u(:,:)
-    real,                       allocatable :: forcing_terrain_v(:,:)
-    real,                       allocatable :: forc(:,:)
     real,                       allocatable :: h1(:,:)     ! the large-scale terrain (h1) for the SLEVE coordinate (achieved by smoothin the org terrain)
     real,                       allocatable :: h2(:,:)     ! the small-scale terrain (h2) for the SLEVE coordinate (difference org and h1 terrain)
     real,                       allocatable :: h1_u(:,:)     ! the large-scale terrain (h1) on the u grid
@@ -470,8 +469,6 @@ module domain_interface
     procedure :: update_delta_fields
     procedure :: apply_forcing
 
-    procedure :: calculate_delta_terrain
-
   end type
 
   integer, parameter :: space_dimension=3
@@ -591,16 +588,9 @@ module domain_interface
     module subroutine apply_forcing(this, forcing, options, dt)
         implicit none
         class(domain_t),    intent(inout) :: this
-        class(boundary_t),  intent(in)    :: forcing
+        class(boundary_t),  intent(inout) :: forcing
         type(options_t), intent(in)       :: options
         real, intent(in)                  :: dt
-    end subroutine
-
-    module subroutine calculate_delta_terrain(this, forcing, options)
-        implicit none
-        class(domain_t), intent(inout) :: this
-        type(boundary_t), intent(in)    :: forcing
-        type(options_t), intent(in) :: options
     end subroutine
 
   end interface

@@ -7,8 +7,8 @@
 !! ----------------------------------------------------------------------------
 module convection
     use data_structures
-    use icar_constants
-    use mod_wrf_constants
+!    use icar_constants
+    use mod_wrf_constants,  only: svpt0, EP_1, EP_2, gravity, XLS, XLV, cp, R_d
     use module_cu_tiedtke,  only: tiedtkeinit, CU_TIEDTKE
     ! use module_cu_kf,       only: kfinit, KFCPS
     use module_cu_nsas,  only: nsasinit, cu_nsas
@@ -47,18 +47,18 @@ contains
                          kVARS%exner, kVARS%dz_interface, kVARS%density, kVARS%pressure_interface, kVARS%pressure,  &
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u, kVARS%v, kVARS%w, kVARS%land_mask,        &
                          kVARS%tend_qv, kVARS%tend_th, kVARS%tend_qc, kVARS%tend_qi, kVARS%tend_qs, kVARS%tend_qr,  &
-                         kVARS%tend_u, kVARS%tend_v, kVARS%tend_qv_pbl, kVARS%tend_qv_adv, kVARS%znu])
+                         kVARS%tend_u, kVARS%tend_v, kVARS%tend_qv_pbl, kVARS%tend_qv_adv, kVARS%znu, kVARS%QFX])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
 
              call options%restart_vars( &
-                         [kVARS%water_vapor, kVARS%potential_temperature, kVARS%temperature,                        &
+                         [kVARS%water_vapor, kVARS%potential_temperature, kVARS%temperature, kVARS%QFX,             &
                          kVARS%cloud_water, kVARS%cloud_ice, kVARS%precipitation, kVARS%convective_precipitation,   &
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u, kVARS%v, kVARS%pressure])
 
         else if (options%physics%convection == kCU_NSAS) then  ! Not checked thoroughly yet
             call options%alloc_vars( &
-                         [kVARS%water_vapor, kVARS%potential_temperature, kVARS%temperature,                        &
+                         [kVARS%water_vapor, kVARS%potential_temperature, kVARS%temperature, kVARS%QFX,             &
                          kVARS%cloud_water, kVARS%cloud_ice, kVARS%precipitation, kVARS%convective_precipitation,   &
                          kVARS%exner, kVARS%dz_interface, kVARS%density, kVARS%pressure_interface, kVARS%pressure,  &
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u, kVARS%v, kVARS%w, kVARS%land_mask,        &
@@ -68,7 +68,7 @@ contains
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
 
              call options%restart_vars( &
-                         [kVARS%water_vapor, kVARS%potential_temperature, kVARS%temperature,                        &
+                         [kVARS%water_vapor, kVARS%potential_temperature, kVARS%temperature, kVARS%QFX,             &
                          kVARS%cloud_water, kVARS%cloud_ice, kVARS%precipitation, kVARS%convective_precipitation,   &
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u, kVARS%v, kVARS%pressure, kVARS%hpbl])
 
@@ -303,7 +303,7 @@ subroutine convect(domain,options,dt_in)
         call CU_TIEDTKE(                                        &
                  dt_in, itimestep, STEPCU                       &
                 ,RAINCV, PRATEC                                 &
-                ,domain%latent_heat%data_2d/LH_vaporization     &
+                ,domain%qfx%data_2d                             &
                 ,domain%sensible_heat%data_2d                   &
                 ,domain%znu                                     &
                 ,domain%u_mass%data_3d                          &
@@ -391,7 +391,7 @@ subroutine convect(domain,options,dt_in)
             ,v3d=domain%v_mass%data_3d                           & !-- v3d         3d v-velocity interpolated to theta points (m/s)
             ,hpbl=domain%hpbl%data_2d                            &  ! ?? PBL height I assume?
             ,hfx=domain%sensible_heat%data_2d                     & !  HFX  - net upward heat flux at the surface (W/m^2)
-            ,qfx=domain%latent_heat%data_2d/LH_vaporization       & !  QFX  - net upward moisture flux at the surface (kg/m^2/s)
+            ,qfx=domain%qfx%data_2d                              & !  QFX  - net upward moisture flux at the surface (kg/m^2/s)
             ,mp_physics=5        & ! - sets ncloud: - integer no_cloud(0),no_ice(1),cloud+ice(2) (see ln 141 cu_nsas.f90)  use options%physics%microphysics?
             ,dx_factor_nsas=dx_factor_nsas                       & !
             ,p_qc=1                                              & ! copied from Tiedke; no idea as to what these 3 flags represent.
@@ -405,8 +405,8 @@ subroutine convect(domain,options,dt_in)
             ,xlv=2.5E6                                           & ! from wrf_constants.f90
             ,r_d=287.                                            & ! from wrf_constants.f90
             ,r_v=461.6                                           & ! from wrf_constants.f90
-            ,ep_1=EP1                                  & ! EP_1=R_v/R_d-1. (wrf_constants.f90) 461.6/287.-1.
-            ,ep_2=EP2                                     & ! EP_2=R_d/R_v  = 287./461.6
+            ,ep_1=EP_1                                  & ! EP_1=R_v/R_d-1. (wrf_constants.f90) 461.6/287.-1.
+            ,ep_2=EP_2                                     & ! EP_2=R_d/R_v  = 287./461.6
             ,cice=2106.                                           & ! from wrf_constants.f90                                          &
             ,xls=2.85E6                                           & ! from wrf_constants.f90
             ,psat=610.78                                           & ! from wrf_constants.f90
@@ -446,7 +446,7 @@ subroutine convect(domain,options,dt_in)
                 ,PMID=domain%pressure%data_3d                   &!-- Pcps        3D hydrostatic pressure at half levels (Pa)
                 ,PI=domain%exner%data_3d                        &   ! exner
                 ,CP=cp ,R=r_d ,ELWV=xlv ,ELIV=xls ,G=gravity    &
-                ,TFRZ=svpt0 ,D608=EP1 ,CLDEFI=cldefi           &
+                ,TFRZ=svpt0 ,D608=EP_1 ,CLDEFI=cldefi           &
                 ,LOWLYR=lowlyr                                  &
                 ,XLAND=XLAND                                    &
                 ,CU_ACT_FLAG=CU_ACT_FLAG                        &

@@ -3,6 +3,8 @@ module exchangeable_interface
   use icar_constants
   use grid_interface,          only : grid_t
   use variable_interface,      only : variable_t
+  use io_routines,             only : io_write
+
   implicit none
 
   private
@@ -19,10 +21,10 @@ module exchangeable_interface
     real, allocatable :: halo_west_in(:,:,:)[:]
     real, allocatable :: halo_east_in(:,:,:)[:]
 
-    logical :: north_boundary=.false.
-    logical :: south_boundary=.false.
-    logical :: east_boundary=.false.
-    logical :: west_boundary=.false.
+    logical :: north_boundary=.True.
+    logical :: south_boundary=.True.
+    logical :: east_boundary=.True.
+    logical :: west_boundary=.True.
     
     !x-extra and y-extra to support exchanges on staggered grids
     integer :: xe

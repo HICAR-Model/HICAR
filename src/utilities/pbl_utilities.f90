@@ -6,7 +6,8 @@
 !
 ! ------------------------------------------------------------------------------
 module mod_pbl_utilities
-    use icar_constants,           only : pi, gravity, Rd, Rw, cp, LH_vaporization,SVPT0
+    use mod_wrf_constants,   only : piconst, gravity, R_d, R_v, cp, XLV, SVPT0
+
     ! use data_structures
     ! use domain_interface,   only : domain_t
     ! use options_interface,  only : options_t
@@ -33,7 +34,7 @@ subroutine da_tp_to_qs( t, p, es, qs)
     real, parameter   :: es_alpha = 611.2 ! (= SVP1*1000)
     real, parameter   :: es_beta = 17.67  ! (= SVP2 = 17.67 )
     real, parameter   :: es_gamma = 243.5
-    real, parameter    :: rd_over_rv = Rd / Rw! gas_constant / gas_constant_v
+    real, parameter    :: rd_over_rv = R_d / R_v! gas_constant / gas_constant_v
     real, parameter    :: rd_over_rv1 = 1.0 - rd_over_rv
     real, parameter    :: t_kelvin =SVPT0
     ! if (trace_use_dull) call da_trace_entry("da_tp_to_qs")
@@ -165,7 +166,7 @@ subroutine da_sfc_wtq (psfc, tg, ps, ts, qs, us, vs, &
     real, parameter :: ka = 2.4E-5
 
     ! if (trace_use_dull) call da_trace_entry("da_sfc_wtq")
-    gas_constant=Rd
+    gas_constant=R_d
     rcp = gas_constant/cp
 
 

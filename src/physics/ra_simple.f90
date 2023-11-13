@@ -49,6 +49,7 @@ module module_ra_simple
     use options_interface,  only : options_t
     use domain_interface,   only : domain_t
     use data_structures
+    use mod_wrf_constants,  only : piconst, DEGRAD, STBOLT
     ! use time
     use iso_fortran_env, only: real128 !!MJ added
     
@@ -74,8 +75,8 @@ contains
         allocate(cos_lat_m(ims:ime, jms:jme))
         allocate(sin_lat_m(ims:ime, jms:jme))
 
-        cos_lat_m = cos(domain%latitude%data_2d / 360.0 * 2*pi)
-        sin_lat_m = sin(domain%latitude%data_2d / 360.0 * 2*pi)
+        cos_lat_m = cos(domain%latitude%data_2d / 360.0 * 2*piconst)
+        sin_lat_m = sin(domain%latitude%data_2d / 360.0 * 2*piconst)
 
         nrad_layers = 5
 
@@ -99,7 +100,7 @@ contains
 
         sin_solar_elev = sin(solar_elevation(its:ite))
 
-        shortwave(its:ite) = So * (1 + 0.035 * cos(day_frac(its:ite) * 2*pi)) * sin_solar_elev * (0.48 + 0.29 * sin_solar_elev)
+        shortwave(its:ite) = So * (1 + 0.035 * cos(day_frac(its:ite) * 2*piconst)) * sin_solar_elev * (0.48 + 0.29 * sin_solar_elev)
 
         ! note it is cloud_cover**3.4 in Reiff, but this makes almost no difference and integer powers are fast so could use **3
         shortwave(its:ite) = shortwave(its:ite) * (1 - (0.75 * (cloud_cover(its:ite)**3.4)) )
@@ -117,7 +118,7 @@ contains
 
         effective_emissivity = 1 - 0.261 * exp((-7.77e-4) * (273.16-T_air(its:ite))**2)
 
-        longwave(its:ite) = effective_emissivity * stefan_boltzmann * T_air(its:ite)**4
+        longwave(its:ite) = effective_emissivity * STBOLT * T_air(its:ite)**4
 
         longwave(its:ite) = min(longwave(its:ite) * (1 + 0.2 * cloud_cover(its:ite)), 600.0)
 
@@ -181,7 +182,7 @@ contains
             day_of_year(i) = date%day_of_year(lon=lon(i,j))
 
             ! hour angle is 0 at noon
-            hour_angle(i) = 2*pi* mod(day_of_year(i)+0.5, 1.0)
+            hour_angle(i) = 2*piconst* mod(day_of_year(i)+0.5, 1.0)
 
             day_frac(i) = date%year_fraction(lon=lon(i,j))
         end do
@@ -219,20 +220,20 @@ contains
         geom_mean_anom_sun_deg = 357.52911 + julian_century * (35999.05029 - 0.0001537 * julian_century)
         eccent_earth_orbit = 0.016708634 - julian_century * (0.000042037 + 0.0000001267 * julian_century)
         !!
-        sun_eq_of_ctr = sin(pi/180 *(geom_mean_anom_sun_deg)) * (1.914602 - julian_century * (0.004817 + 0.000014 * julian_century)) + sin(pi/180 *(2  * geom_mean_anom_sun_deg)) * ( 0.019993 - 0.000101 * julian_century) + sin(pi/180 *(3 * geom_mean_anom_sun_deg)) * 0.000289
+        sun_eq_of_ctr = sin(DEGRAD *(geom_mean_anom_sun_deg)) * (1.914602 - julian_century * (0.004817 + 0.000014 * julian_century)) + sin(DEGRAD *(2  * geom_mean_anom_sun_deg)) * ( 0.019993 - 0.000101 * julian_century) + sin(DEGRAD *(3 * geom_mean_anom_sun_deg)) * 0.000289
         sun_true_long_deg = sun_eq_of_ctr + geom_mean_long_sun_deg
-        sun_app_long_deg = sun_true_long_deg - 0.00569 - 0.00478 * sin(pi/180 *(125.04 - 1934.136 * julian_century))
+        sun_app_long_deg = sun_true_long_deg - 0.00569 - 0.00478 * sin(DEGRAD *(125.04 - 1934.136 * julian_century))
         !!
         mean_obliq_ecliptic_deg = 23 + (26 + ((21.448 - julian_century * (46.815 + julian_century * (0.00059 - julian_century * 0.001813)))) / 60) / 60
-        obliq_corr_deg = mean_obliq_ecliptic_deg + 0.00256  * cos(pi/180 *(125.04 - 1934.136 * julian_century))
-        sun_declin_deg = 180./pi*(asin(sin(pi/180 *(obliq_corr_deg)) * sin(pi/180 *(sun_app_long_deg))))
-        var_y = tan(pi/180 *(obliq_corr_deg / 2)) * tan(pi/180 *(obliq_corr_deg / 2))
-        eq_of_time_minutes = 4 * 180./pi*(var_y  * sin(2 * pi/180. *(geom_mean_long_sun_deg)) - 2 * eccent_earth_orbit * sin(pi/180. *(geom_mean_anom_sun_deg)) + 4 * eccent_earth_orbit * var_y * sin(pi/180. *(geom_mean_anom_sun_deg)) * cos(2  * pi/180. *(geom_mean_long_sun_deg)) - 0.5 * var_y * var_y * sin(4 * pi/180. *(geom_mean_long_sun_deg)) - 1.25 * eccent_earth_orbit * eccent_earth_orbit * sin(2 * pi/180. *(geom_mean_anom_sun_deg)))
+        obliq_corr_deg = mean_obliq_ecliptic_deg + 0.00256  * cos(DEGRAD *(125.04 - 1934.136 * julian_century))
+        sun_declin_deg = 180./piconst*(asin(sin(DEGRAD *(obliq_corr_deg)) * sin(DEGRAD *(sun_app_long_deg))))
+        var_y = tan(DEGRAD *(obliq_corr_deg / 2)) * tan(DEGRAD *(obliq_corr_deg / 2))
+        eq_of_time_minutes = 4 * 180./piconst*(var_y  * sin(2 * DEGRAD *(geom_mean_long_sun_deg)) - 2 * eccent_earth_orbit * sin(DEGRAD *(geom_mean_anom_sun_deg)) + 4 * eccent_earth_orbit * var_y * sin(DEGRAD *(geom_mean_anom_sun_deg)) * cos(2  * DEGRAD *(geom_mean_long_sun_deg)) - 0.5 * var_y * var_y * sin(4 * DEGRAD *(geom_mean_long_sun_deg)) - 1.25 * eccent_earth_orbit * eccent_earth_orbit * sin(2 * DEGRAD *(geom_mean_anom_sun_deg)))
         !!
         do i = its, ite           
             !!
             lon_hr=lon(i,j)
-            lat_hr=180./pi*asin(sin_lat_m(i,j))                   
+            lat_hr=180./piconst*asin(sin_lat_m(i,j))                   
             true_solar_time_min = mod(timeofday * 1440 + eq_of_time_minutes + 4 * lon_hr - 60. * tzone,1440.);
             !!
             if (true_solar_time_min /4 < 0) then
@@ -241,30 +242,30 @@ contains
                 hour_angle_deg=true_solar_time_min /4 - 180
             endif
             !!
-            solar_zenith_angle_deg = 180./pi*(acos(sin(pi/180. *(lat_hr)) * sin(pi/180. *(sun_declin_deg)) + cos(pi/180. *(lat_hr)) * cos(pi/180. *(sun_declin_deg)) * cos(pi/180. *(hour_angle_deg))))
+            solar_zenith_angle_deg = 180./piconst*(acos(sin(DEGRAD *(lat_hr)) * sin(DEGRAD *(sun_declin_deg)) + cos(DEGRAD *(lat_hr)) * cos(DEGRAD *(sun_declin_deg)) * cos(DEGRAD *(hour_angle_deg))))
             solar_elev_angle_deg = 90 - solar_zenith_angle_deg;
 
             !! calculate atmospheric diffraction dependent on solar elevation angle
             if (solar_elev_angle_deg > 85) then
                approx_atm_refrac_deg=0. 
             elseif (solar_elev_angle_deg > 5 .and. solar_elev_angle_deg <= 85) then
-                approx_atm_refrac_deg = (58.1 / tan(pi/180. *(solar_elev_angle_deg)) - 0.07 / (tan(pi/180. *(solar_elev_angle_deg)))**3. + 0.000086 / (tan(pi/180. *(solar_elev_angle_deg)))**5.) / 3600 
+                approx_atm_refrac_deg = (58.1 / tan(DEGRAD *(solar_elev_angle_deg)) - 0.07 / (tan(DEGRAD *(solar_elev_angle_deg)))**3. + 0.000086 / (tan(DEGRAD *(solar_elev_angle_deg)))**5.) / 3600 
             elseif (solar_elev_angle_deg > -0.757 .and. solar_elev_angle_deg <= 5) then 
                 approx_atm_refrac_deg = (1735 + solar_elev_angle_deg * (-518.2 + solar_elev_angle_deg * (103.4 + solar_elev_angle_deg * (-12.79 + solar_elev_angle_deg * 0.711)))) / 3600
             elseif (solar_elev_angle_deg <= -0.757) then 
-                approx_atm_refrac_deg = (-20.772 / tan(pi/180. *(solar_elev_angle_deg))) / 3600
+                approx_atm_refrac_deg = (-20.772 / tan(DEGRAD *(solar_elev_angle_deg))) / 3600
             endif                       
             solar_elev_corr_atm_ref_deg = solar_elev_angle_deg + approx_atm_refrac_deg
             
             !! calculate solar azimuth angle depending on hour angle
             if (hour_angle_deg > 0) then
-                solar_azimuth_angle = mod(floor((180./pi*(acos(((sin(pi/180.*(lat_hr)) * cos(pi/180.*(solar_zenith_angle_deg))) - sin(pi/180.*(sun_declin_deg))) / (cos(pi/180.*(lat_hr)) * sin(pi/180.*(solar_zenith_angle_deg))))) + 180)*100000)/100000,360);
+                solar_azimuth_angle = mod(floor((180./piconst*(acos(((sin(DEGRAD*(lat_hr)) * cos(DEGRAD*(solar_zenith_angle_deg))) - sin(DEGRAD*(sun_declin_deg))) / (cos(DEGRAD*(lat_hr)) * sin(DEGRAD*(solar_zenith_angle_deg))))) + 180)*100000)/100000,360);
             elseif (hour_angle_deg <= 0) then
-                solar_azimuth_angle = mod(floor((540 - 180./pi*(acos(((sin(pi/180.*(lat_hr)) * cos(pi/180.*(solar_zenith_angle_deg))) - sin(pi/180.*(sun_declin_deg))) / (cos(pi/180.*(lat_hr)) * sin(pi/180.*(solar_zenith_angle_deg))))))*100000)/100000,360);      
+                solar_azimuth_angle = mod(floor((540 - 180./piconst*(acos(((sin(DEGRAD*(lat_hr)) * cos(DEGRAD*(solar_zenith_angle_deg))) - sin(DEGRAD*(sun_declin_deg))) / (cos(DEGRAD*(lat_hr)) * sin(DEGRAD*(solar_zenith_angle_deg))))))*100000)/100000,360);      
             endif                       
             
-            calc_solar_elevation_corr(i)=solar_elev_corr_atm_ref_deg*pi/180.
-            if(present(solar_azimuth)) solar_azimuth(i)=solar_azimuth_angle*pi/180.
+            calc_solar_elevation_corr(i)=solar_elev_corr_atm_ref_deg*DEGRAD
+            if(present(solar_azimuth)) solar_azimuth(i)=solar_azimuth_angle*DEGRAD
         end do
 
         where(calc_solar_elevation_corr<0.0) calc_solar_elevation_corr=0.0
@@ -303,13 +304,13 @@ contains
             day_of_year(i) = date%day_of_year(lon=lon(i,j))
 
             ! hour angle is 0 at noon
-            hour_angle(i) = 2*pi* mod(day_of_year(i)+0.5, 1.0)
+            hour_angle(i) = 2*piconst* mod(day_of_year(i)+0.5, 1.0)
 
             day_frac(i) = date%year_fraction(lon=lon(i,j))
         end do
 
         ! fast approximation see : http://en.wikipedia.org/wiki/Position_of_the_Sun
-        declination = (-0.4091) * cos(2.0*pi/365.0*(day_of_year+10))
+        declination = (-0.4091) * cos(2.0*piconst/365.0*(day_of_year+10))
 
         calc_solar_elevation(its:ite) = sin_lat_m(its:ite,j) * sin(declination(its:ite)) + &
                                cos_lat_m(its:ite,j) * cos(declination(its:ite)) * cos(hour_angle(its:ite))
@@ -349,13 +350,13 @@ contains
             day_of_year(i) = date%day_of_year(lon=lon(i,j))
 
             ! hour angle is 0 at noon
-            hour_angle(i) = 2*pi* mod(day_of_year(i)+0.5, 1.0)
+            hour_angle(i) = 2*piconst* mod(day_of_year(i)+0.5, 1.0)
 
             day_frac(i) = date%year_fraction(lon=lon(i,j))
         end do
 
         ! fast approximation see : http://en.wikipedia.org/wiki/Position_of_the_Sun
-        declination = (-0.4091) * cos(2.0*pi/365.0*(day_of_year+10))
+        declination = (-0.4091) * cos(2.0*piconst/365.0*(day_of_year+10))
 
         calc_solar_azimuth(its:ite) = ( cos_lat_m(its:ite,j) * sin(declination(its:ite)) - &
                                sin_lat_m(its:ite,j) * cos(declination(its:ite)) * cos(hour_angle(its:ite)) )/(1.e-16+cos(solar_elevation(its:ite)))
@@ -368,10 +369,10 @@ contains
         endwhere
 
         ! partitioning the answer based on the hour angle:
-        where(hour_angle > pi)
+        where(hour_angle > piconst)
             calc_solar_azimuth = acos(calc_solar_azimuth)
-        elsewhere(calc_solar_azimuth <= pi)
-            calc_solar_azimuth = 2*pi - acos(calc_solar_azimuth)
+        elsewhere(calc_solar_azimuth <= piconst)
+            calc_solar_azimuth = 2*piconst - acos(calc_solar_azimuth)
         endwhere
         
     end function calc_solar_azimuth
@@ -420,7 +421,7 @@ contains
         allocate(day_frac       (ims:ime))
 
         ! 1.5K/day radiative cooling rate (300 = W/m^2 at 270K)
-        coolingrate = 1.5 * (dt / 86400.0) * stefan_boltzmann / 300.0
+        coolingrate = 1.5 * (dt / 86400.0) * STBOLT / 300.0
 
         !$omp do
         do j = jts, jte

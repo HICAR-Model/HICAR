@@ -102,20 +102,22 @@ contains
         implicit none
         type(interpolable_type), intent(in)    :: hi
         type(interpolable_type), intent(inout) :: lo
-        integer::nx,ny,nz,i,j,k,guess,lo_nz
+        integer::ims,ime,jms,jme,nz,i,j,k,guess,lo_nz
         integer,dimension(2) :: curpos
         real,dimension(2) :: curweights
 
-        nx=size(hi%z,1)
+        ims=lbound(hi%z,1)
+        ime=ubound(hi%z,1)
         nz=size(hi%z,2)
-        ny=size(hi%z,3)
-
+        jms=lbound(hi%z,3)
+        jme=ubound(hi%z,3)
+        
         lo_nz=size(lo%z,2)
 
-        allocate(lo%vert_lut%z(2,nx,nz,ny))
-        allocate(lo%vert_lut%w(2,nx,nz,ny))
-        do j=1,ny
-            do i=1,nx
+        allocate(lo%vert_lut%z(2,ims:ime,nz,jms:jme))
+        allocate(lo%vert_lut%w(2,ims:ime,nz,jms:jme))
+        do j=jms,jme
+            do i=ims,ime
                 guess=1
                 do k=1,nz
                     curpos=find_match(hi%z(i,k,j),lo%z(i,:,j),guess=guess)
@@ -167,12 +169,14 @@ contains
         implicit none
         type(interpolable_type), intent(in)    :: hi
         type(interpolable_type), intent(inout) :: lo
-        integer::nx,ny,nz,i,j,k,guess,lo_nz
+        integer::ims,ime,jms,jme,nz,i,j,k,guess,lo_nz
         integer,dimension(2) :: curpos
         real,dimension(2) :: curweights
 
-        nx=size(hi%z,1)
-        ny=size(hi%z,2)  ! difference from vLUT
+        ims=lbound(hi%z,1)
+        ime=ubound(hi%z,1)
+        jms=lbound(hi%z,2)  ! difference from vLUT
+        jme=ubound(hi%z,2)  ! difference from vLUT
         nz=size(hi%z,3)  ! difference from vLUT
 
         lo_nz=size(lo%z,3)   ! difference from vLUT
@@ -180,10 +184,10 @@ contains
         if (allocated(lo%vert_lut%z)) then
             deallocate(lo%vert_lut%z, lo%vert_lut%w)
         endif
-        allocate(lo%vert_lut%z(2,nx,ny,nz))   ! difference from vLUT
-        allocate(lo%vert_lut%w(2,nx,ny,nz))   ! difference from vLUT
-        do k=1,ny  ! difference from vLUT
-            do i=1,nx
+        allocate(lo%vert_lut%z(2,ims:ime,jms:jme,nz))   ! difference from vLUT
+        allocate(lo%vert_lut%w(2,ims:ime,jms:jme,nz))   ! difference from vLUT
+        do k=jms,jme  ! difference from vLUT
+            do i=ims,ime
                 guess=1
                 do j=1,nz  ! difference from vLUT
 
@@ -232,35 +236,37 @@ contains
         real,dimension(:,:,:), intent(inout) :: hi
         real,dimension(:,:,:), intent(in)    :: lo
         type(vert_look_up_table),intent(in) :: vlut
-        integer :: i,j,k,nx,ny,nz
+        integer :: i,j,k,ims,jms,nx,ny,nz
 
         nx=size(hi,1)
         nz=size(hi,2)
         ny=size(hi,3)
+        ims = lbound(vlut%z,2)-1
+        jms = lbound(vlut%z,4)-1
 
         j=1
         do k=1,nz
             do i=1,nx
-                hi(i,k,j)=lo(i,vlut%z(1,i,k,j),j)*vlut%w(1,i,k,j) + lo(i,vlut%z(2,i,k,j),j)*vlut%w(2,i,k,j)
+                hi(i,k,j)=lo(i,vlut%z(1,i+ims,k,j),j+jms)*vlut%w(1,i+ims,k,j+jms) + lo(i,vlut%z(2,i+ims,k,j+jms),j)*vlut%w(2,i+ims,k,j+jms)
             enddo
         enddo
         j=ny
         do k=1,nz
             do i=1,nx
-                hi(i,k,j)=lo(i,vlut%z(1,i,k,j),j)*vlut%w(1,i,k,j) + lo(i,vlut%z(2,i,k,j),j)*vlut%w(2,i,k,j)
+                hi(i,k,j)=lo(i,vlut%z(1,i+ims,k,j),j+jms)*vlut%w(1,i+ims,k,j+jms) + lo(i,vlut%z(2,i+ims,k,j+jms),j)*vlut%w(2,i+ims,k,j+jms)
             enddo
         enddo
 
         i=1
         do j=1,ny
             do k=1,nz
-                hi(i,k,j)=lo(i,vlut%z(1,i,k,j),j)*vlut%w(1,i,k,j) + lo(i,vlut%z(2,i,k,j),j)*vlut%w(2,i,k,j)
+                hi(i,k,j)=lo(i,vlut%z(1,i+ims,k,j),j+jms)*vlut%w(1,i+ims,k,j+jms) + lo(i,vlut%z(2,i+ims,k,j+jms),j)*vlut%w(2,i+ims,k,j+jms)
             enddo
         enddo
         i=nx
         do j=1,ny
             do k=1,nz
-                hi(i,k,j)=lo(i,vlut%z(1,i,k,j),j)*vlut%w(1,i,k,j) + lo(i,vlut%z(2,i,k,j),j)*vlut%w(2,i,k,j)
+                hi(i,k,j)=lo(i,vlut%z(1,i+ims,k,j),j+jms)*vlut%w(1,i+ims,k,j+jms) + lo(i,vlut%z(2,i+ims,k,j+jms),j)*vlut%w(2,i+ims,k,j+jms)
             enddo
         enddo
 
@@ -273,7 +279,7 @@ contains
         type(vert_look_up_table), intent(in)    :: vlut
         logical, optional,        intent(in)    :: boundary_only
         integer, optional,        intent(in)    :: axis
-        integer :: i,j,k, nx,ny,nz, zaxis
+        integer :: i,j,k, ims,ime,jms,jme,nz,nx,ny,zaxis
 
         if (present(boundary_only)) then
             if (boundary_only) then
@@ -289,14 +295,16 @@ contains
         endif
 
         if (zaxis==2) then
-            nx = size(hi,1)
-            nz = size(hi,2)
-            ny = size(hi,3)
-
+        
+            nx=size(hi,1)
+            nz=size(hi,2)
+            ny=size(hi,3)
+            ims = lbound(vlut%z,2)-1
+            jms = lbound(vlut%z,4)-1
             do j=1,ny
                 do k=1,nz
                     do i=1,nx
-                        hi(i,k,j)=lo(i,vlut%z(1,i,k,j),j)*vlut%w(1,i,k,j) + lo(i,vlut%z(2,i,k,j),j)*vlut%w(2,i,k,j)
+                        hi(i,k,j)=lo(i,vlut%z(1,i+ims,k,j+jms),j)*vlut%w(1,i+ims,k,j+jms) + lo(i,vlut%z(2,i+ims,k,j+jms),j)*vlut%w(2,i+ims,k,j+jms)
                     enddo
                 enddo
             enddo
@@ -308,10 +316,13 @@ contains
             nx=min(size(hi,1), size(vlut%z,2))
             ny=min(size(hi,2), size(vlut%z,3))
             nz=min(size(hi,3), size(vlut%z,4))
+            ims = lbound(vlut%z,2)-1
+            jms = lbound(vlut%z,4)-1
+            
             do j=1,nz
                 do k=1,ny
                     do i=1,nx
-                        hi(i,k,j)=lo(i,k,vlut%z(1,i,k,j))*vlut%w(1,i,k,j) + lo(i,k,vlut%z(2,i,k,j))*vlut%w(2,i,k,j)
+                        hi(i,k,j)=lo(i,k,vlut%z(1,i+ims,k,j+jms))*vlut%w(1,i+ims,k,j+jms) + lo(i,k,vlut%z(2,i+ims,k,j+jms))*vlut%w(2,i+ims,k,j+jms)
                     enddo
                 enddo
             enddo

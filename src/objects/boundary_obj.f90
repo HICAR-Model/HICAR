@@ -15,6 +15,7 @@ submodule(boundary_interface) boundary_implementation
     use vertical_interpolation, only : vLUT, vinterp
     use timer_interface,    only : timer_t
     use debug_module,           only : check_ncdf
+    use mod_wrf_constants,      only : gravity
     implicit none
 contains
 
@@ -257,13 +258,12 @@ contains
             nx = size(temp_z,1)
             ny = size(temp_z,2)
             nz = size(temp_z,3)
-
             if (allocated(this%z)) deallocate(this%z)
             allocate(this%z((this%ite-this%ite+1),nz,(this%jte-this%jts+1)))
-            allocate(temp_z_trans(nx,nz,ny))
+            allocate(temp_z_trans(1:nx,1:nz,1:ny))
             
-            temp_z_trans = reshape(temp_z, shape=[nx,nz,ny], order=[1,3,2])
-            this%z = temp_z_trans(this%its:this%ite,:,this%jts:this%jte)
+            temp_z_trans(1:nx,1:nz,1:ny) = reshape(temp_z, shape=[nx,nz,ny], order=[1,3,2])
+            this%z = temp_z_trans(this%its:this%ite,1:nz,this%jts:this%jte)
         else
             call io_read(this%firstfile, p_var,   temp_z,   this%firststep)
             nx = size(temp_z,1)
@@ -330,7 +330,8 @@ contains
         real, dimension(:,:), intent(in)  :: temp_lat, temp_lon, domain_lat, domain_lon
         
         real, allocatable, dimension(:,:) ::  LL_d, UR_d
-        real :: LLlat, LLlon, URlat, URlon, lat_corners(4), lon_corners(4)
+        real :: LLlat, LLlon, URlat, URlon
+        real, dimension(4) :: lat_corners, lon_corners
         integer, dimension(2) :: temp_inds
         integer :: nx, ny, d_ims, d_ime, d_jms, d_jme
         
@@ -361,7 +362,6 @@ contains
         URlat = maxval(lat_corners)
         URlon = maxval(lon_corners)
 
-
         ! calculate distance from LL/UR lat/lon for boundary lat/lons
         LL_d = ((temp_lat-LLlat)**2+(temp_lon-LLlon)**2)
         UR_d = ((temp_lat-URlat)**2+(temp_lon-URlon)**2)
@@ -373,7 +373,6 @@ contains
         this%ite = temp_inds(1); this%jte = temp_inds(2)
 
         ! increase boundary image indices by 5 as buffer to allow for interpolation
-        
         this%its = max(this%its - 8,1)
         this%ite = min(this%ite + 8,nx)
         this%jts = max(this%jts - 8,1)
@@ -383,6 +382,8 @@ contains
         if (this%ite < this%its .or. this%jte < this%jts) write(*,*) 'image: ',this_image(),'  d_ims: ',d_ims,'  d_ime: ',d_ime,'  d_jms: ',d_jms,'  d_jme: ',d_jme
         if (this%ite < this%its .or. this%jte < this%jts) write(*,*) 'image: ',this_image(),'  LLlat: ',LLlat,'  LLlon: ',LLlon,'  URlat: ',URlat,'  URlon: ',URlon
         if (this%ite < this%its .or. this%jte < this%jts) write(*,*) 'image: ',this_image(),'  min_loc: ',minloc(LL_d),'  max_loc: ',minloc(UR_d)
+        if (this%ite < this%its .or. this%jte < this%jts) write(*,*) 'image: ',this_image(),'  min_lat: ',minval(domain_lat),'  max_lat: ',maxval(domain_lat)
+        if (this%ite < this%its .or. this%jte < this%jts) write(*,*) 'image: ',this_image(),'  lat_corners: ',lat_corners,'  lon_corners: ',lon_corners
         if (this%ite < this%its .or. this%jte < this%jts) call io_write('domain_lat.nc',"domain_lat",domain_lat)
         if (this%ite < this%its .or. this%jte < this%jts) call io_write('domain_lon.nc',"domain_lon",domain_lon)
         if (this%ite < this%its .or. this%jte < this%jts) call io_write('boundary_lat.nc',"lat",temp_lat)
