@@ -1662,7 +1662,7 @@ contains
             ! Still not 100% convinced this works well in cases other than flat_z_height = 0 (w sleve). So for now best to keep at 0 when using sleve?
             max_level = find_flat_model_level(options, nz, dz)
 
-            smooth_height = sum(dz(1:max_level-1))+dz(max_level)*0.5
+            smooth_height = sum(dz(1:max_level))!+dz(max_level)*0.5
 
             ! Terminology from Schär et al 2002, Leuenberger 2009: (can be simpliied later on, but for clarity)
             s1 = smooth_height / options%parameters%decay_rate_L_topo
@@ -1751,7 +1751,7 @@ contains
                     db2_mass = -n/(s2**n) * (dz_scl(i)/2)**(n-1) * COSH((smooth_height/s2)**n - &
                             ((dz_scl(i)/2)/s2)**n ) / SINH((smooth_height/s2)**n)
 
-                    temp(:,i+1,:)  = dz_scl(i) + h1*b1_i + h2*b1_i
+                    temp(:,i+1,:)  = dz_scl(i) + h1*b1_i + h2*b2_i
 
                     global_dz_interface(:,i,:)  =  temp(:,i+1,:) - temp(:,i,:)  ! same for higher k
                     global_z_interface(:,i,:)  = temp(:,i,:)
@@ -1791,7 +1791,7 @@ contains
                         if (i==this%grid%kme) then  ! if we are at the model top i+1 is not defined
                             global_dz_interface(:,i,:)  =  smooth_height - temp(:,i,:)
                         else
-                            temp(:,i+1,:)  = sum(dz_scl(1:i)) + h1*b1_i + h2*b1_i 
+                            temp(:,i+1,:)  = sum(dz_scl(1:i)) + h1*b1_i + h2*b2_i 
                             global_dz_interface(:,i,:)  =  temp(:,i+1,:) - temp(:,i,:)
                         endif
 
@@ -1836,22 +1836,49 @@ contains
                 neighbor_jacobian(:,i,:) = 1 + h1*db1_mass + h2*db2_mass
                 jacobian_u(:,i,:) = 1 + h1_u*db1_mass + h2_u*db2_mass
                 jacobian_v(:,i,:) = 1 + h1_v*db1_mass + h2_v*db2_mass
+
                 jacobian_w(:,i,:) = 1 + h1(ims:ime,jms:jme)*db1_i + h2(ims:ime,jms:jme)*db2_i
                 
-                dzdx(:,i,:) = (b1_mass*(h1_u(ims+1:ime+1,jms:jme)-h1_u(ims:ime,jms:jme)) + b2_mass*(h2_u(ims+1:ime+1,jms:jme)-h2_u(ims:ime,jms:jme)))/this%dx
-                dzdy(:,i,:) = (b1_mass*(h1_v(ims:ime,jms+1:jme+1)-h1_v(ims:ime,jms:jme)) + b2_mass*(h2_v(ims:ime,jms+1:jme+1)-h2_v(ims:ime,jms:jme)))/this%dx
+                dzdx(ims+1:ime-1,i,:) = (b1_mass*(h1(ims+2:ime,jms:jme)-h1(ims:ime-2,jms:jme)) + b2_mass*(h2(ims+2:ime,jms:jme)-h2(ims:ime-2,jms:jme)))/(2*this%dx)
+                !dzdx(ims,i,:)   = (-neighbor_z(ims+2,i,:) + 4*neighbor_z(ims+1,i,:) - 3*neighbor_z(ims,i,:) )/(2*this%dx)
+                !dzdx(ime,i,:)   = (neighbor_z(ime-2,i,:) - 4*neighbor_z(ime-1,i,:) + 3*neighbor_z(ime,i,:) )/(2*this%dx)
+                dzdx(ims,i,:)   = dzdx(ims+1,i,:)
+                dzdx(ime,i,:)   = dzdx(ime-1,i,:)
 
-                dzdx_u(ims+1:ime,i,:) = (b1_mass*(h1(ims+1:ime,jms:jme)-h1(ims:ime-1,jms:jme))   + b2_mass*(h2(ims+1:ime,jms:jme)-h2(ims:ime-1,jms:jme)))/this%dx
+                dzdy(:,i,jms+1:jme-1) = (b1_mass*(h1(ims:ime,jms+2:jme)-h1(ims:ime,jms:jme-2)) + b2_mass*(h2(ims:ime,jms+2:jme)-h2(ims:ime,jms:jme-2)))/(2*this%dx)
+                !dzdy(:,i,jms)   = (-neighbor_z(:,i,jms+2) + 4*neighbor_z(:,i,jms+1) - 3*neighbor_z(:,i,jms) )/(2*this%dx)
+                !dzdy(:,i,jme)   = (neighbor_z(:,i,jme-2) - 4*neighbor_z(:,i,jme-1) + 3*neighbor_z(:,i,jme) )/(2*this%dx)
+                dzdy(:,i,jms)   = dzdy(:,i,jms+1)
+                dzdy(:,i,jme)   = dzdy(:,i,jme-1)
+                !dzdx(:,i,:) = (b1_mass*(h1_u(ims+1:ime+1,jms:jme)-h1_u(ims:ime,jms:jme)) + b2_mass*(h2_u(ims+1:ime+1,jms:jme)-h2_u(ims:ime,jms:jme)))/(this%dx)
+                !dzdy(:,i,:) = (b1_mass*(h1_v(ims:ime,jms+1:jme+1)-h1_v(ims:ime,jms:jme)) + b2_mass*(h2_v(ims:ime,jms+1:jme+1)-h2_v(ims:ime,jms:jme)))/(this%dx)
+                
+                dzdx_u(ims+1:ime,i,:) = (b1_mass*(h1(ims+1:ime,jms:jme)-h1(ims:ime-1,jms:jme))   + b2_mass*(h2(ims+1:ime,jms:jme)-h2(ims:ime-1,jms:jme)))/(this%dx)
+                dzdy_v(:,i,jms+1:jme) = (b1_mass*(h1(ims:ime,jms+1:jme)-h1(ims:ime,jms:jme-1))   + b2_mass*(h2(ims:ime,jms+1:jme)-h2(ims:ime,jms:jme-1)))/(this%dx)
+
+                dzdx_u(ims+1:ime-1,i,:) = (b1_mass*(h1_u(ims+2:ime,jms:jme)-h1_u(ims:ime-2,jms:jme))   + b2_mass*(h2_u(ims+2:ime,jms:jme)-h2_u(ims:ime-2,jms:jme)))/(2*this%dx) !(dzdx(ims+1:ime,i,:)+dzdx(ims:ime-1,i,:))*0.5
+                dzdx_u(ims+1:ime,i,:) = (dzdx(ims:ime-1,i,:)+dzdx(ims+1:ime,i,:))*0.5
                 dzdx_u(ims,i,:)   = dzdx(ims,i,:)*1.5 - dzdx(ims+1,i,:)*0.5
+                !dzdx_u(ime,i,:)   = dzdx(ime,i,:)
                 dzdx_u(ime+1,i,:)   = dzdx(ime,i,:)*1.5 - dzdx(ime-1,i,:)*0.5
 
-                dzdy_v(:,i,jms+1:jme) = (b1_mass*(h1(ims:ime,jms+1:jme)-h1(ims:ime,jms:jme-1))   + b2_mass*(h2(ims:ime,jms+1:jme)-h2(ims:ime,jms:jme-1)))/this%dx
+                dzdy_v(:,i,jms+1:jme-1) = (b1_mass*(h1_v(ims:ime,jms+2:jme)-h1_v(ims:ime,jms:jme-2))   + b2_mass*(h2_v(ims:ime,jms+2:jme)-h2_v(ims:ime,jms:jme-2)))/(2*this%dx)!(dzdy(:,i,jms+1:jme)+dzdy(:,i,jms:jme-1))*0.5
+                dzdy_v(:,i,jms+1:jme) = (dzdy(:,i,jms:jme-1)+dzdy(:,i,jms+1:jme))*0.5
                 dzdy_v(:,i,jms)   = dzdy(:,i,jms)*1.5 - dzdy(:,i,jms+1)*0.5
+                !dzdy_v(:,i,jme)   = dzdy(:,i,jme)
                 dzdy_v(:,i,jme+1)   = dzdy(:,i,jme)*1.5 - dzdy(:,i,jme-1)*0.5
-
                 if (options%physics%windtype == kLINEAR_ITERATIVE_WINDS .or. options%physics%windtype == kITERATIVE_WINDS) then
                     this%dzdxz(:,i,:) = (db1_mass*(h1_u(ims+1:ime+1,jms:jme)-h1_u(ims:ime,jms:jme)) + db2_mass*(h2_u(ims+1:ime+1,jms:jme)-h2_u(ims:ime,jms:jme)))/this%dx
                     this%dzdyz(:,i,:) = (db1_mass*(h1_v(ims:ime,jms+1:jme+1)-h1_v(ims:ime,jms:jme)) + db2_mass*(h2_v(ims:ime,jms+1:jme+1)-h2_v(ims:ime,jms:jme)))/this%dx
+                    
+                    this%dzdxz(ims+1:ime-1,i,:) = (db1_mass*(h1(ims+2:ime,jms:jme)-h1(ims:ime-2,jms:jme)) + db2_mass*(h2(ims+2:ime,jms:jme)-h2(ims:ime-2,jms:jme)))/(2*this%dx)
+                    this%dzdxz(ims,i,:)   = this%dzdxz(ims+1,i,:)
+                    this%dzdxz(ime,i,:)   = this%dzdxz(ime-1,i,:)
+
+                    this%dzdyz(:,i,jms+1:jme-1) = (db1_mass*(h1(ims:ime,jms+2:jme)-h1(ims:ime,jms:jme-2)) + db2_mass*(h2(ims:ime,jms+2:jme)-h2(ims:ime,jms:jme-2)))/(2*this%dx)
+                    this%dzdyz(:,i,jms)   = this%dzdyz(:,i,jms+1)
+                    this%dzdyz(:,i,jme)   = this%dzdyz(:,i,jme-1)
+
                 endif
             enddo
             
@@ -1864,7 +1891,7 @@ contains
             z_interface  = global_z_interface(ims:ime,:,jms:jme)
             z            = neighbor_z(ims:ime,:,jms:jme)
             jacobian     = neighbor_jacobian(ims:ime,:,jms:jme)
-
+                        
             !call setup_dzdxy(this, options, neighbor_jacobian)
 
 
@@ -2357,8 +2384,10 @@ contains
         deallocate(temp)
         allocate(temp(this%ids:this%ide+1,this%jds:this%jde))
         call array_offset_x(global_terr, temp)
-        h2_u = temp(this%u_grid2d%ims:this%u_grid2d%ime, this%u_grid2d%jms:this%u_grid2d%jme)
+        temp(this%ids,this%jds:this%jde) = temp(this%ids+1,this%jds:this%jde)
+        temp(this%ide+1,this%jds:this%jde) = temp(this%ide,this%jds:this%jde)
         
+        h2_u = temp(this%u_grid2d%ims:this%u_grid2d%ime, this%u_grid2d%jms:this%u_grid2d%jme)
         do i =1,options%parameters%terrain_smooth_cycles
           call smooth_array( temp, windowsize = options%parameters%terrain_smooth_windowsize)
         enddo
@@ -2371,6 +2400,8 @@ contains
         deallocate(temp)
         allocate(temp(this%ids:this%ide,this%jds:this%jde+1))
         call array_offset_y(global_terr, temp)
+        temp(this%ids:this%ide,this%jds) = temp(this%ids:this%ide,this%jds+1)
+        temp(this%ids:this%ide,this%jde+1) = temp(this%ids:this%ide,this%jde)
         h2_v = temp(this%v_grid2d%ims:this%v_grid2d%ime, this%v_grid2d%jms:this%v_grid2d%jme)
         
         do i =1,options%parameters%terrain_smooth_cycles

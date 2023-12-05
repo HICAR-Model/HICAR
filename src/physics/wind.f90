@@ -11,6 +11,8 @@ module wind
 
     use linear_theory_winds, only : linear_perturb
     use wind_iterative,      only : calc_iter_winds
+    use wind_iterative_old,      only : calc_iter_winds_old
+
     !use mod_blocking,        only : update_froude_number, initialize_blocking
     use data_structures
     use exchangeable_interface,   only : exchangeable_t
@@ -230,7 +232,6 @@ contains
             v_met(:,:,jme+1) = v(:,:,jme+1) * jaco_v(:,:,jme+1) * (1.5*rho(:,:,jme) - 0.5*rho(:,:,jme-1))
 
             rho_i(:,kms:kme-1,:) = ( rho(:,kms:kme-1,:)*dz(:,kms+1:kme,:) + rho(:,kms+1:kme,:)*dz(:,kms:kme-1,:) ) / (dz(:,kms:kme-1,:)+dz(:,kms+1:kme,:))
-
         else
             u_met = u * jaco_u
             v_met = v * jaco_v
@@ -317,7 +318,7 @@ contains
         type(options_t),intent(in)    :: options
 
         real, allocatable, dimension(:,:,:) :: div, w_temp
-        integer :: nx, ny, nz
+        integer :: nx, ny, nz, it
         logical :: update
         type(variable_t) :: forcing_var
         
@@ -387,7 +388,7 @@ contains
         call update_stability(domain)
 
         ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
-        !call make_winds_grid_relative(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%sintheta, domain%costheta)
+        call make_winds_grid_relative(domain%u%meta_data%dqdt_3d, domain%v%meta_data%dqdt_3d, domain%sintheta, domain%costheta)
 
         call domain%u%exchange_x(do_metadata=.True.)
         call domain%v%exchange_y(do_metadata=.True.)
@@ -452,12 +453,14 @@ contains
 
                 !If we have not read in W_real from forcing, set target w_real to 0.0. This minimizes vertical motion in solution
                 if (options%parameters%wvar=="") then
-                    w_temp = domain%w%meta_data%dqdt_3d - 0*(0-domain%w%meta_data%dqdt_3d)/domain%jacobian
+                    w_temp = domain%w%meta_data%dqdt_3d !+ (0-domain%w%meta_data%dqdt_3d)/domain%jacobian
                     domain%w%meta_data%dqdt_3d = -domain%w%meta_data%dqdt_3d
                 else
-                    w_temp = domain%w%meta_data%dqdt_3d - (domain%w_real%dqdt_3d-domain%w%meta_data%dqdt_3d)/domain%jacobian
+                    w_temp = domain%w%meta_data%dqdt_3d + (domain%w_real%dqdt_3d-domain%w%meta_data%dqdt_3d)/domain%jacobian
                     domain%w%meta_data%dqdt_3d = (domain%w_real%dqdt_3d-domain%w%meta_data%dqdt_3d)
                 endif
+                if (this_image()==40) call io_write("w_grid_before.nc","w",domain%w%meta_data%dqdt_3d)
+
                 !stagger w, which was just calculated at the mass points, to the vertical k-levels, so that we can calculate divergence with it
                 do i = ims,ime
                     do j = jms, jme
@@ -468,28 +471,22 @@ contains
                         enddo
                     enddo
                 enddo
-
-
-                if (domain%east_boundary .and. domain%grid%yimg==8) call io_write("w_real.nc", "w_real", domain%w%meta_data%dqdt_3d)
-
-
+                                
                 call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
                                 domain%density%data_3d,options,horz_only=.False.)
-                if (domain%east_boundary .and. domain%grid%yimg==8) call io_write("div_before.nc", "horz_div", div)
-
-                call calc_iter_winds(domain,domain%alpha%data_3d,div,w_temp,options%parameters%advect_density,update_in=.True.)
+                domain%froude%data_3d = div
                 
+                call calc_iter_winds(domain,domain%alpha%data_3d,div,w_temp,options%parameters%advect_density,update_in=.True.)
+                !call calc_iter_winds_old(domain,domain%alpha%data_3d,div,w_temp,options%parameters%advect_density,update_in=.True.)
+
+                w_temp = min(max(sqrt(domain%dzdy**2/(domain%dzdy**2+domain%dzdx**2+0.0001)),0.0),1.0)
                 call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
                                 domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
                                 domain%density%data_3d,options,horz_only=.False.)
-                if (domain%east_boundary .and. domain%grid%yimg==8) call io_write("div.nc", "div", div)
+                domain%alpha%data_3d = div
 
-                call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
-                                domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
-                                domain%density%data_3d,options,horz_only=.True.)
-                if (domain%east_boundary .and. domain%grid%yimg==8) call io_write("horz_div.nc", "horz_div", div)
-
+                if (this_image()==40) call io_write("div.nc","div",div)                
 
             endif
         elseif (options%physics%windtype==kOBRIEN_WINDS) then
@@ -596,13 +593,13 @@ contains
         real, dimension(i_s:i_e,j_s:j_e+1) :: vw
 
         !calculate the real vertical motions (including U*dzdx + V*dzdy)
-        lastw = 0
+        lastw = 0!w_grid(i_s:i_e, kms, j_s:j_e) * jaco_w(i_s:i_e, kms, j_s:j_e)
         do z = kms, kme
             
             ! compute the U * dz/dx component of vertical motion
-            uw    = u(i_s:i_e+1,   z, j_s:j_e) * dzdx_u(i_s:i_e+1,z,j_s:j_e)
+            uw    = u(i_s:i_e+1,   z, j_s:j_e) !* dzdx_u(i_s:i_e+1,z,j_s:j_e)
             ! compute the V * dz/dy component of vertical motion
-            vw    = v(i_s:i_e, z,   j_s:j_e+1) * dzdy_v(i_s:i_e,z,j_s:j_e+1)
+            vw    = v(i_s:i_e, z,   j_s:j_e+1) !* dzdy_v(i_s:i_e,z,j_s:j_e+1)
 
             ! the W grid relative motion
             currw = w_grid(i_s:i_e, z, j_s:j_e) * jaco_w(i_s:i_e, z, j_s:j_e)
@@ -613,8 +610,8 @@ contains
             
             ! compute the real vertical velocity of air by combining the different components onto the mass grid
             ! includes vertical interpolation between w_z-1/2 and w_z+1/2
-            w_real(i_s:i_e, z, j_s:j_e) = (uw(i_s:i_e,:) + uw(i_s+1:i_e+1,:))*0.5 &
-                                                 +(vw(:,j_s:j_e) + vw(:,j_s+1:j_e+1))*0.5 &
+            w_real(i_s:i_e, z, j_s:j_e) = dzdx(i_s:i_e, z, j_s:j_e)*(uw(i_s:i_e,:) + uw(i_s+1:i_e+1,:))*0.5 &
+                                                 +dzdy(i_s:i_e, z, j_s:j_e)*(vw(:,j_s:j_e) + vw(:,j_s+1:j_e+1))*0.5 &
                                                  +(lastw + currw) * 0.5
             lastw = currw ! could avoid this memcopy cost using pointers or a single manual loop unroll
         end do
