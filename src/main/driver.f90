@@ -48,7 +48,7 @@ program icar
     type(ioclient_t)  :: ioclient
     real, allocatable :: write_buffer(:,:,:,:)[:], read_buffer(:,:,:,:)[:]
 
-    type(timer_t)   :: initialization_timer, total_timer, input_timer, output_timer, physics_timer, wind_timer, mp_timer, adv_timer, rad_timer, lsm_timer, pbl_timer, exch_timer, send_timer, ret_timer, wait_timer, forcing_timer, diagnostic_timer, wind_bal_timer
+    type(timer_t)   :: io_timer, initialization_timer, total_timer, input_timer, output_timer, physics_timer, wind_timer, mp_timer, adv_timer, rad_timer, lsm_timer, pbl_timer, exch_timer, send_timer, ret_timer, wait_timer, forcing_timer, diagnostic_timer, wind_bal_timer
     type(Time_type) :: next_output, next_input
     type(time_delta_t) :: small_time_delta
     
@@ -56,6 +56,7 @@ program icar
     integer :: sleep_cnt, ev_cnt, end_ev_cnt
     real :: t_val
     logical :: init_flag
+
 
     !Initialize MPI if needed
     init_flag = .False.
@@ -216,7 +217,8 @@ program icar
             if (this_image()==1) write(*,*) "   End  time = ", trim(options%parameters%end_time%as_string())
             if (this_image()==1) write(*,*) "  Next Input = ", trim(next_input%as_string())
             if (this_image()==1) write(*,*) "  Next Output= ", trim(next_output%as_string())
-
+            if (this_image()==1) flush(output_unit)
+            
             ! this is the meat of the model physics, run all the physics for the current time step looping over internal timesteps
             if (.not.(options%wind%wind_only)) then
                 call physics_timer%start()
@@ -269,10 +271,11 @@ program icar
 
         if (options%physics%windtype==kITERATIVE_WINDS) call finalize_iter_winds() 
     case (kIO_TEAM)
-
+    
+        call io_timer%start()
         call EVENT_QUERY(end_ev,end_ev_cnt)
 
-        do while (end_ev_cnt < ioserver%n_children)
+        do while (end_ev_cnt < ioserver%n_children .and. io_timer%get_time() < 600.)
             !See of it is time to read
             call EVENT_QUERY(child_read_ev,ev_cnt)
             if (ev_cnt == ioserver%n_children .and. next_input<=options%parameters%end_time) then
@@ -286,6 +289,9 @@ program icar
                 enddo
 
                 next_input = next_input + options%io_options%input_dt
+                
+                call io_timer%reset()
+                call io_timer%start()
             endif
 
             
@@ -300,11 +306,13 @@ program icar
                     EVENT POST (written_ev[ioserver%children(i)])
                 enddo 
                 next_output = next_output + options%io_options%output_dt
+                
+                call io_timer%reset()
+                call io_timer%start()
             endif
             
             !See if it is time to end
             call EVENT_QUERY(end_ev,end_ev_cnt)
-
         enddo
         !If we are done with the program
         call ioserver%close_files()
@@ -523,6 +531,7 @@ contains
                 else
                     print*,"  frames per output file= ", options%io_options%frames_per_outfile
                 end if
+                flush(output_unit)
             endif
 
             !Contribute k-extents for wrie variables, in case we had to expand beyond the domain k extent due to a large soil variable
