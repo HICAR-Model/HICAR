@@ -34,9 +34,6 @@
     decay_rate_S_topo = 6
     sleve_n = 1.35
 
-    !   Option to use the difference between forcing (lo-res) and hi-res terrain for terrain induced wind speedup (wind=2)
-    use_terrain_difference = .True.
-
     !   Sample model level thickness [m]  Bottom levels could be thicker.
     !   NB: if using gfortran put all on one line
     dz_levels = 50.,   75.,  125.,  200.,  300.,  400.,  500.,  500.,  500.,  500.,  500.,  500.,  500.,  500.,  500.,  500.,  500.,  500.,  500.,  500.,    ! 1-20
@@ -115,6 +112,12 @@
     ! Land Surface Model
     lsm = 1,   ! 1=use prescribed fluxes    2=Simple LSM (N/A)          3=Noah LSM                   4=NoahMP
 
+    ! Snow Model
+    sm  = 0,   ! 1=FSM2oshd
+    
+    ! Surface layer scheme
+    sfc = 1,   ! 1=Revised MM5
+
     ! Open water fluxes
     water=1,  ! 1=use prescribed (w/lsm=1) 2=Simple sea surface fluxes  3=Lake model
 
@@ -131,7 +134,7 @@
     adv = 1,  ! 1=Standard                 2=MPDATA                     3=Adams-Bashforth (wishlist)
 
     ! Wind field calculations
-    wind = 0    ! 1=Linear Theory          2=Grid-deformed winds        3=O'Brien iterative winds    4=PETSc solver  5=Linear+O'brien iterative  6=Linear+PETSc solver
+    wind = 0    ! 1=Linear Theory          2=O'Brien iterative winds    3=PETSc solver  4=Linear+O'brien iterative  5=Linear+PETSc solver
 
 /
 
@@ -296,7 +299,11 @@
     use_bias_correction = false
     !   Read parameters for experimental blocked flow parameterization
     use_block_options = false
-
+    !   Read parameters for PBL scheme
+    use_pbl_options = true
+    !   Read parameters for surface layer scheme
+    use_sfc_options = true
+    !   Read parameters for convection/cumulus parameterizations
     use_cu_options = false
 /
 
@@ -410,6 +417,29 @@
    icloud=3
    read_ghg=.True.
    use_simple_sw=True
+   cldovrlp=2    ! how RRTMG considers cloud overlapping (1 = random, 2 = maximum-random, 3 = maximum, 4 = exponential, 5 = exponential-random)
+/
+
+!---------------------------------------------------------
+!  Optionally specified PBL parameters
+!---------------------------------------------------------
+&pbl_parameters
+   ysu_topdown_pblmix = 1 ! turns on top-down mixing of YSU PBL scheme driven by radiative cloud heating (https://doi.org/10.1175/WAF-D-17-0109.1)
+/
+
+!---------------------------------------------------------
+!  Optionally specified surface layer scheme parameters
+!---------------------------------------------------------
+&sfc_parameters
+    isfflx = 1 ! controls the output of exchange coefficients, and fluxes if scm_force_flux is also turned on
+               ! turning off results in only psi parameters being calculated (0 = off, 1 = on <-- recommended)
+    scm_force_flux = 0 ! If the surfaye layer scheme should output surface fluxes (0 = yes, 1 = no).
+                       ! Turning on the LSM switches this option to 1 by default
+    iz0tlnd = 1 !thermal roughness length for sfclay (0 = old, 1 = veg dependent Chen-Zhang Czil,
+                !                                     2 = Zilitinkevitch (czil=0.1))
+    isftcflx = 0 ! alternative Ck, Cd formulation for tropical storm application 
+                 ! not really used/tested for HICAR, consult WRF documentation/namelist README for more information
+    sbrlim = 0.2 ! limits the maximum bulk richardson number possible under stable conditions
 /
 
 !---------------------------------------------------------
