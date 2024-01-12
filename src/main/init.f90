@@ -32,7 +32,9 @@ module initialization
     use mod_atm_utilities,          only : init_atm_utilities
     use wind,                       only : update_winds, init_winds
     use linear_theory_winds,        only : setup_linwinds
-    use wind_iterative,             only : init_iter_winds
+    use wind_iterative_old,         only : init_iter_winds_old
+    use wind_iterative,         only : init_iter_winds
+
     use icar_constants,             only : kITERATIVE_WINDS, kWIND_LINEAR
     use ioclient_interface,         only : ioclient_t
     use time_step,                  only : init_time_step
@@ -88,6 +90,7 @@ contains
         call init_atm_utilities(options)
 
         if (options%physics%windtype==kITERATIVE_WINDS .or. options%physics%windtype==kLINEAR_ITERATIVE_WINDS) then
+            call init_iter_winds_old(domain)
             call init_iter_winds(domain)
         endif
         if (options%physics%windtype==kWIND_LINEAR .or. &
