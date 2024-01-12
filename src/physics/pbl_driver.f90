@@ -243,7 +243,7 @@ contains
                     ,rqvblten=domain%tend%qv_pbl            & ! i/o
                     ,rqcblten=domain%tend%qc_pbl            & ! i/o
                     ,rqiblten=domain%tend%qi_pbl            & ! i/o
-                    ,flag_qi=.True.                         & ! not used in ysu code, so can be whatever?
+                    ,flag_qi=.True.                         &
                     ,cp=cp                                  &
                     ,g=gravity                              &
                     ,rovcp=rcp                            & ! rovcp = Rd/cp
@@ -256,8 +256,8 @@ contains
                     ,znt=domain%roughness_z0%data_2d       &  ! i/o -- znt		roughness length (m) (input only)
                     ,ust=domain%ustar                       & ! i/o -- ust		u* in similarity theory (m/s)
                     ,hpbl=domain%hpbl%data_2d               & ! i/o -- hpbl	pbl height (m) - intent(inout)
-                    ,psim=domain%fm%data_2d               & !-- psim        similarity stability function for momentum - intent(in)
-                    ,psih=domain%fh%data_2d               & !-- psih        similarity stability function for heat- intent(in)
+                    ,psim=domain%psim%data_2d               & !-- psim        similarity stability function for momentum - intent(in)
+                    ,psih=domain%psih%data_2d               & !-- psih        similarity stability function for heat- intent(in)
                     ,xland=real(domain%land_mask)                               &
                     ,hfx=domain%sensible_heat%data_2d                     & !  HFX  - net upward heat flux at the surface (W/m^2)
                     ,qfx=domain%qfx%data_2d           & !  QFX  - net upward moisture flux at the surface (kg/m^2/s)

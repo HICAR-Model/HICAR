@@ -566,19 +566,24 @@ CONTAINS
       DO 320 I=its,ite
 !                                                                           
       if (br(I).gt.0) then
-        if (br(I).gt.50.0) br(I) = 50.0
+        if (br(I).gt.SBRLIM) then
+        zol(I)=zolri(SBRLIM,ZA(I),ZNT(I))
+        else
         zol(I)=zolri(br(I),ZA(I),ZNT(I))
+        endif
       endif
 !
       if (br(I).lt.0) then
        IF(UST(I).LT.0.001)THEN
-          ZOL(I)=max(BR(I)*GZ1OZ0(I),-1.)
+          ZOL(I)=BR(I)*GZ1OZ0(I)
         ELSE
-        if (br(I).lt.-50.0) br(I) = -50.0
+        if (br(I).lt.-SBRLIM) then
+        zol(I)=zolri(-SBRLIM,ZA(I),ZNT(I))
+        else
         zol(I)=zolri(br(I),ZA(I),ZNT(I))
+        endif
        ENDIF
-      endif
-!
+      endif!
 ! ... paj: compute integrated similarity functions.
 !
         zolzz=zol(I)*(za(I)+znt(I))/za(I) ! (z+z0/L
@@ -1205,12 +1210,10 @@ CONTAINS
    END SUBROUTINE shalwater_init
 
       function zolri(ri,z,z0)
-      real, intent(inout) :: ri
+      real, intent(in) :: ri
       real, intent(in)    :: z, z0
       real    :: x1, x2, fx1, fx2, zolri
       integer :: iter
-
-      if (ri.gt.SBRLIM) ri = SBRLIM
 
 !
       if (ri.lt.0.)then
