@@ -177,7 +177,7 @@ contains
             write(*,*) "Umax = ", maxval(abs(u))
             write(*,*) "Vmax = ", maxval(abs(v))
             write(*,*) "Wmax = ", maxval(abs(w))
-            stop "ERROR time step too small"
+            error stop "ERROR time step too small"
         endif
 
     end function compute_dt
