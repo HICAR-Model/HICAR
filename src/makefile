@@ -208,7 +208,7 @@ endif
 
 # Cray fortran
 ifeq ($(COMPILER), cray)
-	COMP= -h noomp -O3 -hpl=my_program_O3.pl -c -eI
+	COMP= -h noomp -O2 -c -eI
 	LINK= -fopenmp
 	PREPROC= -eZ
 	MODOUTPUT= -J $(BUILD) -em
@@ -242,7 +242,7 @@ ifeq ($(MODE), debug)
 		LINK=
 	endif
 	ifeq ($(COMPILER), cray)
-		COMP=-h noomp -c -G1 -R cp
+		COMP=-h noomp -c -eI -g -R cpbs
 		LINK=-h noomp
 		PREPROC=-eZ
 		MODOUTPUT=-e m -J $(BUILD)
@@ -419,6 +419,7 @@ OBJS=	\
 		$(BUILD)output_obj.o		\
 		$(BUILD)wind.o				\
 		$(BUILD)wind_iterative.o        \
+		$(BUILD)wind_iterative_old.o        \
 		$(BUILD)wind_surf.o		\
 		$(BUILD)wind_thermal.o          \
 		$(BUILD)linear_winds.o		\
@@ -780,7 +781,7 @@ $(BUILD)domain_obj.o: $(OBJECTS)domain_obj.f90 $(BUILD)domain_h.o $(BUILD)option
 
 $(BUILD)init.o:$(MAIN)init.f90 $(BUILD)data_structures.o $(BUILD)options_h.o $(BUILD)domain_h.o $(BUILD)boundary_h.o $(BUILD)icar_constants.o\
 	 				$(BUILD)mp_driver.o $(BUILD)time_step.o $(BUILD)advection_driver.o $(BUILD)atm_utilities.o $(BUILD)wind.o $(BUILD)ra_driver.o \
-					$(BUILD)pbl_driver.o $(BUILD)cu_driver.o $(BUILD)lsm_driver.o $(BUILD)sfc_driver.o $(BUILD)io_routines.o $(BUILD)wind_iterative.o
+					$(BUILD)pbl_driver.o $(BUILD)cu_driver.o $(BUILD)lsm_driver.o $(BUILD)sfc_driver.o $(BUILD)io_routines.o $(BUILD)wind_iterative.o $(BUILD)wind_iterative_old.o
 
 $(BUILD)time_step.o:$(MAIN)time_step.f90 $(BUILD)data_structures.o $(BUILD)wind.o $(BUILD)string.o 	\
 					$(BUILD)advection_driver.o $(BUILD)mp_driver.o $(BUILD)domain_h.o $(BUILD)boundary_h.o \
@@ -982,14 +983,15 @@ $(BUILD)adv_mpdata.o:$(PHYS)adv_mpdata.f90 $(PHYS)adv_mpdata_FCT_core.f90 $(BUIL
 ###################################################################
 $(BUILD)wind.o:$(PHYS)wind.f90  $(BUILD)atm_utilities.o $(BUILD)data_structures.o $(BUILD)boundary_h.o $(BUILD)exchangeable_h.o \
 				$(BUILD)domain_h.o $(BUILD)variable_h.o $(BUILD)wind_iterative.o $(BUILD)options_h.o $(BUILD)linear_winds.o \
-				$(BUILD)wind_surf.o $(BUILD)wind_thermal.o
+				$(BUILD)wind_surf.o $(BUILD)wind_thermal.o $(BUILD)wind_iterative_old.o
 
 $(BUILD)wind_surf.o:$(PHYS)wind_surf.f90 $(BUILD)data_structures.o $(BUILD)atm_utilities.o $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)io_routines.o
 
 $(BUILD)wind_thermal.o:$(PHYS)wind_thermal.f90 $(BUILD)data_structures.o $(BUILD)atm_utilities.o $(BUILD)wrf_constants.o $(BUILD)domain_h.o $(BUILD)options_h.o $(BUILD)io_routines.o
 
 ifdef PETSC_DIR
-$(BUILD)wind_iterative.o:$(PHYS)wind_iterative.f90  $(BUILD)domain_h.o $(BUILD)io_routines.o
+$(BUILD)wind_iterative.o:$(PHYS)wind_iterative.f90  $(BUILD)domain_h.o $(BUILD)array_utilities.o $(BUILD)io_routines.o
+$(BUILD)wind_iterative_old.o:$(PHYS)wind_iterative_old.f90  $(BUILD)domain_h.o $(BUILD)io_routines.o
 endif
 
 #########################
