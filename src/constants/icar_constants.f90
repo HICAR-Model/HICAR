@@ -226,6 +226,7 @@ module icar_constants
         integer :: snow_height
         integer :: snow_nlayers
         integer :: soil_water_content
+        integer :: soil_water_content_liq
         integer :: eq_soil_moisture
         integer :: smc_watertable_deep
         integer :: recharge
@@ -319,6 +320,7 @@ module icar_constants
         integer :: csol3d
         integer :: tkmg3d
         integer :: lakemask
+        integer :: xice
         integer :: zi3d
         integer :: tksatu3d
         integer :: tkdry3d
@@ -360,7 +362,8 @@ module icar_constants
                                                             251, 252, 253, 254, 255, 256, 257, 258, 259, 260,  &
                                                             261, 262, 263, 264, 265, 266, 267, 268, 269, 270,  &
                                                             271, 272, 273, 274, 275, 276, 277, 278, 279, 280,  &
-                                                            281, 282, 283, 284, 285, 286, 287, 288, 289)
+                                                            281, 282, 283, 284, 285, 286, 287, 288, 289, 290,  &
+                                                            291)
 
     integer, parameter :: kINTEGER_BITS     = storage_size(kINTEGER_BITS)
     integer, parameter :: kMAX_STORAGE_VARS = storage_size(kVARS) / kINTEGER_BITS

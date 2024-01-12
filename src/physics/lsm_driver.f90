@@ -65,7 +65,7 @@ module land_surface
     ! also avoids adding LOTS of LSM variables to the main domain datastrucurt
     real,allocatable, dimension(:,:)    :: SMSTAV,SFCRUNOFF,UDRUNOFF, SW,                           &
                                            SNOW,SNOWC,SNOWH, ACSNOW, ACSNOM, SNOALB,           &
-                                           QGH, GSW, ALBEDO, ALBBCK, Z0, XICE,               &
+                                           QGH, GSW, ALBEDO, ALBBCK, Z0,               &
                                            EMBCK, QSFC, CPM, SR, CHS, CHS2, CQS2,                   &
                                            CHKLOWQ, LAI, QZ0, VEGFRAC, SHDMIN,SHDMAX,SNOTIME,SNOPCX,&
                                            POTEVP,RIB, NOAHRES,FLX4_2D,FVB_2D,FBUR_2D,              &
@@ -76,7 +76,7 @@ module land_surface
     integer,allocatable, dimension(:,:) :: rain_bucket ! used to start the previous time step rain bucket
 
     logical :: MYJ, FRPCPN,ua_phys,RDLAI2D,USEMONALB
-    real,allocatable, dimension(:,:,:)  :: SH2O,SMCREL
+    real,allocatable, dimension(:,:,:)  :: SMCREL
     real,allocatable, dimension(:,:)    :: dTemp,lhdQV, windspd
     real,allocatable, dimension(:)      :: Zs,DZs
     real :: XICE_THRESHOLD
@@ -134,7 +134,7 @@ contains
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%ustar,        &
-                         kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2,                                                  &
+                         kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2, kVARS%soil_water_content_liq,                    &
                          kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg, kVARS%albedo,                          &
                          kVARS%veg_type, kVARS%soil_type, kVARS%land_mask, kVARS%land_emissivity])
 
@@ -146,9 +146,9 @@ contains
                          kVARS%longwave, kVARS%canopy_water, kVARS%snow_water_equivalent,                               &
                          kVARS%skin_temperature, kVARS%soil_water_content, kVARS%soil_temperature, kVARS%terrain,       &
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
-                         kVARS%snow_height, kVARS%QFX,  kVARS%land_emissivity,                                          &  ! BK 2020/10/26
+                         kVARS%snow_height, kVARS%QFX,  kVARS%land_emissivity, kVARS%soil_water_content_liq,            &  ! BK 2020/10/26
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
-                         kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0])!, kVARS%veg_type])    ! BK uncommented 2021/03/20
+                         kVARS%soil_totalmoisture, kVARS%roughness_z0])!, kVARS%veg_type])    ! BK uncommented 2021/03/20
                          ! kVARS%soil_type, kVARS%land_mask, kVARS%vegetation_fraction]
         endif
 
@@ -193,7 +193,7 @@ contains
                          kVARS%snow_layer_ice, kVARS%snow_layer_liquid_water, kVARS%soil_texture_1, kVARS%gecros_state, &
                          kVARS%soil_texture_2, kVARS%soil_texture_3, kVARS%soil_texture_4, kVARS%soil_sand_and_clay,    &
                          kVARS%vegetation_fraction_out, kVARS%latitude, kVARS%longitude, kVARS%cosine_zenith_angle,     &
-                         kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2,                                                  &
+                         kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2, kVARS%soil_water_content_liq, kVARS%xice,        &
                          kVARS%veg_type, kVARS%soil_type, kVARS%land_mask, kVARS%land_emissivity])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
@@ -206,7 +206,15 @@ contains
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
                          kVARS%snow_height, kVARS%canopy_water_ice, kVARS%canopy_vapor_pressure, kVARS%canopy_temperature,    &  ! BK 2020/10/26
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
-                         kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0])!, kVARS%veg_type])    ! BK uncommented 2021/03/20
+                         kVARS%soil_totalmoisture, kVARS%roughness_z0,                                                  &
+                         kVARS%ground_surf_temperature, kVARS%snow_nlayers, kVARS%veg_leaf_temperature,                 &
+                         kVARS%canopy_water_liquid, kVARS%coeff_momentum_drag, kVARS%chs, kVARS%canopy_fwet,            &
+                         kVARS%mass_leaf, kVARS%mass_root, kVARS%mass_stem, kVARS%mass_wood, kVARS%snow_water_eq_prev,  &
+                         kVARS%snow_albedo_prev, kVARS%snow_temperature, kVARS%snow_layer_depth,  kVARS%snow_layer_ice, &
+                         kVARS%snow_layer_liquid_water,kVARS%snowfall_ground, kVARS%rainfall_ground, kVARS%storage_lake,&
+                         kVARS%storage_gw, kVARS%water_table_depth, kVARS%water_aquifer, kVARS%soil_carbon_fast,        &
+                         kVARS%soil_carbon_stable, kVARS%lai, kVARS%sai, kVARS%soil_water_content_liq, kVARS%xice,      &
+                         kVARS%mass_ag_grain, kVARS%growing_degree_days])!, kVARS%veg_type])    ! BK uncommented 2021/03/20
                          ! kVARS%soil_type, kVARS%land_mask, kVARS%vegetation_fraction]
         endif
 
@@ -221,7 +229,7 @@ contains
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0, kVARS%ustar,        &
-                         kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg,                                        &
+                         kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg, kVARS%slope_angle,                     &
                          kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2, kVARS%land_emissivity,                           &
                          kVARS%veg_type, kVARS%soil_type, kVARS%land_mask, kVARS%snowfall, kVARS%albedo,                &
                          kVARS%runoff_tstep, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow,   &
@@ -268,7 +276,7 @@ contains
             kVARS%ground_heat_flux, kVARS%snow_water_equivalent, kVARS%t_lake3d, kVARS%dz_lake3d,                   &
             kVARS%t_soisno3d, kVARS%h2osoi_ice3d, kVARS%h2osoi_liq3d, kVARS%h2osoi_vol3d, kVARS%z3d,                &
             kVARS%dz3d, kVARS%watsat3d, kVARS%csol3d, kVARS%tkmg3d, kVARS%lakemask, kVARS%zi3d,                     &
-            kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2, kVARS%land_emissivity,                                    &
+            kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2, kVARS%land_emissivity, kVARS%xice,                        &
             kVARS%tksatu3d, kVARS%tkdry3d, kVARS%snl2d, kVARS%t_grnd2d,  kVARS%savedtke12d, kVARS%lakedepth2d,      & !  kVARS%snowdp2d, kVARS%h2osno2d,
             kVARS%lake_icefrac3d, kVARS%z_lake3d,kVARS%water_vapor, kVARS%potential_temperature     ])
 
@@ -281,7 +289,7 @@ contains
             kVARS%ground_heat_flux, kVARS%snow_water_equivalent, kVARS%t_lake3d, kVARS%dz_lake3d,                   &
             kVARS%t_soisno3d, kVARS%h2osoi_ice3d, kVARS%h2osoi_liq3d, kVARS%h2osoi_vol3d, kVARS%z3d,                &
             kVARS%dz3d, kVARS%watsat3d, kVARS%csol3d, kVARS%tkmg3d, kVARS%lakemask, kVARS%zi3d,                     &
-            kVARS%QFX, kVARS%land_emissivity,                                                                       &
+            kVARS%QFX, kVARS%land_emissivity, kVARS%xice,                                                           &
             kVARS%tksatu3d, kVARS%tkdry3d, kVARS%snl2d, kVARS%t_grnd2d, kVARS%savedtke12d, kVARS%lakedepth2d,       & !kVARS%snowdp2d, kVARS%h2osno2d,
             kVARS%lake_icefrac3d, kVARS%z_lake3d,kVARS%water_vapor, kVARS%potential_temperature ])
         endif
@@ -589,8 +597,6 @@ contains
         ALBEDO = 0.17
         allocate(ALBBCK(ims:ime,jms:jme))
         ALBBCK = 0.17 !?
-        allocate(XICE(ims:ime,jms:jme))
-        XICE = 0
         allocate(EMBCK(ims:ime,jms:jme))
         EMBCK = 0.99
         allocate(CPM(ims:ime,jms:jme))
@@ -638,9 +644,6 @@ contains
         MYJ = .false.
         FRPCPN = .false. ! set this to true and calculate snow ratio to use microphysics based snow/rain partitioning
         ua_phys = .false.
-
-        allocate(SH2O(ims:ime,num_soil_layers,jms:jme))
-        SH2O = 0.25
 
         allocate(Zs(num_soil_layers))
         allocate(DZs(num_soil_layers))
@@ -756,29 +759,23 @@ contains
             stop "Simple LSM not settup, choose a different LSM options"
             ! call lsm_simple_init(domain,options)
         endif
+        
+        if (options%parameters%rho_snow_ext /="" .AND. options%parameters%swe_ext /="") then
+            FNDSNOWH = .True.
+            if (this_image()==1) write(*,*) "    Find snow height in file i.s.o. calculating them from SWE: FNDSNOWH=", FNDSNOWH
+        elseif(options%parameters%hsnow_ext /="" ) then  ! read in external snowheight if supplied
+            FNDSNOWH= .True.
+            if (this_image()==1) write(*,*) "    Find snow height in file i.s.o. calculating them from SWE: FNDSNOWH=", FNDSNOWH
+        elseif(options%parameters%snowh_var /="" .or. options%parameters%swe_var /="") then 
+            FNDSNOWH= .True.
+            if (this_image()==1) write(*,*) "    Find snow height in file i.s.o. calculating them from SWE: FNDSNOWH=", FNDSNOWH
+        else
+            FNDSNOWH=.False. ! calculate SNOWH from SNOW
+        endif
+
         ! Noah Land Surface Model
         if (options%physics%landsurface==kLSM_NOAH) then
             if (this_image()==1) write(*,*) "    Noah LSM"
-
-            ! if (this_image()==1) then
-            !     write(*,*) "    options%parameters%external_files: ", trim(options%parameters%external_files)
-            !     write(*,*) "    options%parameters%restart: ", options%parameters%restart
-            !     write(*,*) "    options%parameters%rho_snow_ext ", trim(options%parameters%rho_snow_ext)
-            !     write(*,*) "    options%parameters%swe_ext ", trim(options%parameters%swe_ext )
-            ! endif
-
-            if (options%parameters%rho_snow_ext /="" .AND. options%parameters%swe_ext /="") then ! calculate snowheight from external swe and density, but only if both are provided. (Swe alone will give FNDSNW = F)
-                FNDSNOWH = .True.
-                if (this_image()==1) write(*,*) "    Find snow height in file i.s.o. calculating them from SWE: FNDSNOWH=", FNDSNOWH
-            elseif(options%parameters%hsnow_ext /="" ) then  ! read in external snowheight if supplied
-                FNDSNOWH= .True.
-                if (this_image()==1) write(*,*) "    Find snow height in file i.s.o. calculating them from SWE: FNDSNOWH=", FNDSNOWH
-            elseif(options%parameters%restart) then   ! If restarting read in snow height, but only if this is in restart file?
-                FNDSNOWH= .True.
-                if (this_image()==1) write(*,*) "    Find snow height in file i.s.o. calculating them from SWE: FNDSNOWH=", FNDSNOWH
-            else
-                FNDSNOWH=.False. ! calculate SNOWH from SNOW
-            endif
 
             !These are still needed for NoahLSM, since it assumes that the exchange coefficients are multiplied by windspeed
             allocate(CHS(ims:ime,jms:jme))
@@ -832,7 +829,7 @@ contains
                                 domain%soil_type,                    &
                                 domain%soil_temperature%data_3d,     &
                                 domain%soil_water_content%data_3d,   &
-                                SH2O,                                &
+                                domain%soil_water_content_liq%data_3d,&
                                 ZS,                                  &
                                 DZS,                                 &
                                 MMINLU,                              &
@@ -856,26 +853,6 @@ contains
         ! Noah-MP Land Surface Model
         if (options%physics%landsurface==kLSM_NOAHMP) then
             if (this_image()==1) write(*,*) "    Noah-MP LSM"
-
-            ! if (this_image()==1) then
-            !     write(*,*) "    options%parameters%external_files: ", trim(options%parameters%external_files)
-            !     write(*,*) "    options%parameters%restart: ", options%parameters%restart
-            !     write(*,*) "    options%parameters%rho_snow_ext ", trim(options%parameters%rho_snow_ext)
-            !     write(*,*) "    options%parameters%swe_ext ", trim(options%parameters%swe_ext )
-            ! endif
-
-            if (options%parameters%rho_snow_ext /="" .AND. options%parameters%swe_ext /="") then ! calculate snowheight from external swe and density, but only if both are provided. (Swe alone will give FNDSNW = F)
-                FNDSNOWH = .True.
-                if (this_image()==1) write(*,*) "    Find snow height in file i.s.o. calculating them from SWE: FNDSNOWH=", FNDSNOWH
-            elseif(options%parameters%hsnow_ext /="" ) then  ! read in external snowheight if supplied
-                FNDSNOWH= .True.
-                if (this_image()==1) write(*,*) "    Find snow height in file i.s.o. calculating them from SWE: FNDSNOWH=", FNDSNOWH
-            elseif(options%parameters%restart) then   ! If restarting read in snow height, but only if this is in restart file?
-                FNDSNOWH= .True.
-                if (this_image()==1) write(*,*) "    Find snow height in file i.s.o. calculating them from SWE: FNDSNOWH=", FNDSNOWH
-            else
-                FNDSNOWH=.False. ! calculate SNOWH from SNOW
-            endif
 
             FNDSOILW=.False. ! calculate SOILW (this parameter is ignored in LSM_NOAH_INIT)
             RDMAXALB=.False.
@@ -951,15 +928,15 @@ contains
                                 domain%latitude%data_2d,                &
                                 domain%soil_temperature%data_3d,        &
                                 domain%soil_water_content%data_3d,      &
-                                SH2O , DZS ,                            &
-                                FNDSOILW , FNDSNOWH ,                   &
+                                domain%soil_water_content_liq%data_3d , &
+                                DZS , FNDSOILW , FNDSNOWH ,             &
                                 domain%skin_temperature%data_2d,        &
-                                domain%snow_nlayers,                    &
+                                int(domain%snow_nlayers%data_2d),       &
                                 domain%veg_leaf_temperature%data_2d,    &
                                 domain%ground_surf_temperature%data_2d, &
                                 domain%canopy_water_ice%data_2d,        &
                                 domain%soil_deep_temperature%data_2d,   &
-                                XICE,                                   &
+                                domain%xice%data_2d,                            &
                                 domain%canopy_water_liquid%data_2d,     &
                                 domain%canopy_vapor_pressure%data_2d,   &
                                 domain%canopy_temperature%data_2d,      &
@@ -1005,7 +982,7 @@ contains
                                 domain%temperature_2m_bare%data_2d,     &
                                 chstarxy,                               &   !doesn't do anything -_-
                                 num_soil_layers,                        &
-                                .False.,                                &    !restart
+                                options%parameters%restart,             &    !restart
                                 .True.,                                 &    !allowed_to_read
                                 IOPT_RUN,  IOPT_CROP, IOPT_IRR, IOPT_IRRM, &
                                 SF_URBAN_PHYSICS,                         &  ! urban scheme
@@ -1043,10 +1020,6 @@ contains
             ! allocate arrays:
             allocate( lake_or_not(ims:ime, jms:jme))
             allocate( TH2( ims:ime, jms:jme ))
-            if( .not.(allocated(XICE))) then
-                allocate(XICE(ims:ime,jms:jme))   ! already allocated for NoahMP, so check?
-                XICE = 0
-            endif
 
             ! ISURBAN = options%lsm_options%urban_category
             ISICE   = options%lsm_options%ice_category
@@ -1120,7 +1093,7 @@ contains
                 ,watsat3d=domain%watsat3d%data_3d               &
                 ,csol3d=domain%csol3d%data_3d                   &
                 ,tkmg3d=domain%tkmg3d%data_3d                   &
-                ,iswater=iswater,       xice=xice,           xice_threshold=xice_threshold                                              &
+                ,iswater=iswater,       xice=domain%xice%data_2d,           xice_threshold=xice_threshold                                              &
                 ,xland=domain%land_mask                         & !-- XLAND         land mask (1 for land, 2 for water)  i/o
                 ,tsk=domain%skin_temperature%data_2d            &
                 ,lakemask=domain%lakemask%data_2d               & ! 2d var that says lake(1) or not lake(0)
@@ -1277,7 +1250,7 @@ contains
                     ,ivgtyp=domain%veg_type                                     &
                     ,HT=domain%terrain%data_2d                                  &
                     ,xland=real(domain%land_mask)                               & !-- XLAND         land mask (1 for land, 2 OR 0 for water)  i/o
-                    ,iswater=iswater,  xice=xice,   xice_threshold=xice_threshold   &
+                    ,iswater=iswater,  xice=domain%xice%data_2d,   xice_threshold=xice_threshold   &
                     ,lake_min_elev=5.                                           & ! if this value is changed, also change it in lake_ini
                     ,ids=ids, ide=ide, jds=jds, jde=jde, kds=kds, kde=kde       &
                     ,ims=ims, ime=ime, jms=jms, jme=jme, kms=kms, kme=kme       &
@@ -1408,7 +1381,7 @@ contains
                             Z0,                                           &
                             domain%soil_deep_temperature%data_2d,         &
                             real(domain%land_mask),                       &
-                            XICE,                                         &
+                            domain%xice%data_2d,                                  &
                             domain%land_emissivity%data_2d,               &
                             EMBCK,                                        &
                             SNOWC,                                        &
@@ -1433,7 +1406,7 @@ contains
                             domain%lai%data_2d,                           &
                             qz0,                                          & !H
                             myj,frpcpn,                                   &
-                            SH2O,                                         &
+                            domain%soil_water_content_liq%data_3d,        &
                             domain%snow_height%data_2d,                   &     !SNOWH,                                   & !H
                             SNOALB,SHDMIN,SHDMAX,                         & !I
                             SNOTIME,                                      & !?
@@ -1533,7 +1506,7 @@ contains
                              domain%vegetation_fraction_max%data_2d,   &
                              domain%soil_deep_temperature%data_2d,     &
                              real(domain%land_mask),                   &
-                             XICE,                                     &
+                             domain%xice%data_2d,                              &
                              XICE_THRESHOLD,                           &
                              domain%crop_category,                     &  !only used if iopt_crop>0; not currently set up
                              domain%date_planting%data_2d,             &  !only used if iopt_crop>0; not currently set up
@@ -1575,7 +1548,7 @@ contains
                              SFCRUNOFF, UDRUNOFF,                      &
                              ALBEDO, SNOWC,                            &
                              domain%soil_water_content%data_3d,        &
-                             SH2O,                                     &
+                             domain%soil_water_content_liq%data_3d,    &
                              domain%soil_temperature%data_3d,          &
                              nmp_snow,                                 &
                              nmp_snowh,                                &
@@ -1596,7 +1569,7 @@ contains
                              domain%irr_amt_flood%data_2d,             &  ! only used if iopt_irr > 0
                              domain%evap_heat_sprinkler%data_2d,       &  ! only used if iopt_irr > 0
                              landuse_name,                             &
-                             domain%snow_nlayers,                      &
+                             int(domain%snow_nlayers%data_2d),         &
                              domain%veg_leaf_temperature%data_2d,      &
                              domain%ground_surf_temperature%data_2d,   &
                              domain%canopy_water_ice%data_2d,          &
@@ -1714,9 +1687,9 @@ contains
                 call sm_FSM(domain,options,lsm_dt,current_rain,current_snow,windspd)
                 !!
                 
-                do i = 1, num_soil_layers              ! soil
-                   SH2O(its:ite,i,jts:jte) =  domain%soil_water_content%data_3d(its:ite,i,jts:jte)    / (1000. * DZS(i))
-                end do
+                !do i = 1, num_soil_layers              ! soil
+                !   domain%soil_water_content_liq%data_3d(its:ite,i,jts:jte) =  domain%soil_water_content%data_3d(its:ite,i,jts:jte)    / (1000. * DZS(i))
+                !end do
                 
                 !if (.not. options%lsm_options%surface_diagnostics) then
                 !    domain%temperature_2m%data_2d = domain%temperature%data_3d(:,kms,:)

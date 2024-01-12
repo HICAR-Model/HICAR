@@ -200,6 +200,7 @@ contains
         if (0<var_list( kVARS%snow_water_equivalent) )      call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_water_equivalent        )), this%snow_water_equivalent)
         if (0<var_list( kVARS%snow_water_eq_prev) )         call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_water_eq_prev           )), this%snow_water_eq_prev)
         if (0<var_list( kVARS%albedo) )                     call this%vars_to_out%add_var( trim( get_varname( kVARS%albedo                       )), this%albedo)
+        if (0<var_list( kVARS%snow_nlayers) )               call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_nlayers                 )), this%snow_nlayers)
         if (0<var_list( kVARS%snow_albedo_prev) )           call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_albedo_prev             )), this%snow_albedo_prev)
         if (0<var_list( kVARS%snow_temperature) )           call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_temperature             )), this%snow_temperature)
         if (0<var_list( kVARS%snow_layer_depth) )           call this%vars_to_out%add_var( trim( get_varname( kVARS%snow_layer_depth             )), this%snow_layer_depth)
@@ -210,6 +211,7 @@ contains
         if (0<var_list( kVARS%skin_temperature) )           call this%vars_to_out%add_var( trim( get_varname( kVARS%skin_temperature             )), this%skin_temperature)
         if (0<var_list( kVARS%sst) )                        call this%vars_to_out%add_var( trim( get_varname( kVARS%sst                          )), this%sst)
         if (0<var_list( kVARS%soil_water_content) )         call this%vars_to_out%add_var( trim( get_varname( kVARS%soil_water_content           )), this%soil_water_content)
+        if (0<var_list( kVARS%soil_water_content_liq) )     call this%vars_to_out%add_var( trim( get_varname( kVARS%soil_water_content_liq       )), this%soil_water_content_liq)
         if (0<var_list( kVARS%eq_soil_moisture) )           call this%vars_to_out%add_var( trim( get_varname( kVARS%eq_soil_moisture             )), this%eq_soil_moisture)
         if (0<var_list( kVARS%smc_watertable_deep) )        call this%vars_to_out%add_var( trim( get_varname( kVARS%smc_watertable_deep          )), this%smc_watertable_deep)
         if (0<var_list( kVARS%recharge) )                   call this%vars_to_out%add_var( trim( get_varname( kVARS%recharge                     )), this%recharge)
@@ -277,6 +279,7 @@ contains
         if (0<var_list( kVARS%storage_gw) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%storage_gw                   )), this%storage_gw)
         if (0<var_list( kVARS%storage_lake) )               call this%vars_to_out%add_var( trim( get_varname( kVARS%storage_lake                 )), this%storage_lake)
         if (0<var_list( kVARS%roughness_z0) )               call this%vars_to_out%add_var( trim( get_varname( kVARS%roughness_z0                 )), this%roughness_z0)
+        if (0<var_list( kVARS%xice) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%xice                         )), this%xice)
         !if (0<var_list( kVARS%veg_type) )                   call this%vars_to_out%add_var( trim( get_varname( kVARS%veg_type                     )), this%veg_type)
         if (0<var_list( kVARS%mass_leaf) )                  call this%vars_to_out%add_var( trim( get_varname( kVARS%mass_leaf                    )), this%mass_leaf)
         if (0<var_list( kVARS%mass_root) )                  call this%vars_to_out%add_var( trim( get_varname( kVARS%mass_root                    )), this%mass_root)
@@ -1041,6 +1044,7 @@ contains
         if (0<opt%vars_to_allocate( kVARS%sst) )                        call setup(this%sst,                      this%grid2d,   forcing_var=opt%parameters%sst_var,     list=this%variables_to_force, force_boundaries=.False.)
         if (0<opt%vars_to_allocate( kVARS%skin_temperature) )           call setup(this%skin_temperature,         this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%soil_water_content) )         call setup(this%soil_water_content,       this%grid_soil)
+        if (0<opt%vars_to_allocate( kVARS%soil_water_content_liq) )     call setup(this%soil_water_content_liq,   this%grid_soil)
         if (0<opt%vars_to_allocate( kVARS%eq_soil_moisture) )           call setup(this%eq_soil_moisture,         this%grid_soil)
         if (0<opt%vars_to_allocate( kVARS%smc_watertable_deep) )        call setup(this%smc_watertable_deep,      this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%recharge) )                   call setup(this%recharge,                 this%grid2d)
@@ -1169,13 +1173,14 @@ contains
         if (0<opt%vars_to_allocate( kVARS%tksatu3d) )                   call setup(this%tksatu3d,                this%grid_lake_soi )
         if (0<opt%vars_to_allocate( kVARS%tkdry3d) )                    call setup(this%tkdry3d,                 this%grid_lake_soi )
         if (0<opt%vars_to_allocate( kVARS%lakemask) )                   call setup(this%lakemask,                this%grid2d )
+        if (0<opt%vars_to_allocate( kVARS%xice) )                       call setup(this%xice,                    this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%savedtke12d) )                call setup(this%savedtke12d,             this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%lakedepth2d) )                call setup(this%lakedepth2d,             this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%ivt) )                        call setup(this%ivt,                     this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%iwv) )                        call setup(this%iwv,                     this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%iwl) )                        call setup(this%iwl,                     this%grid2d )
         if (0<opt%vars_to_allocate( kVARS%iwi) )                        call setup(this%iwi,                     this%grid2d )
-
+        if (0<opt%vars_to_allocate( kVARS%snow_nlayers) )               call setup(this%snow_nlayers,            this%grid2d )
         ! integer variable_t types aren't available (yet...)
         if (0<opt%vars_to_allocate( kVARS%convective_precipitation) )   allocate(this%cu_precipitation_bucket  (ims:ime, jms:jme),          source=0)
         if (0<opt%vars_to_allocate( kVARS%precipitation) )              allocate(this%precipitation_bucket     (ims:ime, jms:jme),          source=0)
@@ -1183,7 +1188,6 @@ contains
         if (0<opt%vars_to_allocate( kVARS%veg_type) )                   allocate(this%veg_type                 (ims:ime, jms:jme),          source=7)
         if (0<opt%vars_to_allocate( kVARS%soil_type) )                  allocate(this%soil_type                (ims:ime, jms:jme),          source=3)
         if (0<opt%vars_to_allocate( kVARS%land_mask) )                  allocate(this%land_mask                (ims:ime, jms:jme),          source=kLC_LAND)
-        if (0<opt%vars_to_allocate( kVARS%snow_nlayers) )               allocate(this%snow_nlayers             (ims:ime, jms:jme),          source=0)
         if (0<opt%vars_to_allocate( kVARS%crop_category) )              allocate(this%crop_category            (ims:ime, jms:jme),          source=0)
         if (0<opt%vars_to_allocate( kVARS%irr_eventno_sprinkler) )      allocate(this%irr_eventno_sprinkler    (ims:ime, jms:jme),          source=0)
         if (0<opt%vars_to_allocate( kVARS%irr_eventno_micro) )          allocate(this%irr_eventno_micro        (ims:ime, jms:jme),          source=0)
@@ -1561,14 +1565,6 @@ contains
 
         allocate(this%dz_scl( this%kms : this%kme))
 
-        if (options%physics%windtype == kLINEAR_ITERATIVE_WINDS .or. options%physics%windtype == kITERATIVE_WINDS) then
-            allocate(this%dzdxz(this% ims : this% ime, &
-                                this% kms : this% kme, &
-                                this% jms : this% jme) )
-            allocate(this%dzdyz(this% ims : this% ime, &
-                                this% kms : this% kme, &
-                                this% jms : this% jme) )
-        endif
 
         if ( (options%physics%windtype == kWIND_LINEAR) .or. (options%physics%windtype == kLINEAR_OBRIEN_WINDS) .or. &
              (options%physics%windtype == kLINEAR_ITERATIVE_WINDS) ) then
@@ -1840,46 +1836,25 @@ contains
                 jacobian_w(:,i,:) = 1 + h1(ims:ime,jms:jme)*db1_i + h2(ims:ime,jms:jme)*db2_i
                 
                 dzdx(ims+1:ime-1,i,:) = (b1_mass*(h1(ims+2:ime,jms:jme)-h1(ims:ime-2,jms:jme)) + b2_mass*(h2(ims+2:ime,jms:jme)-h2(ims:ime-2,jms:jme)))/(2*this%dx)
-                !dzdx(ims,i,:)   = (-neighbor_z(ims+2,i,:) + 4*neighbor_z(ims+1,i,:) - 3*neighbor_z(ims,i,:) )/(2*this%dx)
-                !dzdx(ime,i,:)   = (neighbor_z(ime-2,i,:) - 4*neighbor_z(ime-1,i,:) + 3*neighbor_z(ime,i,:) )/(2*this%dx)
-                dzdx(ims,i,:)   = dzdx(ims+1,i,:)
-                dzdx(ime,i,:)   = dzdx(ime-1,i,:)
+                dzdx(ims,i,:)   = (-neighbor_z(ims+2,i,jms:jme) + 4*neighbor_z(ims+1,i,jms:jme) - 3*neighbor_z(ims,i,jms:jme) )/(2*this%dx)
+                dzdx(ime,i,:)   = (neighbor_z(ime-2,i,jms:jme) - 4*neighbor_z(ime-1,i,jms:jme) + 3*neighbor_z(ime,i,jms:jme) )/(2*this%dx)
 
                 dzdy(:,i,jms+1:jme-1) = (b1_mass*(h1(ims:ime,jms+2:jme)-h1(ims:ime,jms:jme-2)) + b2_mass*(h2(ims:ime,jms+2:jme)-h2(ims:ime,jms:jme-2)))/(2*this%dx)
-                !dzdy(:,i,jms)   = (-neighbor_z(:,i,jms+2) + 4*neighbor_z(:,i,jms+1) - 3*neighbor_z(:,i,jms) )/(2*this%dx)
-                !dzdy(:,i,jme)   = (neighbor_z(:,i,jme-2) - 4*neighbor_z(:,i,jme-1) + 3*neighbor_z(:,i,jme) )/(2*this%dx)
-                dzdy(:,i,jms)   = dzdy(:,i,jms+1)
-                dzdy(:,i,jme)   = dzdy(:,i,jme-1)
-                !dzdx(:,i,:) = (b1_mass*(h1_u(ims+1:ime+1,jms:jme)-h1_u(ims:ime,jms:jme)) + b2_mass*(h2_u(ims+1:ime+1,jms:jme)-h2_u(ims:ime,jms:jme)))/(this%dx)
-                !dzdy(:,i,:) = (b1_mass*(h1_v(ims:ime,jms+1:jme+1)-h1_v(ims:ime,jms:jme)) + b2_mass*(h2_v(ims:ime,jms+1:jme+1)-h2_v(ims:ime,jms:jme)))/(this%dx)
+                dzdy(:,i,jms)   = (-neighbor_z(ims:ime,i,jms+2) + 4*neighbor_z(ims:ime,i,jms+1) - 3*neighbor_z(ims:ime,i,jms) )/(2*this%dx)
+                dzdy(:,i,jme)   = (neighbor_z(ims:ime,i,jme-2) - 4*neighbor_z(ims:ime,i,jme-1) + 3*neighbor_z(ims:ime,i,jme) )/(2*this%dx)
                 
                 dzdx_u(ims+1:ime,i,:) = (b1_mass*(h1(ims+1:ime,jms:jme)-h1(ims:ime-1,jms:jme))   + b2_mass*(h2(ims+1:ime,jms:jme)-h2(ims:ime-1,jms:jme)))/(this%dx)
                 dzdy_v(:,i,jms+1:jme) = (b1_mass*(h1(ims:ime,jms+1:jme)-h1(ims:ime,jms:jme-1))   + b2_mass*(h2(ims:ime,jms+1:jme)-h2(ims:ime,jms:jme-1)))/(this%dx)
 
-                dzdx_u(ims+1:ime-1,i,:) = (b1_mass*(h1_u(ims+2:ime,jms:jme)-h1_u(ims:ime-2,jms:jme))   + b2_mass*(h2_u(ims+2:ime,jms:jme)-h2_u(ims:ime-2,jms:jme)))/(2*this%dx) !(dzdx(ims+1:ime,i,:)+dzdx(ims:ime-1,i,:))*0.5
                 dzdx_u(ims+1:ime,i,:) = (dzdx(ims:ime-1,i,:)+dzdx(ims+1:ime,i,:))*0.5
                 dzdx_u(ims,i,:)   = dzdx(ims,i,:)*1.5 - dzdx(ims+1,i,:)*0.5
-                !dzdx_u(ime,i,:)   = dzdx(ime,i,:)
                 dzdx_u(ime+1,i,:)   = dzdx(ime,i,:)*1.5 - dzdx(ime-1,i,:)*0.5
 
-                dzdy_v(:,i,jms+1:jme-1) = (b1_mass*(h1_v(ims:ime,jms+2:jme)-h1_v(ims:ime,jms:jme-2))   + b2_mass*(h2_v(ims:ime,jms+2:jme)-h2_v(ims:ime,jms:jme-2)))/(2*this%dx)!(dzdy(:,i,jms+1:jme)+dzdy(:,i,jms:jme-1))*0.5
                 dzdy_v(:,i,jms+1:jme) = (dzdy(:,i,jms:jme-1)+dzdy(:,i,jms+1:jme))*0.5
                 dzdy_v(:,i,jms)   = dzdy(:,i,jms)*1.5 - dzdy(:,i,jms+1)*0.5
-                !dzdy_v(:,i,jme)   = dzdy(:,i,jme)
                 dzdy_v(:,i,jme+1)   = dzdy(:,i,jme)*1.5 - dzdy(:,i,jme-1)*0.5
-                if (options%physics%windtype == kLINEAR_ITERATIVE_WINDS .or. options%physics%windtype == kITERATIVE_WINDS) then
-                    this%dzdxz(:,i,:) = (db1_mass*(h1_u(ims+1:ime+1,jms:jme)-h1_u(ims:ime,jms:jme)) + db2_mass*(h2_u(ims+1:ime+1,jms:jme)-h2_u(ims:ime,jms:jme)))/this%dx
-                    this%dzdyz(:,i,:) = (db1_mass*(h1_v(ims:ime,jms+1:jme+1)-h1_v(ims:ime,jms:jme)) + db2_mass*(h2_v(ims:ime,jms+1:jme+1)-h2_v(ims:ime,jms:jme)))/this%dx
-                    
-                    this%dzdxz(ims+1:ime-1,i,:) = (db1_mass*(h1(ims+2:ime,jms:jme)-h1(ims:ime-2,jms:jme)) + db2_mass*(h2(ims+2:ime,jms:jme)-h2(ims:ime-2,jms:jme)))/(2*this%dx)
-                    this%dzdxz(ims,i,:)   = this%dzdxz(ims+1,i,:)
-                    this%dzdxz(ime,i,:)   = this%dzdxz(ime-1,i,:)
+                
 
-                    this%dzdyz(:,i,jms+1:jme-1) = (db1_mass*(h1(ims:ime,jms+2:jme)-h1(ims:ime,jms:jme-2)) + db2_mass*(h2(ims:ime,jms+2:jme)-h2(ims:ime,jms:jme-2)))/(2*this%dx)
-                    this%dzdyz(:,i,jms)   = this%dzdyz(:,i,jms+1)
-                    this%dzdyz(:,i,jme)   = this%dzdyz(:,i,jme-1)
-
-                endif
             enddo
             
             !Finishing touch
@@ -1891,9 +1866,6 @@ contains
             z_interface  = global_z_interface(ims:ime,:,jms:jme)
             z            = neighbor_z(ims:ime,:,jms:jme)
             jacobian     = neighbor_jacobian(ims:ime,:,jms:jme)
-                        
-            !call setup_dzdxy(this, options, neighbor_jacobian)
-
 
         end associate
 
@@ -2613,7 +2585,6 @@ contains
             if (associated(this%snow_water_equivalent%data_2d)) then
                 this%snow_water_equivalent%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
             endif
-
         else
             if (associated(this%snow_water_equivalent%data_2d)) then
                 this%snow_water_equivalent%data_2d = 0
@@ -2627,12 +2598,25 @@ contains
             if (associated(this%snow_height%data_2d)) then
                 this%snow_height%data_2d = temporary_data(this%grid%ims:this%grid%ime, this%grid%jms:this%grid%jme)
             endif
-
         else
             if (associated(this%snow_height%data_2d)) then
                 this%snow_height%data_2d = 0
             endif
         endif
+        
+        if (associated(this%snow_height%data_2d) .and. associated(this%snow_water_equivalent%data_2d)) then
+            !Do check if we read in SWE but not snow height -- convert with user supplied constant density
+            if (options%parameters%swe_var /= "" .and. options%parameters%snowh_var == "") then
+                this%snow_height%data_2d = this%snow_water_equivalent%data_2d/options%lsm_options%snow_den_const
+            endif
+            
+            !Do check if we read in snow height but not SWE -- convert with user supplied constant density
+            if (options%parameters%snowh_var /= "" .and. options%parameters%swe_var == "") then
+                this%snow_water_equivalent%data_2d = this%snow_height%data_2d*options%lsm_options%snow_den_const
+            endif
+        endif
+
+
 
         if (options%parameters%soil_vwc_var /= "") then
             call io_read(options%parameters%init_conditions_file,   &

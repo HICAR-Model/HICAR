@@ -200,7 +200,7 @@ module domain_interface
     type(variable_t) :: snow_layer_liquid_water
     type(variable_t) :: snow_age_factor
     type(variable_t) :: snow_height
-    integer,allocatable :: snow_nlayers(:,:)
+    type(variable_t) :: snow_nlayers
     type(variable_t) :: skin_temperature
     type(variable_t) :: sst
     type(variable_t) :: soil_water_content
@@ -233,6 +233,7 @@ module domain_interface
     type(variable_t) :: net_longwave_bare
     type(variable_t) :: net_longwave_canopy
     type(variable_t) :: soil_totalmoisture
+    type(variable_t) :: soil_water_content_liq
     type(variable_t) :: soil_deep_temperature
     type(variable_t) :: water_table_depth
     type(variable_t) :: water_aquifer
@@ -256,6 +257,7 @@ module domain_interface
     type(variable_t) :: csol3d
     type(variable_t) :: tkmg3d
     type(variable_t) :: lakemask
+    type(variable_t) :: xice
     type(variable_t) :: tksatu3d
     type(variable_t) :: tkdry3d
     type(variable_t) :: zi3d
@@ -340,8 +342,6 @@ module domain_interface
     real,                       allocatable :: dzdy(:,:,:) ! change in height with change in x/y position (used to calculate w_real vertical motions)
     real,                       allocatable :: dzdx_u(:,:,:) ! change in height with change in x/y position on u-grid
     real,                       allocatable :: dzdy_v(:,:,:) ! change in height with change in x/y position on v-grid
-    real,                       allocatable :: dzdxz(:,:,:) ! change in height with change in x/y position with change in transformed vertical coordinate
-    real,                       allocatable :: dzdyz(:,:,:) ! change in height with change in x/y position with change in transformed vertical coordinate
     ! BK 2020/05
     real,                       allocatable :: froude_terrain(:,:,:,:) ! Terrain length-scale to use at each point for Froude Number calculation
     real,                       allocatable :: h1(:,:)     ! the large-scale terrain (h1) for the SLEVE coordinate (achieved by smoothin the org terrain)

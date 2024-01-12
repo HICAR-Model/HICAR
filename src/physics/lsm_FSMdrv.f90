@@ -125,9 +125,17 @@ contains
         lat_HICAR=TRANSPOSE(domain%latitude%data_2d(its:ite,jts:jte))
         lon_HICAR=TRANSPOSE(domain%longitude%data_2d(its:ite,jts:jte))
         terrain_HICAR=TRANSPOSE(domain%terrain%data_2d(its:ite,jts:jte))
-        slope_HICAR=TRANSPOSE(domain%slope_angle%data_2d(its:ite,jts:jte))*180.0/piconst !Convert from radians to degrees
-        shd_HICAR=TRANSPOSE(domain%shd%data_2d(its:ite,jts:jte))
-
+        if (associated(domain%slope_angle%data_2d)) then
+            slope_HICAR=TRANSPOSE(domain%slope_angle%data_2d(its:ite,jts:jte))*180.0/piconst !Convert from radians to degrees
+        else
+            slope_HICAR = 0.
+        endif
+        if (associated(domain%shd%data_2d)) then
+            shd_HICAR=TRANSPOSE(domain%shd%data_2d(its:ite,jts:jte))
+        else
+            shd_HICAR = 10000.
+        endif
+        
         dx_HICAR=domain%dx
         !!
         allocate(Esrf_(Nx_HICAR,Ny_HICAR)); Esrf_=0.
@@ -161,7 +169,12 @@ contains
         if (options%parameters%restart) then
             !! giving feedback to HICAR
             Tsrf = TRANSPOSE(domain%skin_temperature%data_2d(its:ite,jts:jte))
-            albs = TRANSPOSE(domain%albedo%data_3d(its:ite, domain%model_time%month, jts:jte))
+            if (options%lsm_options%monthly_albedo) then
+                albs = TRANSPOSE(domain%albedo%data_3d(its:ite, domain%model_time%month, jts:jte))
+            else
+                albs = TRANSPOSE(domain%albedo%data_3d(its:ite, 1, jts:jte))
+            endif
+            
             fsnow = TRANSPOSE(domain%fsnow%data_2d(its:ite,jts:jte))
             Nsnow = TRANSPOSE(domain%Nsnow%data_2d(its:ite,jts:jte))                        
             !!
@@ -326,11 +339,16 @@ contains
             do i=i_s,i_e
                 hj = j-j_s+domain%jts
                 hi = i-i_s+domain%its
-                if ( (SWE_(j,i)+current_snow(hi,hj)) > 0 .and. .not.(options%physics%watersurface==kWATER_SIMPLE .and. domain%land_mask(hi,hj)==kLC_WATER)) then
+                if ( SWE_(j,i) > 0 .and. .not.(options%physics%watersurface==kWATER_SIMPLE .and. domain%land_mask(hi,hj)==kLC_WATER)) then
                     domain%sensible_heat%data_2d(hi,hj)=H_(j,i)
                     domain%latent_heat%data_2d(hi,hj)=LE_(j,i)
                     domain%snow_water_equivalent%data_2d(hi,hj)=SWE_(j,i)
-                    domain%albedo%data_3d(hi, domain%model_time%month, hj)=albs(j,i)
+                    if (options%lsm_options%monthly_albedo) then
+                        domain%albedo%data_3d(hi, domain%model_time%month, hj) = albs(j,i)
+                    else
+                        domain%albedo%data_3d(hi, 1, hj) = albs(j,i)
+                    endif
+
                     !
                     domain%skin_temperature%data_2d(hi,hj)=Tsrf(j,i)
                     domain%snow_height%data_2d(hi,hj)=snowdepth_(j,i)

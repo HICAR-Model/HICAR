@@ -116,10 +116,6 @@ contains
             call ra_simple_init(domain, options)
 
             call rrtmg_lwinit(                           &
-                !p_top=minval(domain%pressure_interface%data_3d(:,domain%kme,:)), allowed_to_read=.TRUE. ,                     &
-                ! Added 0.8 factor to make sure p_top is low enough. This value can be changed if code crashes.
-                ! Code will crash because of negative log value in this expression in ra_rrtmg_lw and ra_rrtmg_sw:
-                !        plog = log(pavel(lay))
                 p_top=(minval(domain%pressure_interface%data_3d(:,domain%kme+1,:))),     allowed_to_read=.TRUE. ,                &
                 ids=domain%ids, ide=domain%ide, jds=domain%jds, jde=domain%jde, kds=domain%kds, kde=domain%kde,                &
                 ims=domain%ims, ime=domain%ime, jms=domain%jms, jme=domain%jme, kms=domain%kms, kme=domain%kme,                &
@@ -358,7 +354,7 @@ contains
 
             !Calculate solar constant
             call radconst(domain%model_time%day_of_year(), declin, solar_constant)
-
+           
             if (options%physics%radiation==kRA_SIMPLE) then
                 call ra_simple(theta = domain%potential_temperature%data_3d,         &
                                pii= domain%exner%data_3d,                            &
@@ -509,6 +505,18 @@ contains
                     yr=domain%model_time%year,                            &
                     julian=domain%model_time%day_of_year(),               &
                     mp_options=mp_options                               )
+                    
+                    
+                ! DR added December 2023 -- this is necesarry because HICAR does not use a pressure coordinate, so
+                ! p_top is not fixed throughout the simulation. p_top must be reset for each call of RRTMG_LW, 
+                ! which is what RRTMG_LWINIT does. Pass allowed_to_read=.False.
+                ! to avoid re-reading look up tables (already done in init).
+                CALL RRTMG_LWINIT(minval(domain%pressure_interface%data_3d(:,domain%kme+1,:)), &
+                                  allowed_to_read=.FALSE.,         &
+                                  ids=ids, ide=ide, jds=jds, jde=jde, kds=kds, kde=kde, &
+                                  ims=ims, ime=ime, jms=jms, jme=jme, kms=kms, kme=kme, &
+                                  its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte)
+                
                 call RRTMG_LWRAD(rthratenlw=domain%tend%th_lwrad,                 &
 !                           lwupt, lwuptc, lwuptcln, lwdnt, lwdntc, lwdntcln,     &        !if lwupt defined, all MUST be defined
 !                           lwupb, lwupbc, lwupbcln, lwdnb, lwdnbc, lwdnbcln,     &
@@ -567,7 +575,7 @@ contains
                             mp_physics=0,                                          &
                             ids=ids, ide=ide, jds=jds, jde=jde, kds=kds, kde=kde,  &
                             ims=ims, ime=ime, jms=jms, jme=jme, kms=kms, kme=kme,  &
-                            its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte-1,&
+                            its=its, ite=ite, jts=jts, jte=jte, kts=kts, kte=kte-1,  &
 !                           lwupflx, lwupflxc, lwdnflx, lwdnflxc,                  &
                             read_ghg=options%rad_options%read_ghg                  &
                             )

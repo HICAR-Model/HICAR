@@ -1681,7 +1681,7 @@ ENDIF   ! CROPTYPE == 0
       WRITE(message,'(a17,F10.4)') "Veg fraction: ",FVEG
 !      call wrf_message(trim(message))
       WRITE(*,*) "Energy budget problem in Noah-MP LSM"
-      STOP
+      ERROR STOP
 !      call wrf_error_fatal("Energy budget problem in NOAHMP LSM")
    END IF
 

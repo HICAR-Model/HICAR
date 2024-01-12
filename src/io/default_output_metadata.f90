@@ -2209,6 +2209,20 @@ contains
                                attribute_t("coordinates",   "lat lon")]
         end associate
         !>------------------------------------------------------------
+        !!  Soil water content, of liquid water
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%soil_water_content_liq))
+            var%name        = "soil_water_content_liq"
+            var%dimensions  = three_d_t_soil_dimensions
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%unlimited_dim=.True.
+            var%dim_len(3)  = kSOIL_GRID_Z
+            var%attributes  = [attribute_t("standard_name", "liquid_moisture_content_of_soil_layer"),      &
+                               attribute_t("units",         "m3 m-3"),                              &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
         !!  Equilibrium Volumetric Soil Moisture
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%eq_soil_moisture))
@@ -3292,6 +3306,18 @@ contains
             var%three_d     = .False.
             var%two_d       = .True.
             var%attributes  = [attribute_t("standard_name", "lakemask"),     &
+                               attribute_t("units",         ""),                               &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+        !>------------------------------------------------------------
+        !!  Grid cell fractional sea ice lakemask
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%xice))
+            var%name        = "xice"
+            var%dimensions  = two_d_dimensions
+            var%three_d     = .False.
+            var%two_d       = .True.
+            var%attributes  = [attribute_t("standard_name", "xice"),     &
                                attribute_t("units",         ""),                               &
                                attribute_t("coordinates",   "lat lon")]
         end associate
