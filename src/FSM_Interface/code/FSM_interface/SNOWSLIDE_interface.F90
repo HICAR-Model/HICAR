@@ -129,7 +129,7 @@ do n = 1, Nx*Ny
   if (j == 1) w_edge=.True.
   if (j == Ny) e_edge=.True.
   
-  frame_indx = ( ((i==2) .or. (i==Nx-1) .or. (j==2) .or. (j==Ny-1)) .and. .not.(n_edge .or. s_edge .or. e_edge .or. w_edge))
+  frame_indx = (n_edge .or. s_edge .or. e_edge .or. w_edge)
   if (FRAME .and. .not.(frame_indx)) cycle
 
   ! Start slide processes only if slope higher than the defined minimum. 

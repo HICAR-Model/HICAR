@@ -318,10 +318,6 @@ contains
                 SD_0_old = SD_0
                 call FSM_SNOWSLIDE(SD_0,Sice_0,SD_0_buff,Sice_0_buff,aval,first_it_SLIDE,dm_slide_)
                 
-                !Must accumulate slide changes here, since we will loop over calls to snowslide
-                domain%dm_slide%data_2d(domain%its:domain%ite,domain%jts:domain%jte) = &
-                        domain%dm_slide%data_2d(domain%its:domain%ite,domain%jts:domain%jte) + TRANSPOSE(dm_slide_(j_s:j_e,i_s:i_e))
-                
                 ! Copy interior buffer for exchange
                 call exch_SLIDE_buffers(domain,SD_0_buff,Sice_0_buff)
                 
@@ -329,6 +325,11 @@ contains
                 where(SD_0 > SD_0_old) aval=.True.
                 !Reset interior avalanching, so only avalanches coming from the border will be considered
                 aval(j_s:j_e,i_s:i_e) = .False.
+                
+                !Must accumulate slide changes here, since we will loop over calls to snowslide
+                domain%dm_slide%data_2d(domain%its:domain%ite,domain%jts:domain%jte) = &
+                        domain%dm_slide%data_2d(domain%its:domain%ite,domain%jts:domain%jte) + TRANSPOSE(dm_slide_(j_s:j_e,i_s:i_e))
+                
             enddo
             call FSM_SNOWSLIDE_END(SD_0,Sice_0)
             call exch_FSM_state_vars(domain)
