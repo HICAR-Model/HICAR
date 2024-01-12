@@ -11,8 +11,7 @@
 !!------------------------------------------------------------
 !#include <petsc/finclude/petscdmda.h90>
 
-
-module wind_iterative
+module wind_iterative_old
     !include 'petsc/finclude/petscksp.h'
     !include 'petsc/finclude/petscdm.h'
     !include 'petsc/finclude/petscdmda.h'
@@ -28,18 +27,20 @@ module wind_iterative
     use petscksp
     use petscdm
     use petscdmda
-    
+    use array_utilities,      only : smooth_array_3d
+
     implicit none
     private
-    public:: init_iter_winds, calc_iter_winds, finalize_iter_winds
+    public:: init_iter_winds_old, calc_iter_winds_old, finalize_iter_winds
     real, parameter::deg2rad=0.017453293 !2*pi/360
     real, parameter :: rad2deg=57.2957779371
     real, allocatable, dimension(:,:,:) :: A_coef, B_coef, C_coef, D_coef, E_coef, F_coef, G_coef, H_coef, I_coef, &
                                            J_coef, K_coef, L_coef, M_coef, N_coef, O_coef
     real    :: dx
     real, allocatable, dimension(:,:,:)  :: div, dz_if, jaco, dzdx, dzdy, sigma, alpha
+    real, allocatable, dimension(:,:)    :: dzdx_surf, dzdy_surf
     integer, allocatable :: xl(:), yl(:)
-    integer              :: hs, i_s, i_e, k_s, k_e, j_s, j_e
+    integer              :: hs, i_s, i_e, k_s, k_e, j_s, j_e, ims, ime, kms, kme, jms, jme
 contains
 
 
@@ -51,7 +52,7 @@ contains
     !! Starts by setting w out of the ground=0 then works through layers
     !!
     !!------------------------------------------------------------
-    subroutine calc_iter_winds(domain,alpha_in,div_in,adv_den,update_in)
+    subroutine calc_iter_winds_old(domain,alpha_in,div_in,adv_den,update_in)
         implicit none
         type(domain_t), intent(inout) :: domain
         real, intent(in), dimension(domain%grid%ims:domain%grid%ime, &
@@ -69,17 +70,16 @@ contains
         KSP            ksp
         DM             da
         Vec            x, localX
-        PetscInt       one, x_size
+        PetscInt       one, x_size, iteration
         PetscReal      norm, conv_tol
+        KSPConvergedReason reason
 
         update=.False.
         if (present(update_in)) update=update_in
                 
-                
         !Initialize div to be the initial divergence of the input wind field
         div = div_in(i_s:i_e,k_s:k_e,j_s:j_e) 
         one = 1
-        
         alpha = alpha_in(i_s:i_e,k_s:k_e,j_s:j_e) 
         
         if (.not.(allocated(A_coef))) then
@@ -89,10 +89,10 @@ contains
         endif
                                                                 
         call KSPCreate(domain%IO_comms,ksp,ierr)
-        conv_tol = 1e-4
+        conv_tol = 1e-10
 
-        !call KSPSetTolerances(ksp,conv_tol,PETSC_DEFAULT_REAL,PETSC_DEFAULT_REAL,PETSC_DEFAULT_INTEGER,ierr)
-        call KSPSetType(ksp,KSPBCGS,ierr);
+        call KSPSetTolerances(ksp,conv_tol,PETSC_DEFAULT_REAL,PETSC_DEFAULT_REAL,PETSC_DEFAULT_INTEGER,ierr)
+        call KSPSetType(ksp,KSPBCGSL,ierr);
         
         call DMDACreate3d(domain%IO_comms,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DMDA_STENCIL_BOX, &
                           (domain%ide+2),(domain%kde+2),(domain%jde+2),domain%grid%ximages,one,domain%grid%yimages,one,one, &
@@ -111,11 +111,19 @@ contains
         call KSPSolve(ksp,PETSC_NULL_VEC,PETSC_NULL_VEC,ierr)
         
         call KSPGetSolution(ksp,x,ierr)
-        if(this_image()==1) write(*,*) 'Solved PETSc'
+        call KSPGetConvergedReason(ksp, reason, ierr)
+        call KSPGetIterationNumber(ksp, iteration, ierr)
+        if(this_image()==1) write(*,*) 'Solved PETSc after ',iteration,' iterations, reason: ',reason
         
         !Subset global solution x to local grid so that we can access ghost-points
         call DMGlobalToLocalBegin(da,x,INSERT_VALUES,localX,ierr)
         call DMGlobalToLocalEnd(da,x,INSERT_VALUES,localX,ierr)
+
+        if ( this_image()==1 .and. reason < 0) then
+            write (*,*) 'PETSc ERROR: convergence failed after ',iteration,' iterations'
+            write (*,*) 'PETSc KSP Error code:  ',reason
+            !stop
+        endif
 
         call DMDAVecGetArrayF90(da,localX,lambda, ierr)
         call calc_updated_winds(domain, lambda, update, adv_den)
@@ -131,8 +139,8 @@ contains
         
         !call finalize_iter_winds()
                 
-    end subroutine calc_iter_winds
-    
+    end subroutine calc_iter_winds_old
+
     subroutine calc_updated_winds(domain,lambda,update,adv_den) !u, v, w, jaco_u,jaco_v,jaco_w,u_dzdx,v_dzdy,lambda, ids, ide, jds, jde)
         type(domain_t), intent(inout) :: domain
         !real, intent(inout), dimension(:,:,:)  :: u,v,w
@@ -221,12 +229,20 @@ contains
 
         !divide dz differennces by dz. Note that dz will be horizontally constant
         do k=k_s,k_e
-            u_dlambdz(:,k,:) = (u_temp(:,k+1,:)*sigma(i_s,k,j_s)**2) - (sigma(i_s,k,j_s)**2 - 1)*u_temp(:,k,:) - u_temp(:,k-1,:)
-            v_dlambdz(:,k,:) = (v_temp(:,k+1,:)*sigma(i_s,k,j_s)**2) - (sigma(i_s,k,j_s)**2 - 1)*v_temp(:,k,:) - v_temp(:,k-1,:)
+            u_dlambdz(:,k,:) = u_temp(:,k+1,:) - u_temp(:,k-1,:)
+            v_dlambdz(:,k,:) = v_temp(:,k+1,:) - v_temp(:,k-1,:)
         
-            u_dlambdz(:,k,:) = u_dlambdz(:,k,:)/(dz_if(i_s,k+1,j_s)*(sigma(i_s,k,j_s)+sigma(i_s,k,j_s)**2))
-            v_dlambdz(:,k,:) = v_dlambdz(:,k,:)/(dz_if(i_s,k+1,j_s)*(sigma(i_s,k,j_s)+sigma(i_s,k,j_s)**2))
+            u_dlambdz(:,k,:) = u_dlambdz(:,k,:)/(dz_if(i_s,k+1,j_s)+dz_if(i_s,k,j_s))
+            v_dlambdz(:,k,:) = v_dlambdz(:,k,:)/(dz_if(i_s,k+1,j_s)+dz_if(i_s,k,j_s))
         enddo
+        
+        !u_dlambdz(:,k_s,:) = -(u_temp(:,k_s+2,:)*sigma(i_s,k_s+1,j_s)**2) + &
+        !                    u_temp(:,k_s+1,:)*(sigma(i_s,k_s+1,j_s)+1)**2 - u_temp(:,k_s,:)*(2*sigma(i_s,k_s+1,j_s)+1)
+        !v_dlambdz(:,k_s,:) = -(v_temp(:,k_s+2,:)*sigma(i_s,k_s+1,j_s)**2) + &
+        !                    v_temp(:,k_s+1,:)*(sigma(i_s,k_s+1,j_s)+1)**2 - v_temp(:,k_s,:)*(2*sigma(i_s,k_s+1,j_s)+1)
+        !
+        !u_dlambdz(:,k_s,:) = u_dlambdz(:,k_s,:)/(dz_if(i_s,k_s+1,j_s)*(sigma(i_s,k_s+1,j_s)+1))
+        !v_dlambdz(:,k_s,:) = v_dlambdz(:,k_s,:)/(dz_if(i_s,k_s+1,j_s)*(sigma(i_s,k_s+1,j_s)+1))
         
         !PETSc arrays are zero-indexed
         
@@ -234,12 +250,12 @@ contains
             domain%u%meta_data%dqdt_3d(i_start:i_end,:,j_s:j_e) = domain%u%meta_data%dqdt_3d(i_start:i_end,:,j_s:j_e) + &
                                                             0.5*((lambda(i_start:i_end,k_s:k_e,j_s:j_e) - &
                                                             lambda(i_start-1:i_end-1,k_s:k_e,j_s:j_e))/dx - &
-            (1/domain%jacobian_u(i_start:i_end,:,j_s:j_e))*domain%dzdx_u(i_start:i_end,:,j_s:j_e)*(u_dlambdz))/rho_u(i_start:i_end,:,j_s:j_e)
+            (1/domain%jacobian_u(i_start:i_end,:,j_s:j_e))*domain%dzdx_u(i_start:i_end,:,j_s:j_e)*(u_dlambdz))/(rho_u(i_start:i_end,:,j_s:j_e)*domain%jacobian_u(i_start:i_end,:,j_s:j_e))
             
             domain%v%meta_data%dqdt_3d(i_s:i_e,:,j_start:j_end) = domain%v%meta_data%dqdt_3d(i_s:i_e,:,j_start:j_end) + &
                                                             0.5*((lambda(i_s:i_e,k_s:k_e,j_start:j_end) - &
                                                             lambda(i_s:i_e,k_s:k_e,j_start-1:j_end-1))/dx - &
-            (1/domain%jacobian_v(i_s:i_e,:,j_start:j_end))*domain%dzdy_v(i_s:i_e,:,j_start:j_end)*(v_dlambdz))/rho_v(i_s:i_e,:,j_start:j_end)
+            (1/domain%jacobian_v(i_s:i_e,:,j_start:j_end))*domain%dzdy_v(i_s:i_e,:,j_start:j_end)*(v_dlambdz))/(rho_v(i_s:i_e,:,j_start:j_end)*domain%jacobian_v(i_s:i_e,:,j_start:j_end))
         else
             domain%u%data_3d(i_start:i_end,:,j_s:j_e) = domain%u%data_3d(i_start:i_end,:,j_s:j_e) + &
                                                             0.5*((lambda(i_start:i_end,k_s:k_e,j_s:j_e) - &
@@ -289,10 +305,8 @@ contains
             do k=zs,(zs+zm-1)
                 do i=xs,(xs+xm-1)
                     !For global boundary conditions
-                    if (i.eq.0 .or. j.eq.0 .or. &
-                        i.eq.mx-1 .or. j.eq.my-1 .or. k.eq.mz-1) then
-                        barray(i,k,j) = 0.0
-                    else if (k.eq.0) then
+                    if (i.le.1 .or. j.le.1 .or. k.eq.0 .or. &
+                        i.ge.mx-2 .or. j.ge.my-2 .or. k.eq.mz-1) then
                         barray(i,k,j) = 0.0
                     else
                         barray(i,k,j) = -2*div(i,k,j)
@@ -327,14 +341,14 @@ contains
 
 
         DM             da
-        PetscInt       i,j,k,mx,my,mz,xm,ym,zm,xs,ys,zs,i1,i2,i10,i15
+        PetscInt       i,j,k,mx,my,mz,xm,ym,zm,xs,ys,zs,i1,i2,i6,i15
         DMDALocalInfo  info(DMDA_LOCAL_INFO_SIZE)
         PetscScalar    v(15)
         MatStencil     row(4),col(4,15),gnd_col(4,10),top_col(4,2)
         
         i1 = 1
         i2 = 2
-        i10 = 10
+        i6 = 10
         i15 = 15
 
         call KSPGetDM(ksp,da,ierr)
@@ -357,8 +371,8 @@ contains
                 row(MatStencil_i) = i
                 row(MatStencil_j) = k
                 row(MatStencil_k) = j
-                if (i.eq.0 .or. j.eq.0 .or. &
-                    i.eq.mx-1 .or. j.eq.my-1) then
+                if (i.le.1 .or. j.le.1 .or. &
+                    i.ge.mx-2 .or. j.ge.my-2) then
                     v(1) = 1.0
                     call MatSetValuesStencil(arr_B,i1,row,i1,row,v,INSERT_VALUES, ierr)
                 else if (k.eq.mz-1) then
@@ -375,60 +389,61 @@ contains
                     call MatSetValuesStencil(arr_B,i1,row,i2,top_col,v,INSERT_VALUES, ierr)
 
                 else if (k.eq.0) then
-                                
-                    denom = 2*(alpha(i,1,j)**2 + dzdx(i,1,j)**2 + &
-                                          dzdy(i,1,j)**2)/(jaco(i,1,j))
+                    denom = 2*(dzdx_surf(i,j)**2 + dzdy_surf(i,j)**2 + alpha(i,1,j)**2)/(jaco(i,1,j))
                     !k
-                    v(1) = - 1
-                    gnd_col(MatStencil_i,1) = i
-                    gnd_col(MatStencil_j,1) = k
-                    gnd_col(MatStencil_k,1) = j
-                    !k + 1
-                    v(2) = 1
+                    v(2) = -1/dz_if(i,k+1,j)
                     gnd_col(MatStencil_i,2) = i
-                    gnd_col(MatStencil_j,2) = k+1
+                    gnd_col(MatStencil_j,2) = k
                     gnd_col(MatStencil_k,2) = j
-                    !i - 1
-                    v(3) = dz_if(i,1,j)*dzdx(i,1,j)/(denom*2*dx)
+                    !k + 1
+                    v(1) = 1/dz_if(i,k+1,j)
+                    gnd_col(MatStencil_i,1) = i
+                    gnd_col(MatStencil_j,1) = k+1
+                    gnd_col(MatStencil_k,1) = j
+
+                    !Reminder: The equation for the lower BC has all of the lateral derivatives (dlambdadx, etc) NEGATIVE, hence opposite signs below
+                    !If we are on left most border
+                    !i - 1, k + 1
+                    v(3) = dzdx_surf(i,j)/(denom*2*dx)
                     gnd_col(MatStencil_i,3) = i-1
-                    gnd_col(MatStencil_j,3) = k+1
+                    gnd_col(MatStencil_j,3) = k
                     gnd_col(MatStencil_k,3) = j
-                    !i - 1
-                    v(4) = dz_if(i,1,j)*dzdx(i,1,j)/(denom*2*dx)
-                    gnd_col(MatStencil_i,4) = i-1
+                    !i + 1, k + 1
+                    v(4) = -dzdx_surf(i,j)/(denom*2*dx)
+                    gnd_col(MatStencil_i,4) = i+1
                     gnd_col(MatStencil_j,4) = k
                     gnd_col(MatStencil_k,4) = j
-                    !i + 1
-                    v(5) = -dz_if(i,1,j)*dzdx(i,1,j)/(denom*2*dx)
-                    gnd_col(MatStencil_i,5) = i+1
+                    !i - 1, k + 1
+                    v(5) = dzdx_surf(i,j)/(denom*2*dx)
+                    gnd_col(MatStencil_i,5) = i-1
                     gnd_col(MatStencil_j,5) = k+1
                     gnd_col(MatStencil_k,5) = j
-                    !i + 1
-                    v(6) = -dz_if(i,1,j)*dzdx(i,1,j)/(denom*2*dx)
+                    !i + 1, k + 1
+                    v(6) = -dzdx_surf(i,j)/(denom*2*dx)
                     gnd_col(MatStencil_i,6) = i+1
-                    gnd_col(MatStencil_j,6) = k
+                    gnd_col(MatStencil_j,6) = k+1
                     gnd_col(MatStencil_k,6) = j
-                    !j - 1
-                    v(7) = dz_if(i,1,j)*dzdy(i,1,j)/(denom*2*dx)
+                    !j - 1, k + 1
+                    v(7) = dzdy_surf(i,j)/(denom*2*dx)
                     gnd_col(MatStencil_i,7) = i
-                    gnd_col(MatStencil_j,7) = k+1
+                    gnd_col(MatStencil_j,7) = k
                     gnd_col(MatStencil_k,7) = j-1
-                    !j - 1
-                    v(8) = dz_if(i,1,j)*dzdy(i,1,j)/(denom*2*dx)
+                    !j + 1, k + 1
+                    v(8) = -dzdy_surf(i,j)/(denom*2*dx)
                     gnd_col(MatStencil_i,8) = i
                     gnd_col(MatStencil_j,8) = k
-                    gnd_col(MatStencil_k,8) = j-1
-                    !j + 1
-                    v(9) = -dz_if(i,1,j)*dzdy(i,1,j)/(denom*2*dx)
+                    gnd_col(MatStencil_k,8) = j+1
+                    !j - 1, k + 1
+                    v(9) = dzdy_surf(i,j)/(denom*2*dx)
                     gnd_col(MatStencil_i,9) = i
                     gnd_col(MatStencil_j,9) = k+1
-                    gnd_col(MatStencil_k,9) = j+1
-                    !j + 1
-                    v(10) = -dz_if(i,1,j)*dzdy(i,1,j)/(denom*2*dx)
+                    gnd_col(MatStencil_k,9) = j-1
+                    !j + 1, k + 1
+                    v(10) = -dzdy_surf(i,j)/(denom*2*dx)
                     gnd_col(MatStencil_i,10) = i
-                    gnd_col(MatStencil_j,10) = k
+                    gnd_col(MatStencil_j,10) = k+1
                     gnd_col(MatStencil_k,10) = j+1
-                    call MatSetValuesStencil(arr_B,i1,row,i10,gnd_col,v,INSERT_VALUES, ierr)
+                    call MatSetValuesStencil(arr_B,i1,row,i6,gnd_col,v,INSERT_VALUES, ierr)
                 else
                     !j - 1, k - 1
                     v(1) = O_coef(i,k,j)
@@ -521,19 +536,13 @@ contains
     end subroutine ComputeMatrix
     
     
+
     subroutine initialize_coefs(domain)
         implicit none
         type(domain_t), intent(in) :: domain
         
-        real, allocatable, dimension(:,:,:) :: mixed_denom
-        !integer i_s, i_e, k_s, k_e, j_s, j_e
-        
-        !i_s = domain%its-1
-        !i_e = domain%ite+1
-        !k_s = domain%kts  
-        !k_e = domain%kte  
-        !j_s = domain%jts-1
-        !j_e = domain%jte+1
+        real :: sig_i, mixed_denom
+        integer :: k
         
         allocate(A_coef(i_s:i_e,k_s:k_e,j_s:j_e))
         allocate(B_coef(i_s:i_e,k_s:k_e,j_s:j_e))
@@ -550,9 +559,7 @@ contains
         allocate(M_coef(i_s:i_e,k_s:k_e,j_s:j_e))
         allocate(N_coef(i_s:i_e,k_s:k_e,j_s:j_e))
         allocate(O_coef(i_s:i_e,k_s:k_e,j_s:j_e))
-        
-        allocate(mixed_denom(i_s:i_e,k_s:k_e,j_s:j_e))
-        
+                
         A_coef = 1 !Because this corresponds to the centered node, must be non-zero, otherwise there is no solution
         B_coef = 0
         C_coef = 0
@@ -569,78 +576,38 @@ contains
         N_coef = 0
         O_coef = 0
 
-        mixed_denom = 2*domain%dx*dz_if(:,k_s+1:k_e+1,:)*(sigma+sigma**2)
 
         !This function sets A, B, annd C coefficients
         call update_coefs(domain)
                 
-        D_coef(i_s:i_e-1,k_s:k_e,j_s:j_e) = (domain%jacobian(i_s+1:i_e,k_s:k_e,j_s:j_e) + &
-            domain%jacobian(i_s:i_e-1,k_s:k_e,j_s:j_e))/(2*domain%dx**2) + &
-            (sigma(i_s:i_e-1,:,:)**2 - 1)*(dzdx(i_s:i_e-1,:,:)+domain%dzdx_u(i_s+1:i_e,:,j_s:j_e))/&
-            mixed_denom(i_s:i_e-1,k_s:k_e,j_s:j_e)
-        E_coef(i_s+1:i_e,k_s:k_e,j_s:j_e) = (domain%jacobian(i_s+1:i_e,k_s:k_e,j_s:j_e) + &
-            domain%jacobian(i_s:i_e-1,k_s:k_e,j_s:j_e))/(2*domain%dx**2) - &
-            (sigma(i_s+1:i_e,:,:)**2 - 1)*(dzdx(i_s+1:i_e,:,:)+domain%dzdx_u(i_s+1:i_e,:,j_s:j_e))/&
-            mixed_denom(i_s+1:i_e,k_s:k_e,j_s:j_e)
-        F_coef(i_s:i_e,k_s:k_e,j_s:j_e-1) = (domain%jacobian(i_s:i_e,k_s:k_e,j_s+1:j_e) + &
-            domain%jacobian(i_s:i_e,k_s:k_e,j_s:j_e-1))/(2*domain%dx**2) + &
-            (sigma(:,:,j_s:j_e-1)**2 - 1)*(dzdy(:,:,j_s:j_e-1)+domain%dzdy_v(i_s:i_e,:,j_s+1:j_e))/&
-            mixed_denom(i_s:i_e,k_s:k_e,j_s:j_e-1)
-        G_coef(i_s:i_e,k_s:k_e,j_s+1:j_e) = (domain%jacobian(i_s:i_e,k_s:k_e,j_s+1:j_e) + &
-            domain%jacobian(i_s:i_e,k_s:k_e,j_s:j_e-1))/(2*domain%dx**2) - &
-            (sigma(:,:,j_s+1:j_e)**2 - 1)*(dzdy(:,:,j_s+1:j_e)+domain%dzdy_v(i_s:i_e,:,j_s+1:j_e))/&
-            mixed_denom(i_s:i_e,k_s:k_e,j_s+1:j_e)
+        !First terms -- d2lam/dx2
+                
+        !i+1
+        D_coef = 1/(domain%dx**2)
+        !i-1
+        E_coef = 1/(domain%dx**2)
+        !j+1
+        F_coef = 1/(domain%dx**2)
+        !j-1
+        G_coef = 1/(domain%dx**2)
+        
+        !Now consider mixed derivatives -- d2lam/dxdz
+        do k=k_s,k_e
+            !sigma and dz_if are both horizontally constant, so can be set to constants for each layer
+            mixed_denom = 2*domain%dx*(dz_if(i_s,k+1,j_s)+dz_if(i_s,k,j_s))!*(sig_i+sig_i**2)
+            
+            H_coef(:,k,:) = -(dzdx(:,k,:)/jaco(:,k,:)+domain%dzdx_u(i_s+1:i_e+1,k,j_s:j_e)/domain%jacobian_u(i_s+1:i_e+1,k,j_s:j_e))/mixed_denom
+            I_coef(:,k,:) =  (dzdx(:,k,:)/jaco(:,k,:)+domain%dzdx_u(i_s:i_e,k,j_s:j_e)/domain%jacobian_u(i_s:i_e,k,j_s:j_e))/mixed_denom
+            L_coef(:,k,:) = -(dzdy(:,k,:)/jaco(:,k,:)+domain%dzdy_v(i_s:i_e,k,j_s+1:j_e+1)/domain%jacobian_v(i_s:i_e,k,j_s+1:j_e+1))/mixed_denom
+            M_coef(:,k,:) =  (dzdy(:,k,:)/jaco(:,k,:)+domain%dzdy_v(i_s:i_e,k,j_s:j_e)/domain%jacobian_v(i_s:i_e,k,j_s:j_e))/mixed_denom
 
-        D_coef(i_e,k_s:k_e,j_s:j_e) = D_coef(i_e-1,k_s:k_e,j_s:j_e)
-        E_coef(i_s,k_s:k_e,j_s:j_e) = E_coef(i_s+1,k_s:k_e,j_s:j_e)
-        F_coef(i_s:i_e,k_s:k_e,j_e) = F_coef(i_s:i_e,k_s:k_e,j_e-1)
-        G_coef(i_s:i_e,k_s:k_e,j_s) = G_coef(i_s:i_e,k_s:k_e,j_s+1)
+            J_coef(:,k,:) =  (dzdx(:,k,:)/jaco(:,k,:)+domain%dzdx_u(i_s+1:i_e+1,k,j_s:j_e)/domain%jacobian_u(i_s+1:i_e+1,k,j_s:j_e))/mixed_denom
+            K_coef(:,k,:) = -(dzdx(:,k,:)/jaco(:,k,:)+domain%dzdx_u(i_s:i_e,k,j_s:j_e)/domain%jacobian_u(i_s:i_e,k,j_s:j_e))/mixed_denom
+            N_coef(:,k,:) =  (dzdy(:,k,:)/jaco(:,k,:)+domain%dzdy_v(i_s:i_e,k,j_s+1:j_e+1)/domain%jacobian_v(i_s:i_e,k,j_s+1:j_e+1))/mixed_denom
+            O_coef(:,k,:) = -(dzdy(:,k,:)/jaco(:,k,:)+domain%dzdy_v(i_s:i_e,k,j_s:j_e)/domain%jacobian_v(i_s:i_e,k,j_s:j_e))/mixed_denom
 
-        H_coef(i_s:i_e-1,k_s:k_e-1,:) = &
-                -(sigma(i_s:i_e-1,k_s:k_e-1,:)**2)* &
-                (dzdx(i_s:i_e-1,k_s+1:k_e,:)+domain%dzdx_u(i_s+1:i_e,k_s:k_e-1,j_s:j_e))&
-                /mixed_denom(i_s:i_e-1,k_s:k_e-1,:)
-        I_coef(i_s+1:i_e,k_s:k_e-1,:) = &
-                (sigma(i_s+1:i_e,k_s:k_e-1,:)**2)* &
-                (dzdx(i_s+1:i_e,k_s+1:k_e,:)+&
-                domain%dzdx_u(i_s+1:i_e,k_s:k_e-1,j_s:j_e))/mixed_denom(i_s+1:i_e,k_s:k_e-1,:)
-        J_coef(i_s:i_e-1,k_s+1:k_e,:) = &
-                (dzdx(i_s:i_e-1,k_s:k_e-1,:)+domain%dzdx_u(i_s+1:i_e,k_s+1:k_e,j_s:j_e))&
-                /mixed_denom(i_s:i_e-1,k_s+1:k_e,:)
-        K_coef(i_s+1:i_e,k_s+1:k_e,:) = &
-                -(dzdx(i_s+1:i_e,k_s:k_e-1,:)+&
-                domain%dzdx_u(i_s+1:i_e,k_s+1:k_e,j_s:j_e))/mixed_denom(i_s+1:i_e,k_s+1:k_e,:)
+        enddo
 
-        L_coef(:,k_s:k_e-1,j_s:j_e-1) = &
-                -(sigma(:,k_s:k_e-1,j_s:j_e-1)**2)* &
-                (dzdy(:,k_s+1:k_e,j_s:j_e-1)+domain%dzdy_v(i_s:i_e,k_s:k_e-1,j_s+1:j_e))/mixed_denom(:,k_s:k_e-1,j_s:j_e-1)
-        M_coef(:,k_s:k_e-1,j_s+1:j_e) = &
-                (sigma(:,k_s:k_e-1,j_s+1:j_e)**2)* &
-                (dzdy(:,k_s+1:k_e,j_s+1:j_e)+domain%dzdy_v(i_s:i_e,k_s:k_e-1,j_s+1:j_e))/mixed_denom(:,k_s:k_e-1,j_s+1:j_e)
-        N_coef(:,k_s+1:k_e,j_s:j_e-1) = &
-                (dzdy(:,k_s:k_e-1,j_s:j_e-1)+domain%dzdy_v(i_s:i_e,k_s+1:k_e,j_s+1:j_e))/mixed_denom(:,k_s+1:k_e,j_s:j_e-1)
-        O_coef(:,k_s+1:k_e,j_s+1:j_e) = &
-                -(dzdy(:,k_s:k_e-1,j_s+1:j_e)+domain%dzdy_v(i_s:i_e,k_s+1:k_e,j_s+1:j_e))&
-                /mixed_denom(:,k_s+1:k_e,j_s+1:j_e)
-
-        J_coef(i_s:i_e-1,k_s,:) = (dzdx(i_s:i_e-1,k_s,:)+domain%dzdx_u(i_s+1:i_e,k_s,j_s:j_e))&
-                                    /mixed_denom(i_s:i_e-1,k_s,:)
-        K_coef(i_s+1:i_e,k_s,:) = -(dzdx(i_s+1:i_e,k_s,:)+domain%dzdx_u(i_s+1:i_e,k_s,j_s:j_e))&
-                                    /mixed_denom(i_s+1:i_e,k_s,:)
-        N_coef(:,k_s,j_s:j_e-1) = (dzdy(:,k_s,j_s:j_e-1)+domain%dzdy_v(i_s:i_e,k_s,j_s+1:j_e))&
-                                    /mixed_denom(:,k_s,j_s:j_e-1)
-        O_coef(:,k_s,j_s+1:j_e) = -(dzdy(:,k_s,j_s+1:j_e)+domain%dzdy_v(i_s:i_e,k_s,j_s+1:j_e))&
-                                    /mixed_denom(:,k_s,j_s+1:j_e)
-
-        H_coef(i_e,:,:) = H_coef(i_e-1,:,:)
-        I_coef(i_s,:,:) = I_coef(i_s+1,:,:)
-        J_coef(i_e,:,:) = J_coef(i_e-1,:,:)
-        K_coef(i_s,:,:) = K_coef(i_s+1,:,:)
-
-        L_coef(:,:,j_e) = L_coef(:,:,j_e-1)
-        M_coef(:,:,j_s) = M_coef(:,:,j_s+1)
-        N_coef(:,:,j_e) = N_coef(:,:,j_e-1)
-        O_coef(:,:,j_s) = O_coef(:,:,j_s+1)
 
     end subroutine initialize_coefs
     
@@ -649,78 +616,95 @@ contains
     subroutine update_coefs(domain)
         implicit none
         type(domain_t), intent(in) :: domain        
-        real, allocatable, dimension(:,:,:) :: mixed_denom
-        !integer i_s, i_e, k_s, k_e, j_s, j_e
-        
-        !i_s = domain%its-1
-        !i_e = domain%ite+1
-        !k_s = domain%kts  
-        !k_e = domain%kte  
-        !j_s = domain%jts-1
-        !j_e = domain%jte+1
+        real, allocatable, dimension(:,:,:) :: mixed_denom, X_coef
+        real, allocatable, dimension(:,:)   :: M_up, M_dwn
+        integer :: k
+        real :: denom_tmp, sig_i
         
         allocate(mixed_denom(i_s:i_e,k_s:k_e,j_s:j_e))
-        mixed_denom = 2*domain%dx*dz_if(:,k_s+1:k_e+1,:)*(sigma+sigma**2)
+        allocate(X_coef(i_s:i_e,k_s:k_e,j_s:j_e))
+        allocate(M_up(i_s:i_e,j_s:j_e))
+        allocate(M_dwn(i_s:i_e,j_s:j_e))
+        
+        mixed_denom = (dz_if(:,k_s+1:k_e+1,:)+dz_if(:,k_s:k_e,:))*2*domain%dx
 
-
-        B_coef(:,k_s:k_e-1,:) = sigma(:,k_s:k_e-1,:) * &
-                              ( (alpha(i_s:i_e,k_s:k_e-1,j_s:j_e)**2 + dzdy(i_s:i_e,k_s:k_e-1,j_s:j_e)**2 + &
-                              dzdx(i_s:i_e,k_s:k_e-1,j_s:j_e)**2) * (1./domain%jacobian(i_s:i_e,k_s:k_e-1,j_s:j_e)) + &
-                              (alpha(i_s:i_e,k_s+1:k_e,j_s:j_e)**2 + dzdy(i_s:i_e,k_s+1:k_e,j_s:j_e)**2 + &
-                              dzdx(i_s:i_e,k_s+1:k_e,j_s:j_e)**2) * (1./domain%jacobian(i_s:i_e,k_s+1:k_e,j_s:j_e))) / &
-                          ((sigma(:,k_s:k_e-1,:)+sigma(:,k_s:k_e-1,:)**2)*dz_if(:,k_s+1:k_e,:)**2)
-                          
-                          
-        C_coef(:,k_s+1:k_e,:) = ( (alpha(i_s:i_e,k_s:k_e-1,j_s:j_e)**2 + dzdy(i_s:i_e,k_s:k_e-1,j_s:j_e)**2 + &
-                              dzdx(i_s:i_e,k_s:k_e-1,j_s:j_e)**2) * (1./domain%jacobian(i_s:i_e,k_s:k_e-1,j_s:j_e)) + &
-                              (alpha(i_s:i_e,k_s+1:k_e,j_s:j_e)**2 + dzdy(i_s:i_e,k_s+1:k_e,j_s:j_e)**2 + &
-                              dzdx(i_s:i_e,k_s+1:k_e,j_s:j_e)**2) * (1./domain%jacobian(i_s:i_e,k_s+1:k_e,j_s:j_e))) / &
-                          ((sigma(:,k_s+1:k_e,:)+sigma(:,k_s+1:k_e,:)**2)*dz_if(:,k_s+2:k_e+1,:)**2)
+        do k = k_s,k_e
+            if (k == k_s) then
+                !Terms for dzdx
+                M_up = dzdx(:,k,:)*(dzdx(:,k,:)*domain%advection_dz(i_s,k+1,j_s) + &
+                        dzdx(:,k+1,:)*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k+1,j_s))/domain%jacobian_w(i_s:i_e,k,j_s:j_e)
+                M_dwn = dzdx(:,k,:)*dzdx_surf/jaco(i_s:i_e,k,j_s:j_e)
+                !Terms for dzdy
+                M_up = M_up + dzdy(:,k,:)*(dzdy(:,k,:)*domain%advection_dz(i_s,k+1,j_s) + &
+                        dzdy(:,k+1,:)*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k+1,j_s))/domain%jacobian_w(i_s:i_e,k,j_s:j_e)
+                M_dwn = M_dwn + dzdy(:,k,:)*dzdy_surf/jaco(i_s:i_e,k,j_s:j_e)
+                !Terms for alpha
+                M_up = M_up + (alpha(:,k,:)**2*domain%advection_dz(i_s,k+1,j_s) + &
+                        alpha(:,k+1,:)**2*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k+1,j_s))/domain%jacobian_w(i_s:i_e,k,j_s:j_e)
+                M_dwn = M_dwn + alpha(:,k,:)**2/jaco(i_s:i_e,k,j_s:j_e)
+            else if (k == k_e) then
+                !Terms for dzdx
+                M_up = dzdx(:,k,:)*(dzdx(:,k,:)*domain%advection_dz(i_s,k,j_s) + &
+                        dzdx(:,k,:)*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k,j_s))
+                M_dwn = dzdx(:,k,:)*(dzdx(:,k,:)*domain%advection_dz(i_s,k-1,j_s) + &
+                        dzdx(:,k-1,:)*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k-1,j_s))/domain%jacobian_w(i_s:i_e,k-1,j_s:j_e)
+                !Terms for dzdy
+                M_up = M_up + dzdy(:,k,:)*(dzdy(:,k,:)*domain%advection_dz(i_s,k,j_s) + &
+                        dzdy(:,k,:)*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k,j_s))
+                M_dwn = M_dwn + dzdy(:,k,:)*(dzdy(:,k,:)*domain%advection_dz(i_s,k-1,j_s) + &
+                        dzdy(:,k-1,:)*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k-1,j_s))/domain%jacobian_w(i_s:i_e,k-1,j_s:j_e)
+                !Terms for alpha
+                M_up = M_up + (alpha(:,k,:)**2*domain%advection_dz(i_s,k,j_s) + &
+                        alpha(:,k,:)**2*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k,j_s))
+                M_dwn = M_dwn + (alpha(:,k,:)**2*domain%advection_dz(i_s,k-1,j_s) + &
+                        alpha(:,k-1,:)**2*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k-1,j_s))/domain%jacobian_w(i_s:i_e,k-1,j_s:j_e)
+            else
+                !Terms for dzdx
+                M_up = dzdx(:,k,:)*(dzdx(:,k,:)*domain%advection_dz(i_s,k+1,j_s) + &
+                        dzdx(:,k+1,:)*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k+1,j_s))/domain%jacobian_w(i_s:i_e,k,j_s:j_e)
+                M_dwn = dzdx(:,k,:)*(dzdx(:,k,:)*domain%advection_dz(i_s,k-1,j_s) + &
+                        dzdx(:,k-1,:)*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k-1,j_s))/domain%jacobian_w(i_s:i_e,k-1,j_s:j_e)
+                !Terms for dzdy
+                M_up = M_up + dzdy(:,k,:)*(dzdy(:,k,:)*domain%advection_dz(i_s,k+1,j_s) + &
+                        dzdy(:,k+1,:)*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k+1,j_s))/domain%jacobian_w(i_s:i_e,k,j_s:j_e)
+                M_dwn = M_dwn + dzdy(:,k,:)*(dzdy(:,k,:)*domain%advection_dz(i_s,k-1,j_s) + &
+                        dzdy(:,k-1,:)*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k-1,j_s))/domain%jacobian_w(i_s:i_e,k-1,j_s:j_e)
+                !Terms for alpha
+                M_up = M_up + (alpha(:,k,:)**2*domain%advection_dz(i_s,k+1,j_s) + &
+                        alpha(:,k+1,:)**2*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k+1,j_s))/domain%jacobian_w(i_s:i_e,k,j_s:j_e)
+                M_dwn = M_dwn + (alpha(:,k,:)**2*domain%advection_dz(i_s,k-1,j_s) + &
+                        alpha(:,k-1,:)**2*domain%advection_dz(i_s,k,j_s))/ &
+                        (domain%advection_dz(i_s,k,j_s)+domain%advection_dz(i_s,k-1,j_s))/domain%jacobian_w(i_s:i_e,k-1,j_s:j_e)
+            endif
+            B_coef(:,k,:) = M_up/(jaco(:,k,:)*domain%advection_dz(i_s,k,j_s)*dz_if(i_s,k+1,j_s))
+            C_coef(:,k,:) = M_dwn/(jaco(:,k,:)*domain%advection_dz(i_s,k,j_s)*dz_if(i_s,k,j_s))
+        enddo
                 
-        C_coef(:,k_s,:) = ( (alpha(i_s:i_e,k_s,j_s:j_e)**2 + dzdy(i_s:i_e,k_s,j_s:j_e)**2 + &
-                              dzdx(i_s:i_e,k_s,j_s:j_e)**2) * (1./domain%jacobian(i_s:i_e,k_s,j_s:j_e)) + &
-                              (alpha(i_s:i_e,k_s,j_s:j_e)**2 + dzdy(i_s:i_e,k_s,j_s:j_e)**2 + &
-                              dzdx(i_s:i_e,k_s,j_s:j_e)**2) * (1./domain%jacobian(i_s:i_e,k_s,j_s:j_e))) / &
-                          ((sigma(:,k_s,:)+sigma(:,k_s,:)**2)*dz_if(:,k_s+1,:)**2)
-                          
-        B_coef(i_s+1:i_e-1,:,:) = B_coef(i_s+1:i_e-1,:,:) - sigma(i_s+1:i_e-1,:,:)**2 * &
-                                    (domain%dzdx_u(i_s+2:i_e,:,j_s:j_e)-domain%dzdx_u(i_s+1:i_e-1,:,j_s:j_e))/(mixed_denom(i_s+1:i_e-1,:,:))
-                          
-        B_coef(:,:,j_s+1:j_e-1) = B_coef(:,:,j_s+1:j_e-1) - sigma(:,:,j_s+1:j_e-1)**2 * &
-                                    (domain%dzdy_v(i_s:i_e,:,j_s+2:j_e)-domain%dzdy_v(i_s:i_e,:,j_s+1:j_e-1))/(mixed_denom(:,:,j_s+1:j_e-1))
-                          
+        A_coef = -4/(domain%dx**2) - B_coef - C_coef
         
-        C_coef(i_s+1:i_e-1,:,:) = C_coef(i_s+1:i_e-1,:,:) + &
-                                    (domain%dzdx_u(i_s+2:i_e,:,j_s:j_e)-domain%dzdx_u(i_s+1:i_e-1,:,j_s:j_e))/(mixed_denom(i_s+1:i_e-1,:,:))
-                          
-        C_coef(:,:,j_s+1:j_e-1) = C_coef(:,:,j_s+1:j_e-1) + &
-                                    (domain%dzdy_v(i_s:i_e,:,j_s+2:j_e)-domain%dzdy_v(i_s:i_e,:,j_s+1:j_e-1))/(mixed_denom(:,:,j_s+1:j_e-1))
-                                                    
-        B_coef(i_s,:,:) = B_coef(i_s+1,:,:)
-        B_coef(i_e,:,:) = B_coef(i_e-1,:,:)
-        B_coef(:,:,j_s) = B_coef(:,:,j_s+1)
-        B_coef(:,:,j_e) = B_coef(:,:,j_e-1)
+        X_coef = -((domain%dzdx_u(i_s+1:i_e+1,:,j_s:j_e)/domain%jacobian_u(i_s+1:i_e+1,:,j_s:j_e) - domain%dzdx_u(i_s:i_e,:,j_s:j_e)/domain%jacobian_u(i_s:i_e,:,j_s:j_e)) + &
+                   (domain%dzdy_v(i_s:i_e,:,j_s+1:j_e+1)/domain%jacobian_v(i_s:i_e,:,j_s+1:j_e+1) - domain%dzdy_v(i_s:i_e,:,j_s:j_e)/domain%jacobian_v(i_s:i_e,:,j_s:j_e)))/mixed_denom
+                   
+        B_coef = B_coef + X_coef 
+        C_coef = C_coef - X_coef
         
-        C_coef(i_s,:,:) = C_coef(i_s+1,:,:)
-        C_coef(i_e,:,:) = C_coef(i_e-1,:,:)
-        C_coef(:,:,j_s) = C_coef(:,:,j_s+1)
-        C_coef(:,:,j_e) = C_coef(:,:,j_e-1)
-        
-        A_coef(i_s+1:i_e-1,k_s:k_e,j_s+1:j_e-1) = -((domain%jacobian(i_s+2:i_e,k_s:k_e,j_s+1:j_e-1) + &
-                                               2*domain%jacobian(i_s+1:i_e-1,k_s:k_e,j_s+1:j_e-1) + &
-                                               domain%jacobian(i_s:i_e-2,k_s:k_e,j_s+1:j_e-1))/(2*domain%dx**2)) &
-                                            -((domain%jacobian(i_s+1:i_e-1,k_s:k_e,j_s+2:j_e) + &
-                                               2*domain%jacobian(i_s+1:i_e-1,k_s:k_e,j_s+1:j_e-1) + &
-                                               domain%jacobian(i_s+1:i_e-1,k_s:k_e,j_s:j_e-2))/(2*domain%dx**2)) - &
-                                               B_coef(i_s+1:i_e-1,k_s:k_e,j_s+1:j_e-1) - C_coef(i_s+1:i_e-1,k_s:k_e,j_s+1:j_e-1)
-                                               
-        A_coef(i_s,:,j_s+1:j_e-1) = A_coef(i_s+1,:,j_s+1:j_e-1) 
-        A_coef(i_e,:,j_s+1:j_e-1) = A_coef(i_e-1,:,j_s+1:j_e-1) 
-        A_coef(i_s:i_e,:,j_s) = A_coef(i_s:i_e,:,j_s+1)
-        A_coef(i_s:i_e,:,j_e) = A_coef(i_s:i_e,:,j_e-1)
-                    
+                                                       
     end subroutine
-
+    
 
     subroutine finalize_iter_winds()
         implicit none
@@ -730,7 +714,7 @@ contains
         call PetscFinalize(ierr)
     end subroutine
 
-    subroutine init_iter_winds(domain)
+    subroutine init_iter_winds_old(domain)
         implicit none
         type(domain_t), intent(in) :: domain
         PetscErrorCode ierr
@@ -755,7 +739,16 @@ contains
         k_e = domain%kte  
         j_s = domain%jts-1
         j_e = domain%jte+1
-        
+
+
+        ims = domain%ims
+        ime = domain%ime
+        kms = domain%kms  
+        kme = domain%kme  
+        jms = domain%jms
+        jme = domain%jme
+
+
         !i_s+hs, unless we are on global boundary, then i_s
         if (domain%grid%ims==domain%grid%ids) i_s = domain%grid%ids
         
@@ -774,6 +767,10 @@ contains
             allocate(dzdx(i_s:i_e,k_s:k_e,j_s:j_e))
             allocate(dzdy(i_s:i_e,k_s:k_e,j_s:j_e))
             allocate(jaco(i_s:i_e,k_s:k_e,j_s:j_e))
+
+            allocate(dzdx_surf(i_s:i_e,j_s:j_e))
+            allocate(dzdy_surf(i_s:i_e,j_s:j_e))
+
             allocate(sigma(i_s:i_e,k_s:k_e,j_s:j_e))
             allocate(dz_if(i_s:i_e,k_s:k_e+1,j_s:j_e))
             allocate(alpha(i_s:i_e,k_s:k_e,j_s:j_e))
@@ -784,17 +781,30 @@ contains
             yl = 0
             
             dx = domain%dx
-            dzdx = domain%dzdx(i_s:i_e,k_s:k_e,j_s:j_e) 
-            dzdy = domain%dzdy(i_s:i_e,k_s:k_e,j_s:j_e)
+            dzdx  = domain%dzdx(i_s:i_e,k_s:k_e,j_s:j_e) 
+            dzdy  = domain%dzdy(i_s:i_e,k_s:k_e,j_s:j_e)
             jaco = domain%jacobian(i_s:i_e,k_s:k_e,j_s:j_e)
             
-            dz_if(:,k_s,:) = domain%advection_dz(i_s:i_e,k_s,j_s:j_e)
+            dzdx_surf = 0.1
+            dzdy_surf = 0.1
+            dzdx_surf(i_s+1:i_e-1,j_s:j_e) = (domain%neighbor_terrain(i_s+2:i_e,j_s:j_e)-domain%neighbor_terrain(i_s:i_e-2,j_s:j_e))/(2*dx)
+            dzdy_surf(i_s:i_e,j_s+1:j_e-1) = (domain%neighbor_terrain(i_s:i_e,j_s+2:j_e)-domain%neighbor_terrain(i_s:i_e,j_s:j_e-2))/(2*dx)
+                          
+            dzdx_surf(i_s,j_s:j_e) = dzdx_surf(i_s+1,j_s:j_e)
+            dzdx_surf(i_e,j_s:j_e) = dzdx_surf(i_e-1,j_s:j_e)
+            dzdy_surf(i_s:i_e,j_s) = dzdy_surf(i_s:i_e,j_s+1)
+            dzdy_surf(i_s:i_e,j_e) = dzdy_surf(i_s:i_e,j_e-1)
+            
+            dzdy_surf(i_s:i_e,j_s:j_e) = dzdy(i_s:i_e,1,j_s:j_e)
+            dzdx_surf(i_s:i_e,j_s:j_e) = dzdx(i_s:i_e,1,j_s:j_e)
+
+            
             dz_if(:,k_s+1:k_e,:) = (domain%advection_dz(i_s:i_e,k_s+1:k_e,j_s:j_e) + &
                                    domain%advection_dz(i_s:i_e,k_s:k_e-1,j_s:j_e))/2
+            dz_if(:,k_s,:) = domain%advection_dz(i_s:i_e,k_s,j_s:j_e)
             dz_if(:,k_e+1,:) = domain%advection_dz(i_s:i_e,k_e,j_s:j_e)
             sigma = dz_if(:,k_s:k_e,:)/dz_if(:,k_s+1:k_e+1,:)
             
-                    
             !Calculate how global grid is decomposed for DMDA
             !subtract halo size from boundaries of each cell to get x/y extent
             if (domain%grid%yimg == 1) xl(domain%grid%ximg) = domain%grid%nx-hs*2
@@ -818,4 +828,4 @@ contains
     
     end subroutine
 
-end module wind_iterative
+end module wind_iterative_old
