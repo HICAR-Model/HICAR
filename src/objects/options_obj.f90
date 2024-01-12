@@ -448,11 +448,11 @@ contains
         
         if (options%wind%alpha_const > 0) then
             if (options%wind%alpha_const > 1.0) then
-                if (this_image()==1) write(*,*) "Alpha currently limited to values between 0.1 and 1.0, setting to 1.0"
+                if (this_image()==1) write(*,*) "Alpha currently limited to values between 0.01 and 1.0, setting to 1.0"
                 options%wind%alpha_const = 1.0
-            else if (options%wind%alpha_const < 0.1) then
-                if (this_image()==1) write(*,*) "Alpha currently limited to values between 0.1 and 1.0, setting to 0.1"
-                options%wind%alpha_const = 0.1
+            else if (options%wind%alpha_const < 0.01) then
+                if (this_image()==1) write(*,*) "Alpha currently limited to values between 0.01 and 1.0, setting to 0.01"
+                options%wind%alpha_const = 0.01
             endif
         endif
         
@@ -1973,6 +1973,8 @@ contains
         real    :: dz_lsm_modification
         real    :: wind_enhancement
         real    :: max_swe
+        real    :: snow_den_const                    ! variable for converting snow height into SWE or visa versa when input data is incomplete 
+
         logical :: monthly_vegfrac                   ! read in 12 months of vegfrac data
         logical :: monthly_albedo                    ! same for albedo (requires vegfrac be monthly)
         integer :: update_interval                   ! minimum number of seconds between LSM updates
@@ -1988,7 +1990,7 @@ contains
 
         ! define the namelist
         namelist /lsm_parameters/ LU_Categories, lh_feedback_fraction, sh_feedback_fraction, update_interval, &
-                                  urban_category, ice_category, water_category, lake_category,                &
+                                  urban_category, ice_category, water_category, lake_category, snow_den_const,&
                                   monthly_vegfrac, monthly_albedo, sfc_layer_thickness, dz_lsm_modification,  &
                                   wind_enhancement, max_swe, surface_diagnostics,  nmp_dveg, nmp_opt_crs,     &
                                   nmp_opt_sfc, nmp_opt_btr, nmp_opt_run, nmp_opt_infdv, nmp_opt_frz,          &
@@ -2052,7 +2054,8 @@ contains
         noahmp_output = 1
         
         max_swe = 1e10
-
+        snow_den_const = 200 !kg/m^3
+        
         ! read the namelist options
         if (options%parameters%use_lsm_options) then
             open(io_newunit(name_unit), file=filename)
@@ -2077,6 +2080,7 @@ contains
         lsm_options%dz_lsm_modification  = dz_lsm_modification
         lsm_options%wind_enhancement     = wind_enhancement
         lsm_options%max_swe              = max_swe
+        lsm_options%snow_den_const       = snow_den_const
         lsm_options%surface_diagnostics  = surface_diagnostics !! MJ added
         lsm_options%sf_urban_phys        = sf_urban_phys
 
