@@ -17,3 +17,4 @@ docs/doxygen_sqlite3.db
 *-checkpoint.F90
 *.stamp
 */.ipynb_checkpoints/*
+*/build/*
