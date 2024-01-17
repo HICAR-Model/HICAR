@@ -99,7 +99,6 @@ contains
         if (options%vars_to_exch(kVARS%fsnow)>0) call this%exch_vars%add_var('fsnow', this%fsnow)   
         if (options%vars_to_exch(kVARS%Sice)>0) call this%exch_vars%add_var('Sice', this%Sice)   
         if (options%vars_to_exch(kVARS%Sliq)>0) call this%exch_vars%add_var('Sliq', this%Sliq)   
-        if (options%vars_to_exch(kVARS%Tsnow)>0) call this%exch_vars%add_var('Tsnow', this%Tsnow)   
         if (options%vars_to_exch(kVARS%Nsnow)>0) call this%exch_vars%add_var('Nsnow', this%Nsnow)   
 
         var_list = options%io_options%vars_for_output + options%vars_for_restart
@@ -310,7 +309,6 @@ contains
         if (0<var_list( kVARS%tend_swrad) )                 call this%vars_to_out%add_var( trim( get_varname( kVARS%tend_swrad                   )), this%tend_swrad)
         !! MJ added for FSM:
         if (0<var_list( kVARS%runoff_tstep) )               call this%vars_to_out%add_var( trim( get_varname( kVARS%runoff_tstep                 )), this%runoff_tstep)
-        if (0<var_list( kVARS%Tsnow) )                      call this%vars_to_out%add_var( trim( get_varname( kVARS%Tsnow                        )), this%Tsnow)
         if (0<var_list( kVARS%Sice) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%Sice                         )), this%Sice)
         if (0<var_list( kVARS%Sliq) )                       call this%vars_to_out%add_var( trim( get_varname( kVARS%Sliq                         )), this%Sliq)
         if (0<var_list( kVARS%Ds) )                         call this%vars_to_out%add_var( trim( get_varname( kVARS%Ds                           )), this%Ds)
@@ -1219,7 +1217,6 @@ contains
         !! note that, in lsm_driver, it is alreaddy decieded if we need these vars or not..so it should be here..
         !if (0<opt%vars_to_allocate( kVARS%FSM_slopemu) )               allocate(this%FSM_slopemu                (ims:ime, jms:jme))!,          source=0.0)        
         if (0<opt%vars_to_allocate( kVARS%runoff_tstep) )               call setup(this%runoff_tstep,     this%grid2d)        
-        if (0<opt%vars_to_allocate( kVARS%Tsnow) )                      call setup(this%Tsnow,      this%grid_snow)        
         if (0<opt%vars_to_allocate( kVARS%Sice) )                       call setup(this%Sice,       this%grid_snow)        
         if (0<opt%vars_to_allocate( kVARS%Sliq) )                       call setup(this%Sliq,       this%grid_snow)        
         if (0<opt%vars_to_allocate( kVARS%Ds) )                         call setup(this%Ds,         this%grid_snow)        
@@ -2894,7 +2891,7 @@ contains
         if (associated(this%storage_lake%data_2d)) this%storage_lake%data_2d=0
         
         if (associated(this%runoff_tstep%data_2d))        this%runoff_tstep%data_2d=0.
-        if (associated(this%Tsnow%data_3d))               this%Tsnow%data_3d=273.15
+        if (associated(this%snow_temperature%data_3d))    this%snow_temperature%data_3d=273.15
         if (associated(this%Sice%data_3d))                this%Sice%data_3d=0.
         if (associated(this%Sliq%data_3d))                this%Sliq%data_3d=0.
         if (associated(this%Ds%data_3d))                  this%Ds%data_3d=0.
@@ -3181,10 +3178,10 @@ contains
             if (.not.(this%south_boundary) .and. .not.(this%east_boundary)) this%southeast_neighbor  = DOM_IMG_INDX(my_index - this%grid%ximages + 1)
             if (.not.(this%north_boundary) .and. .not.(this%east_boundary)) this%northeast_neighbor  = DOM_IMG_INDX(my_index + this%grid%ximages + 1)
 
-            n_neighbors = merge(0,1,(this%south_boundary .or. this%west_boundary))  &
-                     +merge(0,1,(this%north_boundary .or. this%west_boundary))  &
-                     +merge(0,1,(this%south_boundary .or. this%east_boundary))   &
-                     +merge(0,1,(this%north_boundary .or. this%east_boundary))
+            n_neighbors = merge(1,0,(.not.(this%south_boundary) .and. .not.(this%west_boundary)))  &
+                     +merge(1,0,(.not.(this%north_boundary) .and. .not.(this%west_boundary)))  &
+                     +merge(1,0,(.not.(this%south_boundary) .and. .not.(this%east_boundary)))   &
+                     +merge(1,0,(.not.(this%north_boundary) .and. .not.(this%east_boundary)))
             n_neighbors = max(1, n_neighbors)
 
             allocate(this%corner_neighbors(n_neighbors))

@@ -52,7 +52,7 @@ module FSM_interface
 !-----------------------------------------------------------------------
     use MODULES_interface
            
-    use SNOWTRAN3D_interface, only : SNOWTRAN3D_setup,SNOWTRAN3D_fluxes,SNOWTRAN3D_accum, STRAN_NORTH, STRAN_SOUTH, STRAN_EAST, STRAN_WEST
+    use SNOWTRAN3D_interface, only : SNOWTRAN3D_setup,SNOWTRAN3D_fluxes,SNOWTRAN3D_accum
 
     implicit none
     
@@ -60,7 +60,7 @@ module FSM_interface
     !!
     public :: FSM_SETUP,FSM_DRIVE,FSM_PHYSICS,FSM_SNOWSLIDE, FSM_SNOWSLIDE_END, FSM_CUMULATE_SD, FSM_SNOWTRAN_SETUP, FSM_SNOWTRAN_FLUXES, FSM_SNOWTRAN_ACCUM
     
-    public :: Nx_HICAR, Ny_HICAR,lat_HICAR,lon_HICAR,terrain_HICAR,dx_HICAR,slope_HICAR,shd_HICAR, STRAN_NORTH, STRAN_SOUTH, STRAN_EAST, STRAN_WEST, SNTRAN, SNSLID
+    public :: Nx_HICAR, Ny_HICAR,lat_HICAR,lon_HICAR,terrain_HICAR,dx_HICAR,slope_HICAR,shd_HICAR, SNTRAN, SNSLID
     !!
     public ::            &
       year,              &
@@ -108,9 +108,9 @@ module FSM_interface
       dm_salt_,      &
       dm_susp_,      &
       dm_subl_,      &
-      dm_slide_,     &
-      Qsalt_u,       &
-      Qsalt_v
+      dm_slide_!,     &
+!      Qsalt_u,       &
+!      Qsalt_v
       
     
     integer :: Nx_HICAR, Ny_HICAR    
@@ -165,15 +165,9 @@ module FSM_interface
         logical, intent(inout) :: &
           first_it,               &
           aval(Nx_HICAR,Ny_HICAR)
-          
-        real :: &
-          snowdepth0_temp(Nx_HICAR,Ny_HICAR), &
-          Sice0_temp(Nx_HICAR,Ny_HICAR)
-          
 
         if (SNSLID==1) then
         
-            
             !Run over all cells, not removing snow from image border
             call SNOWSLIDE_interface(snowdepth0,Sice0,dm_slide,first_it,.False.,aval)
 
@@ -197,39 +191,39 @@ module FSM_interface
         ! Accumulation of new snow, calculation of snow cover fraction and relayering
         call SNOW_LAYERING(snowdepth0,Sice0)
 
-        call CUMULATE_SD_interface()
+        !call CUMULATE_SD_interface()
 
     end subroutine FSM_SNOWSLIDE_END
 
 
-    subroutine FSM_SNOWTRAN_SETUP()
+    subroutine FSM_SNOWTRAN_SETUP(Qsalt_u, Qsalt_v)
         implicit none
-        
-        if (SNTRAN==1) call SNOWTRAN3D_setup()
+        real, intent(inout) :: &
+          Qsalt_u(Nx_HICAR,Ny_HICAR), &
+          Qsalt_v(Nx_HICAR,Ny_HICAR)
+
+        if (SNTRAN==1) call SNOWTRAN3D_setup(Qsalt_u, Qsalt_v)
         
     end subroutine FSM_SNOWTRAN_SETUP
 
-    subroutine FSM_SNOWTRAN_FLUXES(DIR)
+    subroutine FSM_SNOWTRAN_FLUXES(Qsalt_u, Qsalt_v)
         implicit none
-        
-        integer, optional, intent(in) :: DIR
-        
+        real, intent(inout) :: &
+          Qsalt_u(Nx_HICAR,Ny_HICAR), &
+          Qsalt_v(Nx_HICAR,Ny_HICAR)
+
         if (SNTRAN==1) then
-            if (present(DIR)) then
-                call SNOWTRAN3D_fluxes(DIR)    
-            else
-                call SNOWTRAN3D_fluxes(STRAN_NORTH)    
-                call SNOWTRAN3D_fluxes(STRAN_SOUTH)    
-                call SNOWTRAN3D_fluxes(STRAN_EAST)    
-                call SNOWTRAN3D_fluxes(STRAN_WEST)    
-            endif
+            call SNOWTRAN3D_fluxes(Qsalt_u, Qsalt_v)    
         endif 
         
     end subroutine FSM_SNOWTRAN_FLUXES
     
-    subroutine FSM_SNOWTRAN_ACCUM()
+    subroutine FSM_SNOWTRAN_ACCUM(Qsalt_u, Qsalt_v)
         implicit none
-        
+        real, intent(inout) :: &
+          Qsalt_u(Nx_HICAR,Ny_HICAR), &
+          Qsalt_v(Nx_HICAR,Ny_HICAR)
+
         real :: &
           snowdepth0(Nx_HICAR,Ny_HICAR), &
           Sice0(Nx_HICAR,Ny_HICAR), &
@@ -246,7 +240,7 @@ module FSM_interface
             dm_subl(:,:) = 0.
             dm_subgrid(:,:) = 0.
 
-            call SNOWTRAN3D_accum(snowdepth0,Sice0,dm_salt,dm_susp,dm_subl,dm_subgrid)
+            call SNOWTRAN3D_accum(Qsalt_u, Qsalt_v, snowdepth0,Sice0,dm_salt,dm_susp,dm_subl,dm_subgrid)
         
             ! Accumulation of new snow, calculation of snow cover fraction and relayering
             call SNOW_LAYERING(snowdepth0,Sice0)

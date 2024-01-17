@@ -12,9 +12,8 @@ module module_sf_FSMdrv
     use options_interface,   only : options_t
     use domain_interface,    only : domain_t
     use io_routines,         only : io_write, io_read, io_add_attribute
-    use FSM_interface , only:  FSM_SETUP,FSM_DRIVE,FSM_PHYSICS,FSM_SNOWSLIDE, FSM_SNOWSLIDE_END, FSM_CUMULATE_SD, FSM_SNOWTRAN_SETUP, FSM_SNOWTRAN_FLUXES, FSM_SNOWTRAN_ACCUM
+    use FSM_interface , only:  FSM_SETUP,FSM_DRIVE,FSM_PHYSICS, FSM_SNOWSLIDE, FSM_SNOWSLIDE_END, FSM_CUMULATE_SD, FSM_SNOWTRAN_SETUP, FSM_SNOWTRAN_FLUXES, FSM_SNOWTRAN_ACCUM
     use FSM_interface , only:  Nx_HICAR, Ny_HICAR,lat_HICAR,lon_HICAR,terrain_HICAR,dx_HICAR,slope_HICAR,shd_HICAR
-    use FSM_interface , only:  STRAN_NORTH, STRAN_SOUTH, STRAN_EAST, STRAN_WEST
     use FSM_interface, only: &
       year,          &
       month,         &
@@ -48,9 +47,9 @@ module module_sf_FSMdrv
       dm_salt_,      &
       dm_susp_,      &
       dm_subl_,      &
-      dm_slide_,     &
-      Qsalt_u,       &
-      Qsalt_v
+      dm_slide_!,     &
+      !Qsalt_u,       &
+      !Qsalt_v
 
     use FSM_interface, only: &
       firstit,       &
@@ -77,6 +76,7 @@ module module_sf_FSMdrv
     integer :: its,ite,jts,jte,kts,kte ! Processing Tile dimensions
     
     type(Time_type) :: last_output
+    real            :: last_snowslide
    
     real, allocatable :: &
         snowfall_sum(:,:),       & !aggregated per output interval
@@ -115,6 +115,7 @@ contains
         Nx_HICAR=jte-jts+1
         
         last_output = options%parameters%start_time
+        last_snowslide = 4000
         !!
         allocate(lat_HICAR(Nx_HICAR,Ny_HICAR))
         allocate(lon_HICAR(Nx_HICAR,Ny_HICAR))
@@ -154,8 +155,8 @@ contains
         allocate(dm_susp_(Nx_HICAR,Ny_HICAR)); dm_susp_=0.
         allocate(dm_subl_(Nx_HICAR,Ny_HICAR)); dm_subl_=0.
         allocate(dm_slide_(Nx_HICAR,Ny_HICAR)); dm_slide_=0.
-        allocate(Qsalt_u(Nx_HICAR,Ny_HICAR)); Qsalt_u=0.
-        allocate(Qsalt_v(Nx_HICAR,Ny_HICAR)); Qsalt_v=0.
+        !allocate(Qsalt_u(Nx_HICAR,Ny_HICAR)); Qsalt_u=0.
+        !allocate(Qsalt_v(Nx_HICAR,Ny_HICAR)); Qsalt_v=0.
         !!
         allocate(snowfall_sum(Nx_HICAR,Ny_HICAR)); snowfall_sum=0.
         allocate(rainfall_sum(Nx_HICAR,Ny_HICAR)); rainfall_sum=0.
@@ -179,7 +180,7 @@ contains
             Nsnow = TRANSPOSE(domain%Nsnow%data_2d(its:ite,jts:jte))                        
             !!
             do i=1,3
-                Tsnow(i,:,:) = TRANSPOSE(domain%Tsnow%data_3d(its:ite,i,jts:jte))
+                Tsnow(i,:,:) = TRANSPOSE(domain%snow_temperature%data_3d(its:ite,i,jts:jte))
                 Sice(i,:,:) = TRANSPOSE(domain%Sice%data_3d(its:ite,i,jts:jte))
                 Sliq(i,:,:) = TRANSPOSE(domain%Sliq%data_3d(its:ite,i,jts:jte))
                 Ds(i,:,:) = TRANSPOSE(domain%Ds%data_3d(its:ite,i,jts:jte))
@@ -213,12 +214,17 @@ contains
         integer :: i,j,k, hj, hi, i_s, i_e, j_s, j_e
         real :: Delta_t
         real, dimension(its:ite,jts:jte) :: SWE_pre
-        real, dimension(Nx_HICAR,Ny_HICAR) :: SD_0, Sice_0, SD_0_buff, Sice_0_buff, SD_0_old
+        real, dimension(Nx_HICAR,Ny_HICAR) :: SD_0, Sice_0, SD_0_buff, Sice_0_buff, Qsalt_u, Qsalt_v
         logical, dimension(Nx_HICAR,Ny_HICAR) :: aval
-        logical :: first_it_SLIDE
+        logical :: first_SLIDE, do_snowslide
         character(len=1024) :: filename
         
         !if (SNTRAN+SNSLID > 0) then
+        do_snowslide = .False.
+        if (SNSLID > 0) then
+            do_snowslide = (last_snowslide > 3600.) !Hard code to just be called every hour...
+        endif
+
         j_s = 2
         i_s = 2
         j_e = Nx_HICAR-1
@@ -237,6 +243,8 @@ contains
         day=real(domain%model_time%day)
         hour=real(domain%model_time%hour)
         dt=lsm_dt
+        
+        
         LW=TRANSPOSE(domain%longwave%data_2d(its:ite,jts:jte))
         Ps=TRANSPOSE(domain%surface_pressure%data_2d(its:ite,jts:jte))
         Rf=TRANSPOSE(current_rain(its:ite,jts:jte))
@@ -258,11 +266,11 @@ contains
         Ta= TRANSPOSE(domain%temperature%data_3d(its:ite,domain%grid%kms,jts:jte))!domain%temperature_2m%data_2d(its:ite,jts:jte)
         Qa= TRANSPOSE(domain%water_vapor%data_3d(its:ite,domain%grid%kms,jts:jte))!domain%humidity_2m%data_2d(its:ite,jts:jte)
         Ua=TRANSPOSE(windspd(its:ite,jts:jte))
-        Udir = ATAN2(TRANSPOSE(domain%v_10m%data_2d(its:ite,jts:jte)/windspd(its:ite,jts:jte)), &
-                     TRANSPOSE(domain%u_10m%data_2d(its:ite,jts:jte)/windspd(its:ite,jts:jte))) 
-        Udir = 90 - (Udir * 180/piconst + 180)
+        Udir = ATAN2(TRANSPOSE(domain%u_10m%data_2d(its:ite,jts:jte)/windspd(its:ite,jts:jte)), &
+                     TRANSPOSE(domain%v_10m%data_2d(its:ite,jts:jte)/windspd(its:ite,jts:jte))) 
+        Udir = (Udir * 180/piconst)
         where(Udir<0) Udir=Udir+360
-        
+
         if ((domain%model_time%seconds() - dt <= last_output%seconds()) .and. &
             (domain%model_time%seconds()   >=    last_output%seconds())) then
             !If we are the first call since the last output, reset the per-output counters
@@ -278,62 +286,77 @@ contains
         !! FSM processing      
         call FSM_DRIVE()
         call FSM_PHYSICS()
-                
-        !Exchange state variables here if SNTRAN or SNSLID is to be called
-        if ( (SNTRAN+SNSLID) > 0) call exch_FSM_state_vars(domain)
-        
+                        
         !Call Snowtran here -- must be done here and not in FSM since we need control over the parallelization of the routine
         if (SNTRAN > 0) then        
-            call FSM_SNOWTRAN_SETUP()
+            call exch_FSM_state_vars(domain)
+            
+            call FSM_SNOWTRAN_SETUP(Qsalt_u,Qsalt_v)
             
             !First guess for fluxes
-            call FSM_SNOWTRAN_FLUXES()
+            call FSM_SNOWTRAN_FLUXES(Qsalt_u,Qsalt_v)
             !Exchange fluxes between processes
-            call exch_SNTRAN_Qsalt(domain)
+            call exch_SNTRAN_Qsalt(domain,Qsalt_u,Qsalt_v)
             !Recalculate fluxes with intermediate values from neighbors
-            call FSM_SNOWTRAN_FLUXES()
-            !Exchange fluxes between processes
-            !call exch_SNTRAN_Qsalt(domain)
+            call FSM_SNOWTRAN_FLUXES(Qsalt_u,Qsalt_v)
 
-            call FSM_SNOWTRAN_ACCUM()
-            
-            call exch_FSM_state_vars(domain)
+            call FSM_SNOWTRAN_ACCUM(Qsalt_u,Qsalt_v)
         endif
 
         
         !Call Snowslide here -- must be done here and not in FSM since we need control over the parallelization of the routine
-        if (SNSLID > 0) then
+        if (do_snowslide .and. SNSLID > 0) then
             SD_0 = 0.0
             Sice_0 = 0.0
             SD_0_buff = 0.0
             Sice_0_buff = 0.0
 
             dm_slide_ = 0.0
-            first_it_SLIDE = .True.
+            first_SLIDE = .True.
             aval = .False.
             !Snowslide needs the corner snow depth information from corner neighbor processes
             call exch_FSM_state_vars(domain,corners_in=.True.)
             
             do i=1,10
-                SD_0_old = SD_0
-                call FSM_SNOWSLIDE(SD_0,Sice_0,SD_0_buff,Sice_0_buff,aval,first_it_SLIDE,dm_slide_)
+                call FSM_SNOWSLIDE(SD_0,Sice_0,SD_0_buff,Sice_0_buff,aval,first_SLIDE,dm_slide_)
                 
                 ! Copy interior buffer for exchange
                 call exch_SLIDE_buffers(domain,SD_0_buff,Sice_0_buff)
                 
-                !See where we have been passed avalanching snow
-                where(SD_0 > SD_0_old) aval=.True.
-                !Reset interior avalanching, so only avalanches coming from the border will be considered
+                !Now, where the buffer is positive for halo cells, record that an avalanche was passed here
+                aval = .False.
+                where(SD_0_buff > SD_0) aval=.True.
                 aval(j_s:j_e,i_s:i_e) = .False.
                 
                 !Must accumulate slide changes here, since we will loop over calls to snowslide
                 domain%dm_slide%data_2d(domain%its:domain%ite,domain%jts:domain%jte) = &
                         domain%dm_slide%data_2d(domain%its:domain%ite,domain%jts:domain%jte) + TRANSPOSE(dm_slide_(j_s:j_e,i_s:i_e))
-                
+
+                ! trade over buffer to halo cells, in case avalanching snow was passed on previous iteration.
+                SD_0(1,:) = SD_0_buff(1,:)
+                SD_0(Nx_HICAR,:) = SD_0_buff(Nx_HICAR,:)
+                SD_0(:,1) = SD_0_buff(:,1)
+                SD_0(:,Ny_HICAR) = SD_0_buff(:,Ny_HICAR)
+
+                Sice_0(1,:) = Sice_0_buff(1,:)
+                Sice_0(Nx_HICAR,:) = Sice_0_buff(Nx_HICAR,:)
+                Sice_0(:,1) = Sice_0_buff(:,1)
+                Sice_0(:,Ny_HICAR) = Sice_0_buff(:,Ny_HICAR)
+
+
             enddo
             call FSM_SNOWSLIDE_END(SD_0,Sice_0)
-            call exch_FSM_state_vars(domain)
+            last_snowslide = 0
         endif
+        
+        
+        if (SNSLID > 0) then
+            last_snowslide = last_snowslide + lsm_dt
+        endif
+
+        !The End.
+        if ( (SNTRAN > 0) .or. do_snowslide) call exch_FSM_state_vars(domain)
+        call FSM_CUMULATE_SD()
         
         !! giving feedback to HICAR -- should only be done for snow-covered cells, or cells which were just snowed on
         do j=j_s,j_e
@@ -362,7 +385,7 @@ contains
                     domain%roughness_z0%data_2d(hi,hj) = z0sn*fsnow(j,i)+(1-fsnow(j,i))*domain%roughness_z0%data_2d(hi,hj)
                     
                     do k=1,3
-                        domain%Tsnow%data_3d(hi,k,hj) = Tsnow(k,j,i)
+                        domain%snow_temperature%data_3d(hi,k,hj) = Tsnow(k,j,i)
                         domain%Sice%data_3d(hi,k,hj) = Sice(k,j,i)
                         domain%Sliq%data_3d(hi,k,hj) = Sliq(k,j,i)
                         domain%Ds%data_3d(hi,k,hj) = Ds(k,j,i)
@@ -375,8 +398,8 @@ contains
                     if (SNTRAN>0) then
                         ! Convert to rate 1/s
                         domain%dm_salt%data_2d(hi,hj)=domain%dm_salt%data_2d(hi,hj) + dm_salt_(j,i)/dt 
-                        domain%dm_susp%data_2d(hi,hj)=domain%dm_susp%data_2d(hi,hj) + dm_susp_(j,i)/dt
-                        domain%dm_subl%data_2d(hi,hj)=domain%dm_subl%data_2d(hi,hj) + dm_subl_(j,i)/dt 
+                        domain%dm_susp%data_2d(hi,hj)= Qsalt_u(j,i)!domain%dm_susp%data_2d(hi,hj) + dm_susp_(j,i)/dt
+                        domain%dm_subl%data_2d(hi,hj)= Qsalt_v(j,i)!domain%dm_subl%data_2d(hi,hj) + dm_subl_(j,i)/dt 
                         
                         !Add sublimated snow to latent heat flux. 
                         !Sometimes FSM returns NaN values for blowing snow sublimation, so mask those out here
@@ -442,7 +465,7 @@ contains
         domain%Nsnow%data_2d(domain%its:domain%ite,domain%jts:domain%jte) = TRANSPOSE(Nsnow(2:Nx_HICAR-1,2:Ny_HICAR-1))                        
         !!
         do i=1,3
-            domain%Tsnow%data_3d(domain%its:domain%ite,i,domain%jts:domain%jte) = TRANSPOSE(Tsnow(i,2:Nx_HICAR-1,2:Ny_HICAR-1))
+            domain%snow_temperature%data_3d(domain%its:domain%ite,i,domain%jts:domain%jte) = TRANSPOSE(Tsnow(i,2:Nx_HICAR-1,2:Ny_HICAR-1))
             domain%Sice%data_3d(domain%its:domain%ite,i,domain%jts:domain%jte) = TRANSPOSE(Sice(i,2:Nx_HICAR-1,2:Ny_HICAR-1))
             domain%Sliq%data_3d(domain%its:domain%ite,i,domain%jts:domain%jte) = TRANSPOSE(Sliq(i,2:Nx_HICAR-1,2:Ny_HICAR-1))
             domain%Ds%data_3d(domain%its:domain%ite,i,domain%jts:domain%jte) = TRANSPOSE(Ds(i,2:Nx_HICAR-1,2:Ny_HICAR-1))
@@ -456,7 +479,7 @@ contains
         Nsnow = TRANSPOSE(domain%Nsnow%data_2d(its:ite,jts:jte))                        
         !!
         do i=1,3
-            Tsnow(i,:,:) = TRANSPOSE(domain%Tsnow%data_3d(its:ite,i,jts:jte))
+            Tsnow(i,:,:) = TRANSPOSE(domain%snow_temperature%data_3d(its:ite,i,jts:jte))
             Sice(i,:,:) = TRANSPOSE(domain%Sice%data_3d(its:ite,i,jts:jte))
             Sliq(i,:,:) = TRANSPOSE(domain%Sliq%data_3d(its:ite,i,jts:jte))
             Ds(i,:,:) = TRANSPOSE(domain%Ds%data_3d(its:ite,i,jts:jte))
@@ -466,9 +489,9 @@ contains
             ! Need to handle corner exchanges necesarry for snowslide
             if (.not.(domain%south_boundary) .and. .not.(domain%west_boundary)) then
                 !DIR$ PGAS DEFER_SYNC
-                domain%north_in_2d(1,1,1)[domain%southwest_neighbor] = fsnow(2,2)
+                domain%east_in_2d(1,1,1)[domain%southwest_neighbor] = fsnow(2,2)
                 !DIR$ PGAS DEFER_SYNC
-                domain%north_in_3d(1,1,1:3,1)[domain%southwest_neighbor] = Ds(1:3,2,2)
+                domain%east_in_3d(1,1,1:3,1)[domain%southwest_neighbor] = Ds(1:3,2,2)
             endif
             if (.not.(domain%north_boundary) .and. .not.(domain%west_boundary)) then
                 !DIR$ PGAS DEFER_SYNC
@@ -478,85 +501,72 @@ contains
             endif
             if (.not.(domain%south_boundary) .and. .not.(domain%east_boundary)) then
                 !DIR$ PGAS DEFER_SYNC
-                domain%west_in_2d(1,1,1)[domain%southeast_neighbor] = fsnow(2,Ny_HICAR-1)
+                domain%north_in_2d(1,1,1)[domain%southeast_neighbor] = fsnow(2,Ny_HICAR-1)
                 !DIR$ PGAS DEFER_SYNC
-                domain%west_in_3d(1,1,1:3,1)[domain%southeast_neighbor] = Ds(1:3,2,Ny_HICAR-1)
+                domain%north_in_3d(1,1,1:3,1)[domain%southeast_neighbor] = Ds(1:3,2,Ny_HICAR-1)
             endif
             if (.not.(domain%north_boundary) .and. .not.(domain%east_boundary)) then
                 !DIR$ PGAS DEFER_SYNC
-                domain%east_in_2d(1,1,1)[domain%northeast_neighbor] = fsnow(Nx_HICAR-1,Ny_HICAR-1)
+                domain%west_in_2d(1,1,1)[domain%northeast_neighbor] = fsnow(Nx_HICAR-1,Ny_HICAR-1)
                 !DIR$ PGAS DEFER_SYNC
-                domain%east_in_3d(1,1,1:3,1)[domain%northeast_neighbor] = Ds(1:3,Nx_HICAR-1,Ny_HICAR-1)
+                domain%west_in_3d(1,1,1:3,1)[domain%northeast_neighbor] = Ds(1:3,Nx_HICAR-1,Ny_HICAR-1)
             endif
 
             sync images ( domain%corner_neighbors )
-            sync images ( domain%neighbors )
 
             if (.not.(domain%south_boundary) .and. .not.(domain%west_boundary)) then
-                fsnow(1,1) = domain%east_in_2d(1,1,1)
-                Ds(1:3,1,1) = domain%east_in_3d(1,1,1:3,1)
+                fsnow(1,1) = domain%west_in_2d(1,1,1)
+                Ds(1:3,1,1) = domain%west_in_3d(1,1,1:3,1)
             endif
             if (.not.(domain%north_boundary) .and. .not.(domain%west_boundary)) then
-                fsnow(Nx_HICAR,1) = domain%west_in_2d(1,1,1)
-                Ds(1:3,Nx_HICAR,1) = domain%west_in_3d(1,1,1:3,1)
+                fsnow(Nx_HICAR,1) = domain%north_in_2d(1,1,1)
+                Ds(1:3,Nx_HICAR,1) = domain%north_in_3d(1,1,1:3,1)
             endif
             if (.not.(domain%south_boundary) .and. .not.(domain%east_boundary)) then
                 fsnow(1,Ny_HICAR) = domain%south_in_2d(1,1,1)
                 Ds(1:3,1,Ny_HICAR) = domain%south_in_3d(1,1,1:3,1)
             endif
             if (.not.(domain%north_boundary) .and. .not.(domain%east_boundary)) then
-                fsnow(Nx_HICAR,Ny_HICAR) = domain%north_in_2d(1,1,1)
-                Ds(1:3,Nx_HICAR,Ny_HICAR) = domain%north_in_3d(1,1,1:3,1)
+                fsnow(Nx_HICAR,Ny_HICAR) = domain%east_in_2d(1,1,1)
+                Ds(1:3,Nx_HICAR,Ny_HICAR) = domain%east_in_3d(1,1,1:3,1)
             endif
 
-            sync images ( domain%corner_neighbors )
-            sync images ( domain%neighbors )
         
         endif
-                
-        call FSM_CUMULATE_SD()
         
     end subroutine exch_FSM_state_vars
     
     
-    subroutine exch_SNTRAN_Qsalt(domain)
+    subroutine exch_SNTRAN_Qsalt(domain, Qsalt_u, Qsalt_v)
         implicit none
         
         type(domain_t), intent(inout) :: domain
-        
-        real, dimension(Nx_HICAR,Ny_HICAR) :: tmp1, tmp2
-        integer :: i, j
+        real, dimension(Nx_HICAR,Ny_HICAR), intent(inout) :: Qsalt_u, Qsalt_v
 
-        do i=1,Nx_HICAR
-            do j=1,Ny_HICAR
-                tmp1(i,j) = Qsalt_v(i,j)
-                tmp2(i,j) = Qsalt_u(i,j)
-            enddo
-        enddo
         if (.not.(domain%south_boundary)) then
-            domain%south_buffer_2d(1,1:Ny_HICAR,1) = tmp1(2,:)
-            !DIR$ PGAS DEFER_SYNC
+            domain%south_buffer_2d(1,1:Ny_HICAR,1) = Qsalt_v(2,1:Ny_HICAR)
+            !       !DIR$ PGAS DEFER_SYNC
             domain%north_in_2d(:,:,:)[domain%south_neighbor] = domain%south_buffer_2d(:,:,:)
         endif
         if (.not.(domain%north_boundary)) then
-            domain%north_buffer_2d(1,1:Ny_HICAR,1) = tmp1(Nx_HICAR-1,:)
-            !DIR$ PGAS DEFER_SYNC
+            domain%north_buffer_2d(1,1:Ny_HICAR,1) = Qsalt_v(Nx_HICAR-1,1:Ny_HICAR)
+            !       !DIR$ PGAS DEFER_SYNC
             domain%south_in_2d(:,:,:)[domain%north_neighbor] = domain%north_buffer_2d(:,:,:)
         endif
         
         if (.not.(domain%east_boundary)) then
-            domain%east_buffer_2d(1,1,1:Nx_HICAR) = tmp2(:,Ny_HICAR-1)
-            !DIR$ PGAS DEFER_SYNC
+            domain%east_buffer_2d(1,1,1:Nx_HICAR) = Qsalt_u(1:Nx_HICAR,Ny_HICAR-1)
+            !       !DIR$ PGAS DEFER_SYNC
             domain%west_in_2d(:,:,:)[domain%east_neighbor] = domain%east_buffer_2d(:,:,:)
         endif
         if (.not.(domain%west_boundary)) then
-            domain%west_buffer_2d(1,1,1:Nx_HICAR) = tmp2(:,2)
-            !DIR$ PGAS DEFER_SYNC
+            domain%west_buffer_2d(1,1,1:Nx_HICAR) = Qsalt_u(1:Nx_HICAR,2)
+            !       !DIR$ PGAS DEFER_SYNC
             domain%east_in_2d(:,:,:)[domain%west_neighbor] = domain%west_buffer_2d(:,:,:)
         endif
 
         sync images ( domain%neighbors )
-
+        
         if (.not.(domain%south_boundary)) Qsalt_v(1,2:Ny_HICAR-1) = domain%south_in_2d(1,2:Ny_HICAR-1,1)
         if (.not.(domain%north_boundary)) Qsalt_v(Nx_HICAR,2:Ny_HICAR-1) = domain%north_in_2d(1,2:Ny_HICAR-1,1)
         if (.not.(domain%east_boundary)) Qsalt_u(2:Nx_HICAR-1,Ny_HICAR) = domain%east_in_2d(1,1,2:Nx_HICAR-1)
@@ -592,7 +602,7 @@ contains
             
             if (.not.(domain%west_boundary)) then
                 !DIR$ PGAS DEFER_SYNC
-                domain%south_in_2d(1:2,Ny_HICAR,1)[domain%northwest_neighbor] = domain%north_buffer_2d(1:2,2,1)
+                domain%south_in_2d(1:2,1,1)[domain%northwest_neighbor] = domain%north_buffer_2d(1:2,2,1)
             endif
         endif
         
@@ -615,7 +625,7 @@ contains
 
             if (.not.(domain%south_boundary)) then
                 !DIR$ PGAS DEFER_SYNC
-                domain%east_in_2d(1:2,1,Nx_HICAR)[domain%southwest_neighbor] = domain%west_buffer_2d(1:2,1,2)
+                domain%east_in_2d(1:2,1,1)[domain%southwest_neighbor] = domain%west_buffer_2d(1:2,1,2)
             endif
         endif
 
@@ -626,8 +636,8 @@ contains
             SD_0(1,2:Ny_HICAR-1) = domain%south_in_2d(1,2:Ny_HICAR-1,1)
             Sice_0(1,2:Ny_HICAR-1) = domain%south_in_2d(2,2:Ny_HICAR-1,1)
             if (.not.(domain%east_boundary)) then
-                SD_0(1,Ny_HICAR) = domain%south_in_2d(1,Ny_HICAR,1)
-                Sice_0(1,Ny_HICAR) = domain%south_in_2d(2,Ny_HICAR,1)
+                SD_0(1,Ny_HICAR) = domain%south_in_2d(1,1,1)
+                Sice_0(1,Ny_HICAR) = domain%south_in_2d(2,1,1)
             endif
         endif
         if (.not.(domain%north_boundary)) then
@@ -642,8 +652,8 @@ contains
             SD_0(2:Nx_HICAR-1,Ny_HICAR) = domain%east_in_2d(1,1,2:Nx_HICAR-1)
             Sice_0(2:Nx_HICAR-1,Ny_HICAR) = domain%east_in_2d(2,1,2:Nx_HICAR-1)
             if (.not.(domain%north_boundary)) then
-                SD_0(Nx_HICAR,Ny_HICAR) = domain%east_in_2d(1,1,Nx_HICAR)
-                Sice_0(Nx_HICAR,Ny_HICAR) = domain%east_in_2d(2,1,Nx_HICAR)
+                SD_0(Nx_HICAR,Ny_HICAR) = domain%east_in_2d(1,1,1)
+                Sice_0(Nx_HICAR,Ny_HICAR) = domain%east_in_2d(2,1,1)
             endif
         endif
         if (.not.(domain%west_boundary)) then
@@ -654,9 +664,6 @@ contains
                 Sice_0(1,1) = domain%west_in_2d(2,1,1)
             endif
         endif
-        
-        sync images ( domain%neighbors )
-        sync images ( domain%corner_neighbors )
 
 
     end subroutine exch_SLIDE_buffers

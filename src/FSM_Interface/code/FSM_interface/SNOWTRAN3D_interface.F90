@@ -17,9 +17,9 @@ module SNOWTRAN3D_interface
     use CONSTANTS_SNOWTRAN3D, only: &
       wind_min            ! Minimum wind speed to compute snow transport (m/s)
 
-    use MODULES_interface, only: &
-      Qsalt_u,                &! Saltation flux, u-direction
-      Qsalt_v                  ! Saltation flux, v-direction
+!    use MODULES_interface, only: &
+!      Qsalt_u,                &! Saltation flux, u-direction
+!      Qsalt_v                  ! Saltation flux, v-direction
 
     implicit none
     
@@ -27,24 +27,18 @@ module SNOWTRAN3D_interface
     !!
     public :: SNOWTRAN3D_setup,SNOWTRAN3D_fluxes,SNOWTRAN3D_accum, Utau, Utau_t, Ds_soft
 
-
-    integer, public, parameter :: STRAN_NORTH=1
-    integer, public, parameter :: STRAN_SOUTH=2
-    integer, public, parameter :: STRAN_EAST=3
-    integer, public, parameter :: STRAN_WEST=4
-
-    real :: &
+    real, save :: &
       bs_flag,           &! Blowing snow flag
       delta_WE,          &! Grid cell size in WE direction (m)
       delta_SN,          &! Grid cell size in SN direction (m)
       windspd_flag        ! Maximum wind speed on the domain (m/s)
 
-    integer, allocatable, dimension(:,:) :: &
+    integer, save, allocatable, dimension(:,:) :: &
       index_ue, & ! Wind index array E
       index_uw, & ! Wind index array W
       index_vn, & ! Wind index array N
       index_vs    ! Wind index array S
-    real, allocatable, dimension(:,:) :: &
+    real, save, allocatable, dimension(:,:) :: &
       Ds_soft,           &! Soft snow thickness (m)
       snowthickness,     &! Depth of the snowpack in the snow covered part, i.e. not scaled by fsnow (m)
       uwind,             &! x component of wind speed (m/s)
@@ -59,7 +53,7 @@ module SNOWTRAN3D_interface
     contains
 
 
-    subroutine SNOWTRAN3D_setup()
+    subroutine SNOWTRAN3D_setup(Qsalt_u, Qsalt_v)
 
     use CONSTANTS, only: &
       pi,                &! pi
@@ -93,6 +87,10 @@ module SNOWTRAN3D_interface
       rho_snow            ! Constant snow density (kg/m^3)
 
     implicit none
+
+    real, intent(inout) :: &
+      Qsalt_u(Nx,Ny), &
+      Qsalt_v(Nx,Ny)
 
     integer :: &
       i,j                 ! Point counters
@@ -205,14 +203,14 @@ module SNOWTRAN3D_interface
       ! and suspension models.
       !if (bs_flag == 1.0) then
         ! Solve for the saltation flux.
-        call saltation_init()
+        call saltation_init(Qsalt_u,Qsalt_v)
       !endif
     !endif
       
     end subroutine SNOWTRAN3D_setup
       
       
-    subroutine SNOWTRAN3D_accum(snowdepth0,Sice0,dm_salt,dm_susp,dm_subl,dm_subgrid)
+    subroutine SNOWTRAN3D_accum(Qsalt_u,Qsalt_v,snowdepth0,Sice0,dm_salt,dm_susp,dm_subl,dm_subgrid)
     
     real, intent(inout) :: &
       snowdepth0(Nx,Ny), &! Snow depth of snowdrift accumulation, averaged over the grid cell (m)
@@ -221,6 +219,10 @@ module SNOWTRAN3D_interface
       dm_susp(Nx,Ny),    &! SWE change due to suspension (kg/m^2)
       dm_subl(Nx,Ny),    &! SWE change due to sublimation (kg/m^2)
       dm_subgrid(Nx,Ny)   ! SWE change due to subgrid redistribution (kg/m^2)
+      
+    real, intent(inout) :: &
+      Qsalt_u(Nx,Ny), &
+      Qsalt_v(Nx,Ny)
 
     real :: &
       Qsalt(Nx,Ny),             &! Saltation flux (kg/m/s)
@@ -259,7 +261,7 @@ module SNOWTRAN3D_interface
     if (bs_flag == 1.0) then
 
       ! Solve for the saltation flux.
-      call saltation_accum(Qsalt)
+      call saltation_accum(Qsalt_u,Qsalt_v,Qsalt)
 
       ! Solve for the suspension flux.
       call suspension(Qsalt,conc_salt,Qsusp,Qsusp_u,Qsusp_v,Qsubl)
@@ -271,6 +273,7 @@ module SNOWTRAN3D_interface
     ! saltation, and suspension, and the mass loss due to sublimation.
     call accum(tabler_nn,tabler_ss,tabler_ee,tabler_ww, &
                tabler_ne,tabler_se,tabler_sw,tabler_nw, &
+               Qsalt_u,Qsalt_v, &
                dm_salt, &
                Qsusp_u,Qsusp_v, &
                dm_susp, &
@@ -419,6 +422,7 @@ module SNOWTRAN3D_interface
 
     subroutine accum(tabler_nn,tabler_ss,tabler_ee,tabler_ww, &
                      tabler_ne,tabler_se,tabler_sw,tabler_nw, &
+                     Qsalt_u,Qsalt_v, &
                      dm_salt, &
                      Qsusp_u,Qsusp_v, &
                      dm_susp, &
@@ -464,6 +468,8 @@ module SNOWTRAN3D_interface
       tabler_nw(Nx,Ny)        ! Tabler surfaces NW
 
     real, intent(inout) :: &
+      Qsalt_u(Nx,Ny),        &
+      Qsalt_v(Nx,Ny),        &
       dm_salt(Nx,Ny),        &! SWE change due to saltation (kg/m^2)
       Qsusp_u(Nx,Ny),        &! x component of suspension flux (kg/m/s)
       Qsusp_v(Nx,Ny),        &! y component of suspension flux (kg/m/s)
@@ -765,7 +771,7 @@ module SNOWTRAN3D_interface
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    subroutine saltation_init()
+    subroutine saltation_init(Qsalt_u, Qsalt_v)
 
     use CONSTANTS, only: &
       grav,                 &! Acceleration due to gravity (m/s^2)
@@ -778,6 +784,9 @@ module SNOWTRAN3D_interface
       bc_flag                ! Boundary condition flag
 
     implicit none
+    real, intent(inout) :: &
+      Qsalt_u(Nx,Ny),      &
+      Qsalt_v(Nx,Ny)
 
     integer :: &
       i,j,k,                &! Point counters
@@ -851,7 +860,7 @@ module SNOWTRAN3D_interface
     end subroutine saltation_init
 
 
-    subroutine saltation_accum(Qsalt)
+    subroutine saltation_accum(Qsalt_u,Qsalt_v,Qsalt)
 
     use PARAMMAPS, only: &
       vegsnowd_xy            ! Vegetation snow holding capacity (m)
@@ -862,6 +871,8 @@ module SNOWTRAN3D_interface
     implicit none
 
     real, intent(inout) :: &
+      Qsalt_u(Nx,Ny),      &
+      Qsalt_v(Nx,Ny),      &
       Qsalt(Nx,Ny)           ! Saltation flux (kg/m/s)
 
     integer :: &
@@ -879,7 +890,7 @@ module SNOWTRAN3D_interface
           Qsalt_u(i,j) = 0.0
           Qsalt_v(i,j) = 0.0
         end if
-
+        
         Qsalt(i,j) = Qsalt_u(i,j) + Qsalt_v(i,j)
 
         14 continue  ! Exclude points outside of the domain
@@ -889,7 +900,7 @@ module SNOWTRAN3D_interface
 
     end subroutine saltation_accum
     
-    subroutine SNOWTRAN3D_fluxes(DIR)
+    subroutine SNOWTRAN3D_fluxes(Qsalt_u,Qsalt_v)
     
         use CONSTANTS_SNOWTRAN3D, only: &
           fetch,                &! Equilibrium fetch distance (m)
@@ -897,8 +908,11 @@ module SNOWTRAN3D_interface
 
         implicit none
         
-        integer, intent(in) :: DIR !Desired direction for calculating saltation fluxes over
+        real, intent(inout) :: &
+          Qsalt_u(Nx,Ny), &
+          Qsalt_v(Nx,Ny)
 
+        
         integer :: &
           i,j,k,                &! Point counters
           istart,iend,          &! Point counters boundaries
@@ -931,97 +945,92 @@ module SNOWTRAN3D_interface
         scale_NS = min(1.0,scale_NS)
 
         if (any(abs(Qsalt_u)>0.0) .or. any(abs(Qsalt_v)>0)) bs_flag=1.0
-
+        
         if (bs_flag==1.0 ) then
-            if (DIR==STRAN_EAST) then
-                ! Consider WESTERLY winds.
-                do i = 1, Nx
-                  do k = 1, index_uw(i,1)
-                    jstart = index_uw(i,k*2)+1
-                    jend = index_uw(i,k*2+1)
-                    do j = jstart, jend
-                      dUtau = Utau(i,j) - Utau(i,j-1)
-                      if (dUtau >= epsilon(dUtau)) then
-                        Qsalt_u(i,j) = Qsalt_u(i,j-1) + scale_EW * &
-                                       (Qsalt_maxu(i,j) - Qsalt_u(i,j-1))
-                      else
-                !        Qsalt_u(i,j) = min(Qsalt_u(i,j-1),Qsalt_maxu(i,j))
-                        if (Qsalt_u(i,j-1) < Qsalt_maxu(i,j)) then
-                          Qsalt_u(i,j) = Qsalt_u(i,j-1)
-                        else
-                          Qsalt_u(i,j) = max(blowby*Qsalt_u(i,j-1),Qsalt_maxu(i,j))
-                        end if
-                      end if
-                    end do
-                  end do
+            ! Consider WESTERLY winds.
+            do i = 1, Nx
+              do k = 1, index_uw(i,1)
+                jstart = index_uw(i,k*2)+1
+                jend = index_uw(i,k*2+1)
+                do j = jstart, jend
+                  dUtau = Utau(i,j) - Utau(i,j-1)
+                  if (dUtau >= epsilon(dUtau)) then
+                    Qsalt_u(i,j) = Qsalt_u(i,j-1) + scale_EW * &
+                                   (Qsalt_maxu(i,j) - Qsalt_u(i,j-1))
+                  else
+            !        Qsalt_u(i,j) = min(Qsalt_u(i,j-1),Qsalt_maxu(i,j))
+                    if (Qsalt_u(i,j-1) < Qsalt_maxu(i,j)) then
+                      Qsalt_u(i,j) = Qsalt_u(i,j-1)
+                    else
+                      Qsalt_u(i,j) = max(blowby*Qsalt_u(i,j-1),Qsalt_maxu(i,j))
+                    end if
+                  end if
                 end do
-            else if (DIR==STRAN_WEST) then
-                ! Consider EASTERLY winds.
-                do i = 1, Nx
-                  do k = 1, index_ue(i,1)
-                    jend = index_ue(i,k*2)
-                    jstart = index_ue(i,k*2+1)-1
-                    do j = jstart, jend,-1
-                      dUtau = Utau(i,j) - Utau(i,j+1)
-                      if (dUtau >= epsilon(dUtau)) then
-                        Qsalt_u(i,j) = Qsalt_u(i,j+1) + scale_EW * &
-                                       (Qsalt_maxu(i,j) - Qsalt_u(i,j+1))
-                      else
-                !        Qsalt_u(i,j) = min(Qsalt_u(i,j+1),Qsalt_maxu(i,j))
-                        if (Qsalt_u(i,j+1) < Qsalt_maxu(i,j)) then
-                          Qsalt_u(i,j) = Qsalt_u(i,j+1)
-                        else
-                          Qsalt_u(i,j) = max(blowby*Qsalt_u(i,j+1),Qsalt_maxu(i,j))
-                        end if
-                      end if
-                    end do
-                  end do
+              end do
+            end do
+            ! Consider EASTERLY winds.
+            do i = 1, Nx
+              do k = 1, index_ue(i,1)
+                jend = index_ue(i,k*2)
+                jstart = index_ue(i,k*2+1)-1
+                do j = jstart, jend,-1
+                  dUtau = Utau(i,j) - Utau(i,j+1)
+                  if (dUtau >= epsilon(dUtau)) then
+                    Qsalt_u(i,j) = Qsalt_u(i,j+1) + scale_EW * &
+                                   (Qsalt_maxu(i,j) - Qsalt_u(i,j+1))
+                  else
+            !        Qsalt_u(i,j) = min(Qsalt_u(i,j+1),Qsalt_maxu(i,j))
+                    if (Qsalt_u(i,j+1) < Qsalt_maxu(i,j)) then
+                      Qsalt_u(i,j) = Qsalt_u(i,j+1)
+                    else
+                      Qsalt_u(i,j) = max(blowby*Qsalt_u(i,j+1),Qsalt_maxu(i,j))
+                    end if
+                  end if
                 end do
-            else if (DIR==STRAN_NORTH) then
-                ! Consider SOUTHERLY winds.
-                do j = 1, Ny
-                  do k = 1, index_vs(j,1)
-                    istart = index_vs(j,k*2)+1
-                    iend = index_vs(j,k*2+1)
-                    do i = istart, iend
-                      dUtau = Utau(i,j) - Utau(i-1,j)
-                      if (dUtau >= epsilon(dUtau)) then
-                        Qsalt_v(i,j) = Qsalt_v(i-1,j) + scale_NS * &
-                                       (Qsalt_maxv(i,j) - Qsalt_v(i-1,j))
-                      else
-                !        Qsalt_v(i,j) = min(Qsalt_v(i-1,j),Qsalt_maxv(i,j))
-                        if (Qsalt_v(i-1,j) < Qsalt_maxv(i,j)) then
-                          Qsalt_v(i,j) = Qsalt_v(i-1,j)
-                        else
-                          Qsalt_v(i,j) = max(blowby*Qsalt_v(i-1,j),Qsalt_maxv(i,j))
-                        end if
-                      end if
-                    end do
-                  end do
+              end do
+            end do
+            ! Consider SOUTHERLY winds.
+            do j = 1, Ny
+              do k = 1, index_vs(j,1)
+                istart = index_vs(j,k*2)+1
+                iend = index_vs(j,k*2+1)
+                do i = istart, iend
+                  dUtau = Utau(i,j) - Utau(i-1,j)
+                  if (dUtau >= epsilon(dUtau)) then
+                    Qsalt_v(i,j) = Qsalt_v(i-1,j) + scale_NS * &
+                                   (Qsalt_maxv(i,j) - Qsalt_v(i-1,j))
+                  else
+            !        Qsalt_v(i,j) = min(Qsalt_v(i-1,j),Qsalt_maxv(i,j))
+                    if (Qsalt_v(i-1,j) < Qsalt_maxv(i,j)) then
+                      Qsalt_v(i,j) = Qsalt_v(i-1,j)
+                    else
+                      Qsalt_v(i,j) = max(blowby*Qsalt_v(i-1,j),Qsalt_maxv(i,j))
+                    end if
+                  end if
                 end do
-            else if (DIR==STRAN_SOUTH) then
-                ! Consider NORTHERLY winds.
-                do j = 1, Ny
-                  do k = 1, index_vn(j,1)
-                    iend = index_vn(j,k*2)
-                    istart = index_vn(j,k*2+1)-1
-                    do i = istart, iend,-1
-                      dUtau = Utau(i,j) - Utau(i+1,j)
-                      if (dUtau >= epsilon(dUtau)) then
-                        Qsalt_v(i,j) = Qsalt_v(i+1,j) + scale_NS * &
-                                       (Qsalt_maxv(i,j) - Qsalt_v(i+1,j))
-                      else
-                !        Qsalt_v(i,j) = min(Qsalt_v(i+1,j),Qsalt_maxv(i,j))
-                        if (Qsalt_v(i+1,j) < Qsalt_maxv(i,j)) then
-                          Qsalt_v(i,j) = Qsalt_v(i+1,j)
-                        else
-                          Qsalt_v(i,j) = max(blowby*Qsalt_v(i+1,j),Qsalt_maxv(i,j))
-                        end if
-                      end if
-                    end do
-                  end do
+              end do
+            end do
+            ! Consider NORTHERLY winds.
+            do j = 1, Ny
+              do k = 1, index_vn(j,1)
+                iend = index_vn(j,k*2)
+                istart = index_vn(j,k*2+1)-1
+                do i = istart, iend,-1
+                  dUtau = Utau(i,j) - Utau(i+1,j)
+                  if (dUtau >= epsilon(dUtau)) then
+                    Qsalt_v(i,j) = Qsalt_v(i+1,j) + scale_NS * &
+                                   (Qsalt_maxv(i,j) - Qsalt_v(i+1,j))
+                  else
+            !        Qsalt_v(i,j) = min(Qsalt_v(i+1,j),Qsalt_maxv(i,j))
+                    if (Qsalt_v(i+1,j) < Qsalt_maxv(i,j)) then
+                      Qsalt_v(i,j) = Qsalt_v(i+1,j)
+                    else
+                      Qsalt_v(i,j) = max(blowby*Qsalt_v(i+1,j),Qsalt_maxv(i,j))
+                    end if
+                  end if
                 end do
-            endif
+              end do
+            end do
         endif
         
     end subroutine SNOWTRAN3D_fluxes
@@ -1074,7 +1083,7 @@ module SNOWTRAN3D_interface
     ! Initially set the blowing snow flag to no blowing snow
     ! (bs_flag = 0.0).  Then, if snow is found to blow in any
     ! domain grid cell, set the flag to on (bs_flag = 1.0).
-    bs_flag = 1.0
+    bs_flag = 0.0
 
     ! Build the Utau array.
     guess = 0.1

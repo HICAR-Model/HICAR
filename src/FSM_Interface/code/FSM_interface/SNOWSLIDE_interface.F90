@@ -8,7 +8,7 @@
 ! West of (i,j): (i,j-1)
 ! East of (i,j): (i,j+1)
 !-----------------------------------------------------------------------
-subroutine SNOWSLIDE_interface(snowdepth0,Sice0,dm_slide,first_it,FRAME,snow_depo)
+subroutine SNOWSLIDE_interface(snowdepth0,Sice0,dm_slide,first_it,BUFF_RM,snow_depo)
 
 use GRID, only: &
   Nx,Ny                     ! Grid dimensions
@@ -40,7 +40,7 @@ real, intent(inout) :: &
 
 logical, intent(inout) :: &
   first_it,                &! Controls if minimum slope angle should triger initial avalanches
-  FRAME,                   &! Controls if this is a "frame" call
+  BUFF_RM,                 &! Controls if this is a "buffer remove" call
   snow_depo(Nx,Ny)          ! If supplied, boundary values of this array are passed to snow_depo after init
   
 integer :: &
@@ -49,11 +49,16 @@ integer :: &
   n                         ! Vector point counter
 
 logical :: &
-  frame_indx,              &! Boolean to identify if we are on an image frame index
-  n_edge,                  &! Index is on north edge
-  s_edge,                  &! Index is on south edge
-  e_edge,                  &! Index is on east edge
-  w_edge                    ! Index is on west edge
+  buff_indx,             &! Boolean to identify if we are on an image buffer index
+  halo_indx,               &! Boolean to identify if we are on an image halo index
+  n_halo,                  &! Index is on north halo
+  s_halo,                  &! Index is on south halo
+  e_halo,                  &! Index is on east halo
+  w_halo,                  &! Index is on west halo
+  n_buff,                  &! Index is on north buffer
+  s_buff,                  &! Index is on south buffer
+  e_buff,                  &! Index is on east buffer
+  w_buff                    ! Index is on west buffer
 
 real :: &
   dswe,                    &! Mass of snow transported to a pixel (kg/m2)
@@ -120,21 +125,36 @@ do n = 1, Nx*Ny
   i = index_grid_dem_sorted(n,1)
   j = index_grid_dem_sorted(n,2)
   
-  n_edge=.False.
-  s_edge=.False.
-  e_edge=.False.
-  w_edge=.False.
-  if (i == 1) s_edge=.True.
-  if (i == Nx) n_edge=.True.
-  if (j == 1) w_edge=.True.
-  if (j == Ny) e_edge=.True.
+  n_halo=.False.
+  s_halo=.False.
+  e_halo=.False.
+  w_halo=.False.
+  if (i == 1) s_halo=.True.
+  if (i == Nx) n_halo=.True.
+  if (j == 1) w_halo=.True.
+  if (j == Ny) e_halo=.True.
   
-  frame_indx = (n_edge .or. s_edge .or. e_edge .or. w_edge)
-  if (FRAME .and. .not.(frame_indx)) cycle
+  n_buff=.False.
+  s_buff=.False.
+  e_buff=.False.
+  w_buff=.False.
+  if (i == 2) s_buff=.True.
+  if (i == Nx-1) n_buff=.True.
+  if (j == 2) w_buff=.True.
+  if (j == Ny-1) e_buff=.True.
 
-  ! Start slide processes only if slope higher than the defined minimum. 
+  buff_indx = (n_buff .or. s_buff .or. e_buff .or. w_buff)
+  halo_indx = (n_halo .or. s_halo .or. e_halo .or. w_halo)
+  
+  !If this is a buffer remove run, only run for buffer cells
+  if (BUFF_RM .and. .not.(buff_indx)) cycle
+  
+  ! Start slide processes only if slope higher than the defined minimum, this is an interior cell, and it is the first iteration
+  ! Otherwise, only run if the cell has had snow deposited on it
+  ! If a BUFF_RM, run anyways, we want to know if we should remove snow
+  
   ! If it is a pixel receiving avalanche snow, no slope threshold.
-  if ((slope(i,j) >= slope_min .and. first_it) .or. snow_depo(i,j)) then
+  if ( (first_it .and. .not.(halo_indx) .and. (slope(i,j) >= slope_min)) .or. snow_depo(i,j) .or. BUFF_RM) then
 
     ! Update snowdepth in case snow has been transported to this pixel earlier in the loop
     snowdepth_updated = sum(Ds(:,i,j)) * fsnow(i,j) + snowdepth0(i,j)
@@ -161,56 +181,56 @@ do n = 1, Nx*Ny
         ! Mass transfers are weighted by elevation (snowdepth included) differences.
 
         ! South of (i,j): (i-1,j)
-        if (.not.(s_edge)) then
+        if (.not.(s_halo)) then
           elev_S = dem(i-1,j) + sum(Ds(:,i-1,j)) * fsnow(i-1,j) + snowdepth0(i-1,j)
           w_S = max(0.0, elev - elev_S)
         else
           w_S = 0.0
         endif
         ! North of (i,j): (i+1,j)
-        if (.not.(n_edge)) then
+        if (.not.(n_halo)) then
           elev_N = dem(i+1,j) + sum(Ds(:,i+1,j)) * fsnow(i+1,j) + snowdepth0(i+1,j)
           w_N = max(0.0, elev - elev_N)
         else
           w_N = 0.0
         endif
         ! West of (i,j): (i,j-1)
-        if (.not.(w_edge)) then
+        if (.not.(w_halo)) then
           elev_W = dem(i,j-1) + sum(Ds(:,i,j-1)) * fsnow(i,j-1) + snowdepth0(i,j-1)
           w_W = max(0.0, elev - elev_W)
         else
           w_W = 0.0
         endif
         ! East of (i,j): (i,j+1)
-        if (.not.(e_edge)) then
+        if (.not.(e_halo)) then
           elev_E = dem(i,j+1) + sum(Ds(:,i,j+1)) * fsnow(i,j+1) + snowdepth0(i,j+1)
           w_E = max(0.0, elev - elev_E)
         else
           w_E = 0.0
         endif
         ! South-West of (i,j): (i-1,j-1)
-        if (.not.(s_edge .or. w_edge)) then
+        if (.not.(s_halo .or. w_halo)) then
           elev_SW = dem(i-1,j-1) + sum(Ds(:,i-1,j-1)) * fsnow(i-1,j-1) + snowdepth0(i-1,j-1)
           w_SW = max(0.0, elev - elev_SW)
         else
           w_SW = 0.0
         endif
         ! South-East of (i,j): (i-1,j+1)
-        if (.not.(s_edge .or. e_edge)) then
+        if (.not.(s_halo .or. e_halo)) then
           elev_SE = dem(i-1,j+1) + sum(Ds(:,i-1,j+1)) * fsnow(i-1,j+1) + snowdepth0(i-1,j+1)
           w_SE = max(0.0, elev - elev_SE)
         else
           w_SE = 0.0
         endif
         ! North-West of (i,j): (i+1,j-1)
-        if (.not.(n_edge .or. w_edge)) then
+        if (.not.(n_halo .or. w_halo)) then
           elev_NW = dem(i+1,j-1) + sum(Ds(:,i+1,j-1)) * fsnow(i+1,j-1) + snowdepth0(i+1,j-1)
           w_NW = max(0.0, elev - elev_NW)
         else
           w_NW = 0.0
         endif
         ! North-East of (i,j): (i+1,j+1)
-        if (.not.(n_edge .or. e_edge)) then
+        if (.not.(n_halo .or. e_halo)) then
           elev_NE = dem(i+1,j+1) + sum(Ds(:,i+1,j+1)) * fsnow(i+1,j+1) + snowdepth0(i+1,j+1)
           w_NE = max(0.0, elev - elev_NE)
         else
@@ -232,6 +252,17 @@ do n = 1, Nx*Ny
           w_NE = w_NE / delev_tot
 
           ! Move first snow coming from fresh avalanche deposit
+          ! However, if this is not a buffer remove run, and we are in a buffer cell, check
+          ! That the outgoing cell is not in the halo. If it is in the halo, we want to cycle
+          if (.not.(BUFF_RM) .and. buff_indx) then
+              if ( ( n_buff .and. ( (w_N > epsilon(w_N)) .or. (w_NW > epsilon(w_N)) .or. (w_NE > epsilon(w_N)) )) .or. &
+                   ( s_buff .and. ( (w_S > epsilon(w_S)) .or. (w_SW > epsilon(w_S)) .or. (w_SE > epsilon(w_S)) )) .or. &
+                   ( e_buff .and. ( (w_E > epsilon(w_E)) .or. (w_NE > epsilon(w_E)) .or. (w_SE > epsilon(w_E)) )) .or. &
+                   ( w_buff .and. ( (w_W > epsilon(w_W)) .or. (w_NW > epsilon(w_W)) .or. (w_SW > epsilon(w_W)) )) ) then
+                  cycle
+              endif
+          endif
+          
           if (snowdepth0(i,j) - snowdepth_available > epsilon(snowdepth0)) then
 
             wt = snowdepth_available / snowdepth0(i,j)
@@ -239,10 +270,8 @@ do n = 1, Nx*Ny
             
             !If we are not on an image frame, reduce the local snow depth
             !If we are on an image frame, and this is a FRAME call, then we may reduce local snow depth
-            if (.not.(frame_indx) .or. (FRAME)) then
-              snowdepth0(i,j) = snowdepth0(i,j) - snowdepth_available
-              Sice0(i,j) = Sice0(i,j) - swe_available
-            endif
+            snowdepth0(i,j) = snowdepth0(i,j) - snowdepth_available
+            Sice0(i,j) = Sice0(i,j) - swe_available
           else if (snowdepth_available - snowdepth0(i,j) > epsilon(snowdepth0)) then
 
             snowdepth_available2 = snowdepth_available - snowdepth0(i,j)
@@ -255,21 +284,18 @@ do n = 1, Nx*Ny
 
             swe_available = swe_available + swe_available2
             
-            if (.not.(frame_indx) .or. (FRAME)) then
-                snowdepth0(i,j) = 0.0
-                Sice0(i,j) = 0.0
-            endif
+            snowdepth0(i,j) = 0.0
+            Sice0(i,j) = 0.0
           else ! snowdepth_available == snowdepth0(i,j)
 
             swe_available = Sice0(i,j)
             
-            if (.not.(frame_indx) .or. (FRAME)) then
-                snowdepth0(i,j) = 0.0
-                Sice0(i,j) = 0.0
-            endif
+            snowdepth0(i,j) = 0.0
+            Sice0(i,j) = 0.0
           endif
           
-          if (.not.(FRAME)) then
+          !We only want to remove snow on a buffer remove run
+          if (.not.(BUFF_RM)) then
               dm_slide(i,j) = dm_slide(i,j) - swe_available
               dm_tot_slide(i,j) = dm_tot_slide(i,j) - swe_available
 
@@ -277,7 +303,7 @@ do n = 1, Nx*Ny
               ! Higher pixels have a weight of 0
 
               ! South
-              if (w_S > epsilon(w_S) .and. .not.(s_edge)) then
+              if (w_S > epsilon(w_S) .and. .not.(s_halo)) then
                 dswe = w_S * swe_available
                 Sice0(i-1,j) = Sice0(i-1,j) + dswe
                 snowdepth0(i-1,j) = snowdepth0(i-1,j) + dswe / rho_deposit
@@ -287,7 +313,7 @@ do n = 1, Nx*Ny
               end if
 
               ! North
-              if (w_N > epsilon(w_N) .and. .not.(n_edge)) then
+              if (w_N > epsilon(w_N) .and. .not.(n_halo)) then
                 dswe = w_N * swe_available
                 Sice0(i+1,j) = Sice0(i+1,j) + dswe
                 snowdepth0(i+1,j) = snowdepth0(i+1,j) + dswe / rho_deposit
@@ -297,7 +323,7 @@ do n = 1, Nx*Ny
               end if
 
               ! West
-              if (w_W > epsilon(w_W) .and. .not.(w_edge)) then
+              if (w_W > epsilon(w_W) .and. .not.(w_halo)) then
                 dswe = w_W * swe_available
                 Sice0(i,j-1) = Sice0(i,j-1) + dswe
                 snowdepth0(i,j-1) = snowdepth0(i,j-1) + dswe / rho_deposit
@@ -307,7 +333,7 @@ do n = 1, Nx*Ny
               end if
 
               ! East
-              if (w_E > epsilon(w_E) .and. .not.(e_edge)) then
+              if (w_E > epsilon(w_E) .and. .not.(e_halo)) then
                 dswe = w_E * swe_available
                 Sice0(i,j+1) = Sice0(i,j+1) + dswe
                 snowdepth0(i,j+1) = snowdepth0(i,j+1) + dswe / rho_deposit
@@ -317,7 +343,7 @@ do n = 1, Nx*Ny
               end if
 
               ! South-West
-              if (w_SW > epsilon(w_SW) .and. .not.(s_edge .or. w_edge)) then
+              if (w_SW > epsilon(w_SW) .and. .not.(s_halo .or. w_halo)) then
                 dswe = w_SW * swe_available
                 Sice0(i-1,j-1) = Sice0(i-1,j-1) + dswe
                 snowdepth0(i-1,j-1) = snowdepth0(i-1,j-1) + dswe / rho_deposit
@@ -327,7 +353,7 @@ do n = 1, Nx*Ny
               end if
 
               ! South-East
-              if (w_SE > epsilon(w_SE) .and. .not.(s_edge .or. e_edge)) then
+              if (w_SE > epsilon(w_SE) .and. .not.(s_halo .or. e_halo)) then
                 dswe = w_SE * swe_available
                 Sice0(i-1,j+1) = Sice0(i-1,j+1) + dswe
                 snowdepth0(i-1,j+1) = snowdepth0(i-1,j+1) + dswe / rho_deposit
@@ -337,7 +363,7 @@ do n = 1, Nx*Ny
               end if
 
               ! North-West
-              if (w_NW > epsilon(w_NW) .and. .not.(n_edge .or. w_edge)) then
+              if (w_NW > epsilon(w_NW) .and. .not.(n_halo .or. w_halo)) then
                 dswe = w_NW * swe_available
                 Sice0(i+1,j-1) = Sice0(i+1,j-1) + dswe
                 snowdepth0(i+1,j-1) = snowdepth0(i+1,j-1) + dswe / rho_deposit
@@ -347,7 +373,7 @@ do n = 1, Nx*Ny
               end if
 
               ! North-East
-              if (w_NE > epsilon(w_NE) .and. .not.(n_edge .or. e_edge)) then
+              if (w_NE > epsilon(w_NE) .and. .not.(n_halo .or. e_halo)) then
                 dswe = w_NE * swe_available
                 Sice0(i+1,j+1) = Sice0(i+1,j+1) + dswe
                 snowdepth0(i+1,j+1) = snowdepth0(i+1,j+1) + dswe / rho_deposit

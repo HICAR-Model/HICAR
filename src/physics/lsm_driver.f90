@@ -232,13 +232,13 @@ contains
                          kVARS%snow_height, kVARS%lai, kVARS%temperature_2m_veg, kVARS%slope_angle,                     &
                          kVARS%QFX, kVARS%chs, kVARS%chs2, kVARS%cqs2, kVARS%land_emissivity,                           &
                          kVARS%veg_type, kVARS%soil_type, kVARS%land_mask, kVARS%snowfall, kVARS%albedo,                &
-                         kVARS%runoff_tstep, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow,   &
+                         kVARS%runoff_tstep, kVARS%snow_temperature, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow,   &
                          kVARS%rainfall_tstep, kVARS%shd, kVARS%snowfall_tstep, kVARS%meltflux_out_tstep, kVARS%Sliq_out, &
                          kVARS%windspd_10m, kVARS%factor_p, kVARS%dm_salt, kVARS%dm_susp, kVARS%dm_subl, kVARS%dm_slide])
 
              call options%advect_vars([kVARS%potential_temperature, kVARS%water_vapor])
 
-             call options%exch_vars([kVARS%Ds, kVARS%Nsnow, kVARS%fsnow, kVARS%Sice, kVARS%Sliq, kVARS%Tsnow])
+             call options%exch_vars([kVARS%Ds, kVARS%Nsnow, kVARS%fsnow, kVARS%Sice, kVARS%Sliq, kVARS%snow_temperature])
              
              call options%restart_vars( &
                          [kVARS%sst, kVARS%water_vapor, kVARS%potential_temperature, kVARS%precipitation, kVARS%temperature, &
@@ -249,7 +249,7 @@ contains
                          kVARS%snow_height,  kVARS%snowfall, kVARS%albedo, kVARS%QFX, kVARS%land_emissivity,            &
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
                          kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0,                     &
-                         kVARS%runoff_tstep, kVARS%Tsnow, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow  ])
+                         kVARS%runoff_tstep, kVARS%snow_temperature, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow  ])
         endif
 
        if (options%physics%watersurface > 1) then
