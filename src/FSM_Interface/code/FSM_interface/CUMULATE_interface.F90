@@ -22,7 +22,7 @@ real, intent(in) :: &
   Melt(Nx,Ny),       &! Surface melt rate (kg/m^2/s)
   Rnet(Nx,Ny)         ! Net radiation (W/m^2)
 
-  call CUMULATE_SD_interface()
+  !call CUMULATE_SD_interface()
 
 !! MJ added-----------------------------------------------------------------
   Esrf_= Esrf
@@ -94,7 +94,7 @@ real, intent(in) :: &
   dm_subl(Nx,Ny),   &! blowing snow sublimation per timestep (kg/m^2)
   dm_subgrid(Nx,Ny)  ! subgrid redistribution per timestep (kg/m^2)
 
-  call CUMULATE_SD_interface()
+  !call CUMULATE_SD_interface()
 
   dm_salt_=dm_salt
   dm_susp_=dm_susp
@@ -117,7 +117,7 @@ implicit none
 real, intent(in) :: &
   dm_slide(Nx,Ny)    ! avalanched redistribution per timestep (kg/m^2)
 
-  call CUMULATE_SD_interface()
+  !call CUMULATE_SD_interface()
 
   dm_slide_=dm_slide
 

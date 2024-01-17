@@ -56,8 +56,8 @@ real, allocatable :: &
   dm_subl_(:,:),    &! SWE change due to sublimation (kg/m^2)
   dm_slide_(:,:)     ! SWE change due to snow slides (kg/m^2)
 
-real, allocatable :: &
-  Qsalt_u(:,:),       &! Moisture flux from the surface (kg/m^2/s)
-  Qsalt_v(:,:)        ! Heat flux into soil (W/m^2)
+!real, allocatable :: &
+!  Qsalt_u(:,:),       &! Moisture flux from the surface (kg/m^2/s)
+!  Qsalt_v(:,:)        ! Heat flux into soil (W/m^2)
 
 end module MODULES_interface
