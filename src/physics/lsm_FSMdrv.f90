@@ -165,7 +165,6 @@ contains
         !!
         call FSM_SETUP()
         !!        
-        
         !! MJ added this block to read in while we use restart file:
         if (options%parameters%restart) then
             !! giving feedback to HICAR
@@ -266,11 +265,17 @@ contains
         Ta= TRANSPOSE(domain%temperature%data_3d(its:ite,domain%grid%kms,jts:jte))!domain%temperature_2m%data_2d(its:ite,jts:jte)
         Qa= TRANSPOSE(domain%water_vapor%data_3d(its:ite,domain%grid%kms,jts:jte))!domain%humidity_2m%data_2d(its:ite,jts:jte)
         Ua=TRANSPOSE(windspd(its:ite,jts:jte))
-        Udir = ATAN2(TRANSPOSE(domain%u_10m%data_2d(its:ite,jts:jte)/windspd(its:ite,jts:jte)), &
-                     TRANSPOSE(domain%v_10m%data_2d(its:ite,jts:jte)/windspd(its:ite,jts:jte))) 
-        Udir = (Udir * 180/piconst)
+        
+        !CAUTION -- Udir hardcoded to use domain%u/v instead of v_10m/u_10m. This is done since we need to access 
+        ! these variables, one index out from the tile indices (For FSM). However, the LSM only updates the roughness length
+        ! within the tile indices, which is needed to compute 10m wind speeds. As a cheep work around, and since we are 
+        ! only doing simulations with first level thickness =20m, they are hard coded to lowest level of 3d arrays here
+        
+        Udir = ATAN2(TRANSPOSE(domain%v%data_3d(its:ite,domain%grid%kms,jts:jte)), &
+                     TRANSPOSE(domain%u%data_3d(its:ite,domain%grid%kms,jts:jte))) 
+        Udir = 90 - (Udir * 180/piconst + 180)
         where(Udir<0) Udir=Udir+360
-
+        
         if ((domain%model_time%seconds() - dt <= last_output%seconds()) .and. &
             (domain%model_time%seconds()   >=    last_output%seconds())) then
             !If we are the first call since the last output, reset the per-output counters
@@ -296,6 +301,9 @@ contains
             !First guess for fluxes
             call FSM_SNOWTRAN_FLUXES(Qsalt_u,Qsalt_v)
             !Exchange fluxes between processes
+            call exch_SNTRAN_Qsalt(domain,Qsalt_u,Qsalt_v)
+            !Recalculate fluxes with intermediate values from neighbors
+            call FSM_SNOWTRAN_FLUXES(Qsalt_u,Qsalt_v)
             call exch_SNTRAN_Qsalt(domain,Qsalt_u,Qsalt_v)
             !Recalculate fluxes with intermediate values from neighbors
             call FSM_SNOWTRAN_FLUXES(Qsalt_u,Qsalt_v)
@@ -398,9 +406,8 @@ contains
                     if (SNTRAN>0) then
                         ! Convert to rate 1/s
                         domain%dm_salt%data_2d(hi,hj)=domain%dm_salt%data_2d(hi,hj) + dm_salt_(j,i)/dt 
-                        domain%dm_susp%data_2d(hi,hj)= Qsalt_u(j,i)!domain%dm_susp%data_2d(hi,hj) + dm_susp_(j,i)/dt
-                        domain%dm_subl%data_2d(hi,hj)= Qsalt_v(j,i)!domain%dm_subl%data_2d(hi,hj) + dm_subl_(j,i)/dt 
-                        
+                        domain%dm_susp%data_2d(hi,hj)= domain%dm_susp%data_2d(hi,hj) + dm_susp_(j,i)/dt
+                        domain%dm_subl%data_2d(hi,hj)= domain%dm_subl%data_2d(hi,hj) + dm_subl_(j,i)/dt 
                         !Add sublimated snow to latent heat flux. 
                         !Sometimes FSM returns NaN values for blowing snow sublimation, so mask those out here
                         if (abs(dm_subl_(j,i))>1) dm_subl_(j,i) = 0.0
