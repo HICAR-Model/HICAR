@@ -12,7 +12,7 @@ module module_sf_FSMdrv
     use options_interface,   only : options_t
     use domain_interface,    only : domain_t
     use io_routines,         only : io_write, io_read, io_add_attribute
-    use FSM_interface , only:  FSM_SETUP,FSM_DRIVE,FSM_PHYSICS, FSM_SNOWSLIDE, FSM_SNOWSLIDE_END, FSM_CUMULATE_SD, FSM_SNOWTRAN_SETUP, FSM_SNOWTRAN_FLUXES, FSM_SNOWTRAN_ACCUM
+    use FSM_interface , only:  FSM_SETUP,FSM_DRIVE,FSM_PHYSICS, FSM_SNOWSLIDE, FSM_SNOWSLIDE_END, FSM_CUMULATE_SD, FSM_SNOWTRAN_SETUP, FSM_SNOWTRAN_SALT_START, FSM_SNOWTRAN_SALT, FSM_SNOWTRAN_SALT_END, FSM_SNOWTRAN_SUSP_START, FSM_SNOWTRAN_SUSP, FSM_SNOWTRAN_SUSP_END, FSM_SNOWTRAN_ACCUM
     use FSM_interface , only:  Nx_HICAR, Ny_HICAR,lat_HICAR,lon_HICAR,terrain_HICAR,dx_HICAR,slope_HICAR,shd_HICAR
     use FSM_interface, only: &
       year,          &
@@ -48,8 +48,8 @@ module module_sf_FSMdrv
       dm_susp_,      &
       dm_subl_,      &
       dm_slide_!,     &
-      !Qsalt_u,       &
-      !Qsalt_v
+      !Qs_u,       &
+      !Qs_v
 
     use FSM_interface, only: &
       firstit,       &
@@ -155,8 +155,8 @@ contains
         allocate(dm_susp_(Nx_HICAR,Ny_HICAR)); dm_susp_=0.
         allocate(dm_subl_(Nx_HICAR,Ny_HICAR)); dm_subl_=0.
         allocate(dm_slide_(Nx_HICAR,Ny_HICAR)); dm_slide_=0.
-        !allocate(Qsalt_u(Nx_HICAR,Ny_HICAR)); Qsalt_u=0.
-        !allocate(Qsalt_v(Nx_HICAR,Ny_HICAR)); Qsalt_v=0.
+        !allocate(Qs_u(Nx_HICAR,Ny_HICAR)); Qs_u=0.
+        !allocate(Qs_v(Nx_HICAR,Ny_HICAR)); Qs_v=0.
         !!
         allocate(snowfall_sum(Nx_HICAR,Ny_HICAR)); snowfall_sum=0.
         allocate(rainfall_sum(Nx_HICAR,Ny_HICAR)); rainfall_sum=0.
@@ -213,7 +213,7 @@ contains
         integer :: i,j,k, hj, hi, i_s, i_e, j_s, j_e
         real :: Delta_t
         real, dimension(its:ite,jts:jte) :: SWE_pre
-        real, dimension(Nx_HICAR,Ny_HICAR) :: SD_0, Sice_0, SD_0_buff, Sice_0_buff, Qsalt_u, Qsalt_v
+        real, dimension(Nx_HICAR,Ny_HICAR) :: SD_0, Sice_0, SD_0_buff, Sice_0_buff, Qs_u, Qs_v
         logical, dimension(Nx_HICAR,Ny_HICAR) :: aval
         logical :: first_SLIDE, do_snowslide
         character(len=1024) :: filename
@@ -296,19 +296,48 @@ contains
         if (SNTRAN > 0) then        
             call exch_FSM_state_vars(domain)
             
-            call FSM_SNOWTRAN_SETUP(Qsalt_u,Qsalt_v)
+            call FSM_SNOWTRAN_SETUP()
+            
+            !--------------------------SALTATION--------------------------
+            call FSM_SNOWTRAN_SALT_START(Qs_u,Qs_v)
             
             !First guess for fluxes
-            call FSM_SNOWTRAN_FLUXES(Qsalt_u,Qsalt_v)
+            call FSM_SNOWTRAN_SALT(Qs_u,Qs_v)
+            
             !Exchange fluxes between processes
-            call exch_SNTRAN_Qsalt(domain,Qsalt_u,Qsalt_v)
+            call exch_SNTRAN_Qs(domain,Qs_u,Qs_v)
             !Recalculate fluxes with intermediate values from neighbors
-            call FSM_SNOWTRAN_FLUXES(Qsalt_u,Qsalt_v)
-            call exch_SNTRAN_Qsalt(domain,Qsalt_u,Qsalt_v)
+            call FSM_SNOWTRAN_SALT(Qs_u,Qs_v)
+            
+            !Exchange fluxes between processes
+            call exch_SNTRAN_Qs(domain,Qs_u,Qs_v)
             !Recalculate fluxes with intermediate values from neighbors
-            call FSM_SNOWTRAN_FLUXES(Qsalt_u,Qsalt_v)
+            call FSM_SNOWTRAN_SALT(Qs_u,Qs_v)
+            
+            call FSM_SNOWTRAN_SALT_END(Qs_u,Qs_v)
+            !------------------------END SALTATION------------------------
 
-            call FSM_SNOWTRAN_ACCUM(Qsalt_u,Qsalt_v)
+            !--------------------------SUSPENSION--------------------------
+            call FSM_SNOWTRAN_SUSP_START(Qs_u,Qs_v)
+            
+            !First guess for fluxes
+            call FSM_SNOWTRAN_SUSP(Qs_u,Qs_v)
+            
+            !Exchange fluxes between processes
+            call exch_SNTRAN_Qs(domain,Qs_u,Qs_v)
+            !Recalculate fluxes with intermediate values from neighbors
+            call FSM_SNOWTRAN_SUSP(Qs_u,Qs_v)
+            
+            !Exchange fluxes between processes
+            call exch_SNTRAN_Qs(domain,Qs_u,Qs_v)
+            !Recalculate fluxes with intermediate values from neighbors
+            call FSM_SNOWTRAN_SUSP(Qs_u,Qs_v)
+
+            call FSM_SNOWTRAN_SUSP_END()
+            !------------------------END SUSPENSION------------------------
+
+            !Accumulate all the fluxes calculated above
+            call FSM_SNOWTRAN_ACCUM()
         endif
 
         
@@ -544,44 +573,44 @@ contains
     end subroutine exch_FSM_state_vars
     
     
-    subroutine exch_SNTRAN_Qsalt(domain, Qsalt_u, Qsalt_v)
+    subroutine exch_SNTRAN_Qs(domain, Qs_u, Qs_v)
         implicit none
         
         type(domain_t), intent(inout) :: domain
-        real, dimension(Nx_HICAR,Ny_HICAR), intent(inout) :: Qsalt_u, Qsalt_v
+        real, dimension(Nx_HICAR,Ny_HICAR), intent(inout) :: Qs_u, Qs_v
 
         if (.not.(domain%south_boundary)) then
-            domain%south_buffer_2d(1,1:Ny_HICAR,1) = Qsalt_v(2,1:Ny_HICAR)
+            domain%south_buffer_2d(1,1:Ny_HICAR,1) = Qs_v(2,1:Ny_HICAR)
             !       !DIR$ PGAS DEFER_SYNC
             domain%north_in_2d(:,:,:)[domain%south_neighbor] = domain%south_buffer_2d(:,:,:)
         endif
         if (.not.(domain%north_boundary)) then
-            domain%north_buffer_2d(1,1:Ny_HICAR,1) = Qsalt_v(Nx_HICAR-1,1:Ny_HICAR)
+            domain%north_buffer_2d(1,1:Ny_HICAR,1) = Qs_v(Nx_HICAR-1,1:Ny_HICAR)
             !       !DIR$ PGAS DEFER_SYNC
             domain%south_in_2d(:,:,:)[domain%north_neighbor] = domain%north_buffer_2d(:,:,:)
         endif
         
         if (.not.(domain%east_boundary)) then
-            domain%east_buffer_2d(1,1,1:Nx_HICAR) = Qsalt_u(1:Nx_HICAR,Ny_HICAR-1)
+            domain%east_buffer_2d(1,1,1:Nx_HICAR) = Qs_u(1:Nx_HICAR,Ny_HICAR-1)
             !       !DIR$ PGAS DEFER_SYNC
             domain%west_in_2d(:,:,:)[domain%east_neighbor] = domain%east_buffer_2d(:,:,:)
         endif
         if (.not.(domain%west_boundary)) then
-            domain%west_buffer_2d(1,1,1:Nx_HICAR) = Qsalt_u(1:Nx_HICAR,2)
+            domain%west_buffer_2d(1,1,1:Nx_HICAR) = Qs_u(1:Nx_HICAR,2)
             !       !DIR$ PGAS DEFER_SYNC
             domain%east_in_2d(:,:,:)[domain%west_neighbor] = domain%west_buffer_2d(:,:,:)
         endif
 
         sync images ( domain%neighbors )
         
-        if (.not.(domain%south_boundary)) Qsalt_v(1,2:Ny_HICAR-1) = domain%south_in_2d(1,2:Ny_HICAR-1,1)
-        if (.not.(domain%north_boundary)) Qsalt_v(Nx_HICAR,2:Ny_HICAR-1) = domain%north_in_2d(1,2:Ny_HICAR-1,1)
-        if (.not.(domain%east_boundary)) Qsalt_u(2:Nx_HICAR-1,Ny_HICAR) = domain%east_in_2d(1,1,2:Nx_HICAR-1)
-        if (.not.(domain%west_boundary)) Qsalt_u(2:Nx_HICAR-1,1) = domain%west_in_2d(1,1,2:Nx_HICAR-1)
+        if (.not.(domain%south_boundary)) Qs_v(1,2:Ny_HICAR-1) = domain%south_in_2d(1,2:Ny_HICAR-1,1)
+        if (.not.(domain%north_boundary)) Qs_v(Nx_HICAR,2:Ny_HICAR-1) = domain%north_in_2d(1,2:Ny_HICAR-1,1)
+        if (.not.(domain%east_boundary)) Qs_u(2:Nx_HICAR-1,Ny_HICAR) = domain%east_in_2d(1,1,2:Nx_HICAR-1)
+        if (.not.(domain%west_boundary)) Qs_u(2:Nx_HICAR-1,1) = domain%west_in_2d(1,1,2:Nx_HICAR-1)
         
         sync images ( domain%neighbors )
 
-    end subroutine exch_SNTRAN_Qsalt
+    end subroutine exch_SNTRAN_Qs
 
     subroutine exch_SLIDE_buffers(domain,SD_0,Sice_0)
         implicit none
