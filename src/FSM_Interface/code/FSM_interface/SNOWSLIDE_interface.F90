@@ -294,10 +294,12 @@ do n = 1, Nx*Ny
             Sice0(i,j) = 0.0
           endif
           
+          dm_slide(i,j) = dm_slide(i,j) - swe_available
+          dm_tot_slide(i,j) = dm_tot_slide(i,j) - swe_available
+
+          
           !We only want to remove snow on a buffer remove run
           if (.not.(BUFF_RM)) then
-              dm_slide(i,j) = dm_slide(i,j) - swe_available
-              dm_tot_slide(i,j) = dm_tot_slide(i,j) - swe_available
 
               ! Transport to neighbour pixels, weighted by elevation difference
               ! Higher pixels have a weight of 0
