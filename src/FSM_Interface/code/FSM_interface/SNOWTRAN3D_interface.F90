@@ -753,8 +753,8 @@ module SNOWTRAN3D_interface
     ! Compute the mass concentration of suspended snow according to
     ! Kind (1992).
 
-    do i = 2, Nx-1
-      do j = 2, Ny-1
+    do i = 1, Nx
+      do j = 1, Ny
       
         if (isnan(dem(i,j))) goto 8 ! Exclude points outside of the domain
         

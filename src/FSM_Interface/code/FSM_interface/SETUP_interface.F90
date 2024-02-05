@@ -4,7 +4,7 @@
 subroutine SETUP_interface()
 
 !MJ added-----------------------------------------------------------------
-use FSM_interface, only: Nx_HICAR,Ny_HICAR,lat_HICAR,lon_HICAR,terrain_HICAR,dx_HICAR,slope_HICAR,shd_HICAR
+use FSM_interface, only: Nx_HICAR,Ny_HICAR,NNsmax_HICAR,lat_HICAR,lon_HICAR,terrain_HICAR,dx_HICAR,slope_HICAR,shd_HICAR
 !MJ added-----------------------------------------------------------------
 
 use MODCONF, only: CANMOD,DENSTY,ALBEDO,CANMOD,CONDCT,DENSTY,&
@@ -105,16 +105,15 @@ NNsmax = 3
 NNsoil = 4 ! Attention, 5 soil layers in JIM ... 
 NNx = 1
 NNy = 1
-DDs_min = 0.01 ! Minimum possible snow layer thickness (m)
+DDs_min = 0.02 ! Minimum possible snow layer thickness (m)
 DDs_surflay = 0.5 ! Maximum thickness of surface fine snow layering (m)
 read(nml_unit, nam_grid)
-Nsmax = NNsmax
 Nsoil = NNsoil
 
 !!!!!!!!----> MJ: we receive it once in intializing for each image
 Nx = Nx_HICAR !NNx
 Ny = Ny_HICAR !NNy
-
+Nsmax = NNsmax_HICAR
 
 Ds_min = DDs_min
 Ds_surflay = DDs_surflay

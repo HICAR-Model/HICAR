@@ -60,7 +60,7 @@ module FSM_interface
     !!
     public :: FSM_SETUP,FSM_DRIVE,FSM_PHYSICS,FSM_SNOWSLIDE, FSM_SNOWSLIDE_END, FSM_CUMULATE_SD, FSM_SNOWTRAN_SETUP, FSM_SNOWTRAN_SALT_START, FSM_SNOWTRAN_SALT, FSM_SNOWTRAN_SALT_END, FSM_SNOWTRAN_SUSP_START, FSM_SNOWTRAN_SUSP, FSM_SNOWTRAN_SUSP_END, FSM_SNOWTRAN_ACCUM
     
-    public :: Nx_HICAR, Ny_HICAR,lat_HICAR,lon_HICAR,terrain_HICAR,dx_HICAR,slope_HICAR,shd_HICAR, SNTRAN, SNSLID
+    public :: Nx_HICAR, Ny_HICAR,NNsmax_HICAR,lat_HICAR,lon_HICAR,terrain_HICAR,dx_HICAR,slope_HICAR,shd_HICAR, SNTRAN, SNSLID
     !!
     public ::            &
       year,              &
@@ -113,7 +113,7 @@ module FSM_interface
 !      Qsalt_v
       
     
-    integer :: Nx_HICAR, Ny_HICAR    
+    integer :: Nx_HICAR, Ny_HICAR, NNsmax_HICAR    
 
     real, allocatable:: &
       lat_HICAR(:,:),   & ! lat from HICAR based WGS84
