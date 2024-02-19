@@ -474,11 +474,6 @@ contains
                                 
                 call calc_iter_winds(domain,domain%alpha%data_3d,div,options%parameters%advect_density,update_in=.True.)
                 !call calc_iter_winds_old(domain,domain%alpha%data_3d,div,options%parameters%advect_density,update_in=.True.)
-                
-                call calc_divergence(div,domain%u%meta_data%dqdt_3d,domain%v%meta_data%dqdt_3d,domain%w%meta_data%dqdt_3d, &
-                                domain%jacobian_u, domain%jacobian_v,domain%jacobian_w,domain%advection_dz,domain%dx, &
-                                domain%density%data_3d,options,horz_only=.False.)
-                domain%froude%data_3d = div
             endif
         elseif (options%physics%windtype==kOBRIEN_WINDS) then
             call Obrien_winds(domain, options, update_in=.True.)
