@@ -13,7 +13,7 @@ module module_sf_FSMdrv
     use domain_interface,    only : domain_t
     use io_routines,         only : io_write, io_read, io_add_attribute
     use FSM_interface , only:  FSM_SETUP,FSM_DRIVE,FSM_PHYSICS, FSM_SNOWSLIDE, FSM_SNOWSLIDE_END, FSM_CUMULATE_SD, FSM_SNOWTRAN_SETUP, FSM_SNOWTRAN_SALT_START, FSM_SNOWTRAN_SALT, FSM_SNOWTRAN_SALT_END, FSM_SNOWTRAN_SUSP_START, FSM_SNOWTRAN_SUSP, FSM_SNOWTRAN_SUSP_END, FSM_SNOWTRAN_ACCUM
-    use FSM_interface , only:  Nx_HICAR, Ny_HICAR,lat_HICAR,lon_HICAR,terrain_HICAR,dx_HICAR,slope_HICAR,shd_HICAR
+    use FSM_interface , only:  Nx_HICAR, Ny_HICAR,NNsmax_HICAR,lat_HICAR,lon_HICAR,terrain_HICAR,dx_HICAR,slope_HICAR,shd_HICAR
     use FSM_interface, only: &
       year,          &
       month,         &
@@ -79,6 +79,7 @@ module module_sf_FSMdrv
     real            :: last_snowslide
    
     real, allocatable :: &
+        z0_bare(:,:),            & !bare ground z0 before getting covered in snow
         snowfall_sum(:,:),       & !aggregated per output interval
         rainfall_sum(:,:),       & !aggregated per output interval
         Roff_sum(:,:),           & !aggregated per output interval
@@ -122,6 +123,7 @@ contains
         allocate(terrain_HICAR(Nx_HICAR,Ny_HICAR))
         allocate(slope_HICAR(Nx_HICAR,Ny_HICAR))
         allocate(shd_HICAR(Nx_HICAR,Ny_HICAR))
+        allocate(z0_bare(domain%grid%its:domain%grid%ite,domain%grid%jts:domain%grid%jte))
 
         lat_HICAR=TRANSPOSE(domain%latitude%data_2d(its:ite,jts:jte))
         lon_HICAR=TRANSPOSE(domain%longitude%data_2d(its:ite,jts:jte))
@@ -137,7 +139,10 @@ contains
             shd_HICAR = 10000.
         endif
         
+        z0_bare = 0.01
         dx_HICAR=domain%dx
+        NNsmax_HICAR=options%lsm_options%fsm_nsnow_max
+
         !!
         allocate(Esrf_(Nx_HICAR,Ny_HICAR)); Esrf_=0.
         allocate(Gsoil_(Nx_HICAR,Ny_HICAR));Gsoil_=0.
@@ -178,17 +183,35 @@ contains
             fsnow = TRANSPOSE(domain%fsnow%data_2d(its:ite,jts:jte))
             Nsnow = TRANSPOSE(domain%Nsnow%data_2d(its:ite,jts:jte))                        
             !!
-            do i=1,3
+            do i=1,kSNOW_GRID_Z
                 Tsnow(i,:,:) = TRANSPOSE(domain%snow_temperature%data_3d(its:ite,i,jts:jte))
                 Sice(i,:,:) = TRANSPOSE(domain%Sice%data_3d(its:ite,i,jts:jte))
                 Sliq(i,:,:) = TRANSPOSE(domain%Sliq%data_3d(its:ite,i,jts:jte))
                 Ds(i,:,:) = TRANSPOSE(domain%Ds%data_3d(its:ite,i,jts:jte))
             enddo
-            do i=1,4
+            do i=1,kSOIL_GRID_Z
                 Tsoil(i,:,:) = TRANSPOSE(domain%soil_temperature%data_3d(its:ite,i,jts:jte))
                 theta(i,:,:) = TRANSPOSE(domain%soil_water_content%data_3d(its:ite,i,jts:jte))
             enddo
         endif
+
+        !Test if restart was not succesful, or if we were not passed FSM restart...
+        !do j = 1, Ny_HICAR
+        !    do i = 1, Nx_HICAR
+        !        if (.not.(fsnow(i,j)*SUM(Ds(:,i,j))==domain%snow_height%data_2d(j-1+domain%its,i-1+domain%jts))) then
+        !            albs(i,j) = 0.75
+        !            fsnow(i,j) = 1
+        !            Nsnow (i,j)= min(6,options%lsm_options%fsm_nsnow_max)
+        !            Tsnow(:,i,j) = 268
+        !            Tsoil(:,i,j) = 273
+        !            theta(:,i,j) = 0.2
+        !            Sliq(:,i,j) = 0.0
+        !            Ds(:,i,j) = domain%snow_height%data_2d(j-1+domain%its,i-1+domain%jts)/Nsnow(i,j)
+        !            Sice(:,i,j) = domain%snow_water_equivalent%data_2d(j-1+domain%its,i-1+domain%jts)/Nsnow(i,j)
+        !        endif
+        !    end do
+        !end do
+
         !!
         do j = 1, Ny_HICAR
             do i = 1, Nx_HICAR
@@ -400,7 +423,11 @@ contains
             do i=i_s,i_e
                 hj = j-j_s+domain%jts
                 hi = i-i_s+domain%its
-                if ( SWE_(j,i) > 0 .and. .not.(options%physics%watersurface==kWATER_SIMPLE .and. domain%land_mask(hi,hj)==kLC_WATER)) then
+                if ( SWE_(j,i)+SWE_pre(hi,hj) > 0 .and. .not.(options%physics%watersurface==kWATER_SIMPLE .and. domain%land_mask(hi,hj)==kLC_WATER)) then
+                    !If we are covering pixel for the first time, save current (bare) roughness length for later
+                    if (domain%snow_water_equivalent%data_2d(hi,hj)==0) then
+                        z0_bare(hi,hj) = domain%roughness_z0%data_2d(hi,hj)
+                    endif    
                     domain%sensible_heat%data_2d(hi,hj)=H_(j,i)
                     domain%latent_heat%data_2d(hi,hj)=LE_(j,i)
                     domain%snow_water_equivalent%data_2d(hi,hj)=SWE_(j,i)
@@ -419,24 +446,24 @@ contains
                     !
                     domain%qfx%data_2d(hi,hj)=Esrf_(j,i)
                     domain%chs%data_2d(hi,hj)=KH_(j,i)
-                    domain%roughness_z0%data_2d(hi,hj) = z0sn*fsnow(j,i)+(1-fsnow(j,i))*domain%roughness_z0%data_2d(hi,hj)
+                    domain%roughness_z0%data_2d(hi,hj) = z0sn*fsnow(j,i)+(1-fsnow(j,i))*z0_bare(hi,hj)
                     
-                    do k=1,3
+                    do k=1,kSNOW_GRID_Z
                         domain%snow_temperature%data_3d(hi,k,hj) = Tsnow(k,j,i)
                         domain%Sice%data_3d(hi,k,hj) = Sice(k,j,i)
                         domain%Sliq%data_3d(hi,k,hj) = Sliq(k,j,i)
                         domain%Ds%data_3d(hi,k,hj) = Ds(k,j,i)
                     enddo
-                    do k=1,4
+                    do k=1,kSOIL_GRID_Z
                         domain%soil_temperature%data_3d(hi,k,hj) = Tsoil(k,j,i)
                         domain%soil_water_content%data_3d(hi,k,hj)=theta(k,j,i)
                     enddo
                 
                     if (SNTRAN>0) then
                         ! Convert to rate 1/s
-                        domain%dm_salt%data_2d(hi,hj)=domain%dm_salt%data_2d(hi,hj) + dm_salt_(j,i)/dt 
-                        domain%dm_susp%data_2d(hi,hj)= domain%dm_susp%data_2d(hi,hj) + dm_susp_(j,i)/dt
-                        domain%dm_subl%data_2d(hi,hj)= domain%dm_subl%data_2d(hi,hj) + dm_subl_(j,i)/dt 
+                        domain%dm_salt%data_2d(hi,hj)=domain%dm_salt%data_2d(hi,hj) + dm_salt_(j,i)
+                        domain%dm_susp%data_2d(hi,hj)= domain%dm_susp%data_2d(hi,hj) + dm_susp_(j,i)
+                        domain%dm_subl%data_2d(hi,hj)= domain%dm_subl%data_2d(hi,hj) + dm_subl_(j,i)
                         !Add sublimated snow to latent heat flux. 
                         !Sometimes FSM returns NaN values for blowing snow sublimation, so mask those out here
                         if (abs(dm_subl_(j,i))>1) dm_subl_(j,i) = 0.0
@@ -500,7 +527,7 @@ contains
         domain%fsnow%data_2d(domain%its:domain%ite,domain%jts:domain%jte) = TRANSPOSE(fsnow(2:Nx_HICAR-1,2:Ny_HICAR-1))
         domain%Nsnow%data_2d(domain%its:domain%ite,domain%jts:domain%jte) = TRANSPOSE(Nsnow(2:Nx_HICAR-1,2:Ny_HICAR-1))                        
         !!
-        do i=1,3
+        do i=1,NNsmax_HICAR
             domain%snow_temperature%data_3d(domain%its:domain%ite,i,domain%jts:domain%jte) = TRANSPOSE(Tsnow(i,2:Nx_HICAR-1,2:Ny_HICAR-1))
             domain%Sice%data_3d(domain%its:domain%ite,i,domain%jts:domain%jte) = TRANSPOSE(Sice(i,2:Nx_HICAR-1,2:Ny_HICAR-1))
             domain%Sliq%data_3d(domain%its:domain%ite,i,domain%jts:domain%jte) = TRANSPOSE(Sliq(i,2:Nx_HICAR-1,2:Ny_HICAR-1))
@@ -514,7 +541,7 @@ contains
         fsnow = TRANSPOSE(domain%fsnow%data_2d(its:ite,jts:jte))
         Nsnow = TRANSPOSE(domain%Nsnow%data_2d(its:ite,jts:jte))                        
         !!
-        do i=1,3
+        do i=1,NNsmax_HICAR
             Tsnow(i,:,:) = TRANSPOSE(domain%snow_temperature%data_3d(its:ite,i,jts:jte))
             Sice(i,:,:) = TRANSPOSE(domain%Sice%data_3d(its:ite,i,jts:jte))
             Sliq(i,:,:) = TRANSPOSE(domain%Sliq%data_3d(its:ite,i,jts:jte))
@@ -527,44 +554,44 @@ contains
                 !DIR$ PGAS DEFER_SYNC
                 domain%east_in_2d(1,1,1)[domain%southwest_neighbor] = fsnow(2,2)
                 !DIR$ PGAS DEFER_SYNC
-                domain%east_in_3d(1,1,1:3,1)[domain%southwest_neighbor] = Ds(1:3,2,2)
+                domain%east_in_3d(1,1,1:NNsmax_HICAR,1)[domain%southwest_neighbor] = Ds(1:NNsmax_HICAR,2,2)
             endif
             if (.not.(domain%north_boundary) .and. .not.(domain%west_boundary)) then
                 !DIR$ PGAS DEFER_SYNC
                 domain%south_in_2d(1,1,1)[domain%northwest_neighbor] = fsnow(Nx_HICAR-1,2)
                 !DIR$ PGAS DEFER_SYNC
-                domain%south_in_3d(1,1,1:3,1)[domain%northwest_neighbor] = Ds(1:3,Nx_HICAR-1,2)
+                domain%south_in_3d(1,1,1:NNsmax_HICAR,1)[domain%northwest_neighbor] = Ds(1:NNsmax_HICAR,Nx_HICAR-1,2)
             endif
             if (.not.(domain%south_boundary) .and. .not.(domain%east_boundary)) then
                 !DIR$ PGAS DEFER_SYNC
                 domain%north_in_2d(1,1,1)[domain%southeast_neighbor] = fsnow(2,Ny_HICAR-1)
                 !DIR$ PGAS DEFER_SYNC
-                domain%north_in_3d(1,1,1:3,1)[domain%southeast_neighbor] = Ds(1:3,2,Ny_HICAR-1)
+                domain%north_in_3d(1,1,1:NNsmax_HICAR,1)[domain%southeast_neighbor] = Ds(1:NNsmax_HICAR,2,Ny_HICAR-1)
             endif
             if (.not.(domain%north_boundary) .and. .not.(domain%east_boundary)) then
                 !DIR$ PGAS DEFER_SYNC
                 domain%west_in_2d(1,1,1)[domain%northeast_neighbor] = fsnow(Nx_HICAR-1,Ny_HICAR-1)
                 !DIR$ PGAS DEFER_SYNC
-                domain%west_in_3d(1,1,1:3,1)[domain%northeast_neighbor] = Ds(1:3,Nx_HICAR-1,Ny_HICAR-1)
+                domain%west_in_3d(1,1,1:NNsmax_HICAR,1)[domain%northeast_neighbor] = Ds(1:NNsmax_HICAR,Nx_HICAR-1,Ny_HICAR-1)
             endif
 
             sync images ( domain%corner_neighbors )
 
             if (.not.(domain%south_boundary) .and. .not.(domain%west_boundary)) then
                 fsnow(1,1) = domain%west_in_2d(1,1,1)
-                Ds(1:3,1,1) = domain%west_in_3d(1,1,1:3,1)
+                Ds(1:NNsmax_HICAR,1,1) = domain%west_in_3d(1,1,1:NNsmax_HICAR,1)
             endif
             if (.not.(domain%north_boundary) .and. .not.(domain%west_boundary)) then
                 fsnow(Nx_HICAR,1) = domain%north_in_2d(1,1,1)
-                Ds(1:3,Nx_HICAR,1) = domain%north_in_3d(1,1,1:3,1)
+                Ds(1:NNsmax_HICAR,Nx_HICAR,1) = domain%north_in_3d(1,1,1:NNsmax_HICAR,1)
             endif
             if (.not.(domain%south_boundary) .and. .not.(domain%east_boundary)) then
                 fsnow(1,Ny_HICAR) = domain%south_in_2d(1,1,1)
-                Ds(1:3,1,Ny_HICAR) = domain%south_in_3d(1,1,1:3,1)
+                Ds(1:NNsmax_HICAR,1,Ny_HICAR) = domain%south_in_3d(1,1,1:NNsmax_HICAR,1)
             endif
             if (.not.(domain%north_boundary) .and. .not.(domain%east_boundary)) then
                 fsnow(Nx_HICAR,Ny_HICAR) = domain%east_in_2d(1,1,1)
-                Ds(1:3,Nx_HICAR,Ny_HICAR) = domain%east_in_3d(1,1,1:3,1)
+                Ds(1:NNsmax_HICAR,Nx_HICAR,Ny_HICAR) = domain%east_in_3d(1,1,1:NNsmax_HICAR,1)
             endif
 
         

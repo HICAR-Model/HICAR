@@ -248,7 +248,7 @@ contains
                          kVARS%sensible_heat, kVARS%latent_heat, kVARS%u_10m, kVARS%v_10m, kVARS%temperature_2m,        &
                          kVARS%snow_height,  kVARS%snowfall, kVARS%albedo, kVARS%QFX, kVARS%land_emissivity,            &
                          kVARS%humidity_2m, kVARS%surface_pressure, kVARS%longwave_up, kVARS%ground_heat_flux,          &
-                         kVARS%soil_totalmoisture, kVARS%soil_deep_temperature, kVARS%roughness_z0,                     &
+                         kVARS%soil_totalmoisture, kVARS%roughness_z0,                                                  &
                          kVARS%runoff_tstep, kVARS%snow_temperature, kVARS%Sice, kVARS%Sliq, kVARS%Ds, kVARS%fsnow, kVARS%Nsnow  ])
         endif
 
@@ -951,10 +951,10 @@ contains
                                 domain%water_table_depth%data_2d,       &
                                 domain%water_aquifer%data_2d,           &
                                 domain%storage_gw%data_2d,              &
-                                domain%snow_temperature%data_3d,        &
-                                domain%snow_layer_depth%data_3d,        &
-                                domain%snow_layer_ice%data_3d,          &
-                                domain%snow_layer_liquid_water%data_3d, &
+                                domain%snow_temperature%data_3d(:,1:3,:),        &
+                                domain%snow_layer_depth%data_3d(:,1:7,:),        &
+                                domain%snow_layer_ice%data_3d(:,1:3,:),          &
+                                domain%snow_layer_liquid_water%data_3d(:,1:3,:), &
                                 domain%mass_leaf%data_2d,               &
                                 domain%mass_root%data_2d,               &
                                 domain%mass_stem%data_2d,               &
@@ -1587,10 +1587,10 @@ contains
                              domain%water_table_depth%data_2d,         &
                              domain%water_aquifer%data_2d,             &
                              domain%storage_gw%data_2d,                &
-                             domain%snow_temperature%data_3d,          &
-                             domain%snow_layer_depth%data_3d,          &
-                             domain%snow_layer_ice%data_3d,            &
-                             domain%snow_layer_liquid_water%data_3d,   &
+                             domain%snow_temperature%data_3d(:,1:3,:), &
+                             domain%snow_layer_depth%data_3d(:,1:7,:), &
+                             domain%snow_layer_ice%data_3d(:,1:3,:),   &
+                             domain%snow_layer_liquid_water%data_3d(:,1:3,:),&
                              domain%mass_leaf%data_2d,                 &
                              domain%mass_root%data_2d,                 &
                              domain%mass_stem%data_2d,                 &

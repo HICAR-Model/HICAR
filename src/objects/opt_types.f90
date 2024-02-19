@@ -185,7 +185,8 @@ module options_types
         real :: wind_enhancement                        ! enhancement to winds in LSM to mitigate low bias in driving models
         real :: max_swe                                 ! maximum value for Snow water equivalent (excess above this is removed)
         real :: snow_den_const                          ! variable for converting snow height into SWE or visa versa when input data is incomplete 
-        
+        integer :: fsm_nsnow_max                        ! maximum number of snow layers for FSM2 to use. Set here, since it will
+                                                        ! change the size of arrays elsewhere in domain_obj        
         integer :: update_interval                      ! minimum time to let pass before recomputing LSM ~300s (it may be longer)  [s]
         ! the following categories will be set by default if an known LU_Category is used
         integer :: urban_category                       ! LU index value that equals "urban"

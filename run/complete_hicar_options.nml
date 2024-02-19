@@ -535,6 +535,8 @@
     sfc_layer_thickness  = 400.0      ! thickness of lower atmosphere to spread LH and SH fluxes over [m]
     dz_lsm_modification  = 0.5        ! multiplier on dz thickness in call to NoahMP, significantly improves ta2m
     wind_enhancement = 1.5            ! factor to increase wind speeds passed to NoahMP to account for biases in driving model and improve surface fluxes
+
+    fsm_nsnow_max = 6 		      ! The maximum number of snow layers to allow for an FSM2 simulation, if sm = 1
 /
 
 

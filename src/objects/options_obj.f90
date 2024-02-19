@@ -1,9 +1,6 @@
 submodule(options_interface) options_implementation
 
-    use icar_constants,             only : kMAINTAIN_LON, MAXFILELENGTH, MAXVARLENGTH, MAX_NUMBER_FILES, MAXLEVELS, &
-                                           kNO_STOCHASTIC, kVERSION_STRING, kMAX_FILE_LENGTH, kMAX_NAME_LENGTH,     &
-                                           kWATER_LAKE, kRA_RRTMG, &
-                                           kWIND_LINEAR, kLINEAR_ITERATIVE_WINDS, kITERATIVE_WINDS
+    use icar_constants
     use mod_wrf_constants,          only : piconst
     use io_routines,                only : io_newunit
     use time_io,                    only : find_timestep_in_file
@@ -58,9 +55,7 @@ contains
 
         call version_check(         options_filename,   this%parameters)
         call parameters_namelist(   options_filename,   this%parameters)
-        call io_namelist(           options_filename,   this)
         call physics_namelist(      options_filename,   this)
-        call wind_namelist(         options_filename,   this)
         call var_namelist(          options_filename,   this%parameters)
         call model_levels_namelist( options_filename,   this%parameters)
 
@@ -75,6 +70,9 @@ contains
         call rad_parameters_namelist(   this%parameters%rad_options_filename,   this)
         call pbl_parameters_namelist(   this%parameters%pbl_options_filename,   this)
         call sfc_parameters_namelist(   this%parameters%sfc_options_filename,   this)
+        
+        call io_namelist(           options_filename,   this)
+        call wind_namelist(         options_filename,   this)
 
         if (this%parameters%phys_suite /= '') call set_phys_suite(this)
         
@@ -1984,7 +1982,7 @@ contains
         logical :: surface_diagnostics               ! MJ added: true means that temeprature_2m is calculated using sensible heat flux otherwise it is read from the first grid at 10 m													 ! ..this mean the first layer thickness in z-direction shoud be 20 m for which the center is at 10 m
         integer :: sf_urban_phys
         real    :: nmp_soiltstep
-        integer :: nmp_dveg, nmp_opt_crs, nmp_opt_sfc, nmp_opt_btr, nmp_opt_run, nmp_opt_infdv, nmp_opt_frz, nmp_opt_inf, nmp_opt_rad, nmp_opt_alb, nmp_opt_snf, nmp_opt_tbot, nmp_opt_stc, nmp_opt_gla, nmp_opt_rsf, nmp_opt_soil, nmp_opt_pedo, nmp_opt_crop, nmp_opt_irr, nmp_opt_irrm, nmp_opt_tdrn, noahmp_output
+        integer :: fsm_nsnow_max, nmp_dveg, nmp_opt_crs, nmp_opt_sfc, nmp_opt_btr, nmp_opt_run, nmp_opt_infdv, nmp_opt_frz, nmp_opt_inf, nmp_opt_rad, nmp_opt_alb, nmp_opt_snf, nmp_opt_tbot, nmp_opt_stc, nmp_opt_gla, nmp_opt_rsf, nmp_opt_soil, nmp_opt_pedo, nmp_opt_crop, nmp_opt_irr, nmp_opt_irrm, nmp_opt_tdrn, noahmp_output
 
         integer :: lake_category                    ! index that defines the lake category in (some) LU_Categories
 
@@ -1997,7 +1995,7 @@ contains
                                   nmp_opt_inf, nmp_opt_rad, nmp_opt_alb, nmp_opt_snf, nmp_opt_tbot,           &
                                   nmp_opt_stc, nmp_opt_gla, nmp_opt_rsf, nmp_opt_soil, nmp_opt_pedo,          &
                                   nmp_opt_crop, nmp_opt_irr, nmp_opt_irrm, nmp_opt_tdrn, nmp_soiltstep,       &
-                                  sf_urban_phys, noahmp_output !! MJ added
+                                  sf_urban_phys, noahmp_output, fsm_nsnow_max !! MJ added
 
 
          ! because adv_options could be in a separate file
@@ -2055,7 +2053,9 @@ contains
         
         max_swe = 1e10
         snow_den_const = 200 !kg/m^3
-        
+       
+        fsm_nsnow_max = 6
+
         ! read the namelist options
         if (options%parameters%use_lsm_options) then
             open(io_newunit(name_unit), file=filename)
@@ -2081,6 +2081,7 @@ contains
         lsm_options%wind_enhancement     = wind_enhancement
         lsm_options%max_swe              = max_swe
         lsm_options%snow_den_const       = snow_den_const
+        lsm_options%fsm_nsnow_max        = fsm_nsnow_max
         lsm_options%surface_diagnostics  = surface_diagnostics !! MJ added
         lsm_options%sf_urban_phys        = sf_urban_phys
 
@@ -2119,10 +2120,17 @@ contains
         lsm_options%nmp_opt_tdrn         = nmp_opt_tdrn
         lsm_options%nmp_soiltstep        = nmp_soiltstep
         lsm_options%noahmp_output        = noahmp_output
-
         
         ! copy the data back into the global options data structure
         options%lsm_options = lsm_options
+
+        ! Change z length of snow arrays here, since we need to change their size for the output arrays, which are set in
+        ! io_options_namelist
+        if (options%physics%snowmodel==kSM_FSM) then
+                kSNOW_GRID_Z = options%lsm_options%fsm_nsnow_max
+                kSNOWSOIL_GRID_Z = kSNOW_GRID_Z+kSOIL_GRID_Z
+        endif
+
     end subroutine lsm_parameters_namelist
 
 
