@@ -177,11 +177,11 @@ contains
        RAINNC, RAINNCV, SNOWNC, SNOWNCV,                 &
        diag_effc3d, diag_effi3d,                         &
        !diag_dbz3d,             &
-       !diag_vmi3d_1, diag_di3d_1, 
+       diag_vmi3d_1, & !diag_di3d_1, 
        diag_rhopo3d_1, diag_phii3d_1, &
-       !diag_vmi3d_2, diag_di3d_2, 
+       diag_vmi3d_2, & !diag_di3d_2, 
        diag_rhopo3d_2, diag_phii3d_2, &
-       !diag_vmi3d_3, diag_di3d_3, 
+       diag_vmi3d_3, & !diag_di3d_3, 
        diag_rhopo3d_3, diag_phii3d_3 &
        !diag_itype_1,diag_itype_2,diag_itype_3                    &
        )
@@ -257,9 +257,9 @@ contains
     real, dimension(ims:ime, kms:kme, jms:jme), intent(inout) ::     &
          th, qv, qc, qr, nr, qi1, ni1, ai1, ci1, qi2, ni2, ai2, ci2, &
          qi3, ni3, ai3, ci3, diag_effc3d, diag_effi3d,               &
-         diag_rhopo3d_1, diag_phii3d_1,                              &
-         diag_rhopo3d_2, diag_phii3d_2,                              &
-         diag_rhopo3d_3, diag_phii3d_3                         
+         diag_rhopo3d_1, diag_phii3d_1, diag_vmi3d_1,                &
+         diag_rhopo3d_2, diag_phii3d_2, diag_vmi3d_2,                &
+         diag_rhopo3d_3, diag_phii3d_3, diag_vmi3d_3           
   !.. 2D variables
     real, dimension(ims:ime, jms:jme), intent(inout) ::              &
          rainnc, rainncv, snownc, snowncv
@@ -286,9 +286,9 @@ contains
          
     real, dimension(ims:ime, kms:kme, jms:jme) ::  &
                   diag_dbz3d,              &
-         diag_vmi3d_1, diag_di3d_1,        &
-         diag_vmi3d_2, diag_di3d_2,        &
-         diag_vmi3d_3, diag_di3d_3,        &
+         diag_di3d_1,        &
+         diag_di3d_2,        &
+         diag_di3d_3,        &
          diag_itype_1, diag_itype_2, diag_itype_3                                    
 
 

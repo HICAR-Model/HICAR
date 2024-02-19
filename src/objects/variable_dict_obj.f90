@@ -12,7 +12,7 @@ submodule(variable_dict_interface) variable_dict_implementation
     ! note that this dictionary is stored fairly inefficiently (both speed and space!)
     ! if this value gets larger one may need to think about re-writing to use a hash Table
     ! or similar
-    integer, parameter :: kMIN_VAR_DICT_SIZE = 128
+    integer, parameter :: kMIN_VAR_DICT_SIZE = 140
 
 contains
 

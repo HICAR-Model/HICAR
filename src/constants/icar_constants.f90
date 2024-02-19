@@ -262,10 +262,13 @@ module icar_constants
         integer :: re_snow
         integer :: ice1_rho
         integer :: ice1_phi
+        integer :: ice1_vmi
         integer :: ice2_rho
         integer :: ice2_phi
+        integer :: ice2_vmi
         integer :: ice3_rho
         integer :: ice3_phi
+        integer :: ice3_vmi
         integer :: wind_alpha
         integer :: froude
         integer :: blk_ri
@@ -363,7 +366,7 @@ module icar_constants
                                                             261, 262, 263, 264, 265, 266, 267, 268, 269, 270,  &
                                                             271, 272, 273, 274, 275, 276, 277, 278, 279, 280,  &
                                                             281, 282, 283, 284, 285, 286, 287, 288, 289, 290,  &
-                                                            291)
+                                                            291, 292, 293, 294)
 
     integer, parameter :: kINTEGER_BITS     = storage_size(kINTEGER_BITS)
     integer, parameter :: kMAX_STORAGE_VARS = storage_size(kVARS) / kINTEGER_BITS
@@ -465,8 +468,8 @@ module icar_constants
 
     ! the fixed lengths of various land-surface grids
     integer, parameter :: kSOIL_GRID_Z       = 4
-    integer, parameter :: kSNOW_GRID_Z       = 3
-    integer, parameter :: kSNOWSOIL_GRID_Z   = 7
+    integer            :: kSNOW_GRID_Z       = 3
+    integer            :: kSNOWSOIL_GRID_Z   = 7
     integer, parameter :: kCROP_GRID_Z       = 5
     integer, parameter :: kMONTH_GRID_Z      = 12
     integer, parameter :: kGECROS_GRID_Z     = 60

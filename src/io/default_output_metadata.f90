@@ -966,6 +966,21 @@ contains
         end associate
 
         !>------------------------------------------------------------
+        !!  Mass-weighted fall speed of ice1 category
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice1_vmi))
+            var%name        = "ice1_FS"
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "planar-nucleated mass-weighted fall speeds (m s^-1)"), &
+                               attribute_t("units",         "-"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
+
+        !>------------------------------------------------------------
         !!  Mass-weighted effective density of ice2 category
         !!------------------------------------------------------------
         associate(var=>var_meta(kVARS%ice2_rho))
@@ -989,6 +1004,20 @@ contains
             var%dimensions  = three_d_t_dimensions
             var%unlimited_dim=.True.
             var%attributes  = [attribute_t("non_standard_name", "number-weighted_aspect_ratio_of_ice2_category"), &
+                               attribute_t("units",         "-"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
+        !>------------------------------------------------------------
+        !!  Mass-weighted fall speed of ice2 category
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice2_vmi))
+            var%name        = "ice2_FS"
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "columnar-nucleated mass-weighted fall speeds (m s^-1)"), &
                                attribute_t("units",         "-"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
         end associate
@@ -1020,6 +1049,21 @@ contains
                                attribute_t("units",         "-"),                                                 &
                                attribute_t("coordinates",   "lat lon")]
         end associate
+
+        !>------------------------------------------------------------
+        !!  Mass-weighted fall speed of ice3 category
+        !!------------------------------------------------------------
+        associate(var=>var_meta(kVARS%ice3_vmi))
+            var%name        = "ice3_FS"
+            var%three_d     = .True.
+            var%two_d       = .False.
+            var%dimensions  = three_d_t_dimensions
+            var%unlimited_dim=.True.
+            var%attributes  = [attribute_t("non_standard_name", "aggregates mass-weighted fall speeds (m s^-1)"), &
+                               attribute_t("units",         "-"),                                                 &
+                               attribute_t("coordinates",   "lat lon")]
+        end associate
+
 
         !>------------------------------------------------------------
         !!  Alpha weighting factor in variational wind solver

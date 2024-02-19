@@ -277,10 +277,13 @@ module domain_interface
     ! ice hydrometeor properties diagnosted by ISHMAEL
     type(variable_t) :: ice1_rho
     type(variable_t) :: ice1_phi
+    type(variable_t) :: ice1_vmi
     type(variable_t) :: ice2_rho
     type(variable_t) :: ice2_phi
+    type(variable_t) :: ice2_vmi
     type(variable_t) :: ice3_rho
     type(variable_t) :: ice3_phi
+    type(variable_t) :: ice3_vmi
 
     type(variable_t) :: out_longwave_rad
     type(variable_t) :: longwave_cloud_forcing

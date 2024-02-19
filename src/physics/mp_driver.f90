@@ -211,7 +211,8 @@ contains
                        kVARS%ice1_c, kVARS%ice2_mass, kVARS%ice2_number, kVARS%ice2_a, kVARS%ice2_c, &
                        kVARS%ice3_mass, kVARS%ice3_number, kVARS%ice3_a, kVARS%ice3_c, &
                        kVARS%snowfall,    kVARS%precipitation,  kVARS%dz,   kVARS%re_cloud, kVARS%re_ice, &
-                       kVARS%ice1_rho, kVARS%ice1_phi, kVARS%ice2_rho, kVARS%ice2_phi, kVARS%ice3_rho, kVARS%ice3_phi  ])
+                       kVARS%ice1_rho, kVARS%ice1_phi, kVARS%ice1_vmi, kVARS%ice2_rho, kVARS%ice2_phi, kVARS%ice2_vmi, &
+			kVARS%ice3_rho, kVARS%ice3_phi, kVARS%ice3_vmi  ])
 
         ! List the variables that are required to be advected for the simple microphysics
         call options%advect_vars( &
@@ -245,7 +246,7 @@ contains
                       kVARS%snowfall,    kVARS%precipitation,           kVARS%graupel,      kVARS%graupel_in_air,     &
                       kVARS%graupel_number_concentration, kVARS%snow_number_concentration, &
                       kVARS%tend_qr, kVARS%tend_qs, kVARS%tend_qi, kVARS%dz,   &
-                      kVARS%re_cloud, kVARS%re_ice, kVARS%re_snow    ])
+                      kVARS%re_cloud, kVARS%re_ice, kVARS%re_snow, kVARS%ice1_vmi, kVARS%ice2_vmi    ])
 
         ! List the variables that are required to be advected for the simple microphysics
         call options%advect_vars( &
@@ -594,6 +595,8 @@ contains
                              EFFC = domain%re_cloud%data_3d,          &
                              EFFI = domain%re_ice%data_3d,            &
                              EFFS = domain%re_snow%data_3d,           &
+                             ISED3D = domain%ice2_vmi%data_3d,           &
+                             SSED3D = domain%ice1_vmi%data_3d,           &
                              refl_10cm = refl_10cm, diagflag = .False.,   &
                              do_radar_ref=0,                              & ! GT added for reflectivity calcs
                              qrcuten=domain%tend%qr,                      &
@@ -640,15 +643,15 @@ contains
                              diag_effc3d=domain%re_cloud%data_3d,               &
                              diag_effi3d=domain%re_ice%data_3d,                 &
                              !diag_dbz3d=refl_10cm,               &
-                             !diag_vmi3d_1=vmi3d,                 &
+                             diag_vmi3d_1=domain%ice1_vmi%data_3d,                 &
                              !diag_di3d_1=di3d,                   &
                              diag_rhopo3d_1=domain%ice1_rho%data_3d,          &
                              diag_phii3d_1=domain%ice1_phi%data_3d,           &
-                             !diag_vmi3d_2=vmi3d_2,               &
-                             !diag_di3d_2=di3d_2,                 &
+                             diag_vmi3d_2=domain%ice2_vmi%data_3d,               &
+                             !diag_di3d_2=di3d_2,                 
                              diag_rhopo3d_2=domain%ice2_rho%data_3d,          &
                              diag_phii3d_2=domain%ice2_phi%data_3d,           &
-                             !diag_vmi3d_3=vmi3d_3,               &
+                             diag_vmi3d_3=domain%ice3_vmi%data_3d,               &
                           
                           !diag_di3d_3=di3d_3,                 &
                              diag_rhopo3d_3=domain%ice3_rho%data_3d,          &
