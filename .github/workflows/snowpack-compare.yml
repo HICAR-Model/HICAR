@@ -36,7 +36,7 @@ jobs:
       # debug HICAR would compare an -O0 port against -O3 C++ physics
       HICAR_MODE: release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: ./.github/actions/hicar-deps
       - uses: ./.github/actions/snowpack-src-cache   # outage fallback for the git.wsl.ch snowpack+meteoio fetch
@@ -67,7 +67,7 @@ jobs:
       - name: Compare C++ vs Fortran SNOWPACK
         run: make -C build_snowpack_fortran test_snowpack
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: snowpack-compare-diagnostics
@@ -84,7 +84,7 @@ jobs:
     permissions:
       statuses: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/sign-commit
         with:
           sha: ${{ github.event.pull_request.head.sha || github.sha }}

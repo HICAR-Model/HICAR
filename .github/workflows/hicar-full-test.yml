@@ -37,7 +37,7 @@ jobs:
   build-deps:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: ./.github/actions/hicar-deps
 
@@ -48,7 +48,7 @@ jobs:
     env:
       HICAR_MODE: debug
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: ./.github/actions/hicar-deps   # warm cache => short-circuits
       - uses: ./.github/actions/snowpack-src-cache   # outage fallback for the git.wsl.ch fetch
@@ -64,7 +64,7 @@ jobs:
         run: bash helpers/example_namelists/generate_examples.sh "$GITHUB_WORKSPACE/bin/HICAR_debug"
       - name: Reproducibility (decomposition + restart)
         run: cd build && make test_reproducibility
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: cpu-debug-diagnostics
@@ -81,7 +81,7 @@ jobs:
     env:
       HICAR_MODE: release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: ./.github/actions/hicar-deps   # warm cache => short-circuits
       - uses: ./.github/actions/snowpack-src-cache   # outage fallback for the git.wsl.ch fetch
@@ -90,14 +90,14 @@ jobs:
       - name: Regenerate example namelists
         run: bash helpers/example_namelists/generate_examples.sh "$GITHUB_WORKSPACE/bin/HICAR"
       - name: Upload regenerated example namelists
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: regenerated-namelists
           path: helpers/example_namelists/*.nml
           if-no-files-found: error
       - name: Integration (all config cases — run only)
         run: cd build && make test_cases
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: integration-diagnostics
@@ -120,7 +120,7 @@ jobs:
           echo "blessed regression commit: $sha"
       - name: Cache blessed regression exe   # rebuilt only when the blessed commit changes
         if: steps.blessed.outputs.sha != ''
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             bin/HICAR_blessed
@@ -130,7 +130,7 @@ jobs:
         if: steps.blessed.outputs.sha != ''
         continue-on-error: true   # flip to false once a blessed commit is established
         run: cd build && make test_regression
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: cpu-release-diagnostics
@@ -145,7 +145,7 @@ jobs:
     permissions:
       statuses: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/sign-commit
         with:
           sha: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -161,13 +161,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
       - name: Download regenerated example namelists
         id: dl
         continue-on-error: true   # absent if cpu-release failed before regen -> skip
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: regenerated-namelists
           path: helpers/example_namelists
