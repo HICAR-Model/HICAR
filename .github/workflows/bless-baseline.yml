@@ -39,7 +39,7 @@ jobs:
             admin|maintain) echo "Bless authorized." ;;
             *) echo "::error::Regression bless is restricted to repo admins/maintainers (role: $role)"; exit 1 ;;
           esac
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - name: Resolve commit (warn if not full-tested)
         id: resolve

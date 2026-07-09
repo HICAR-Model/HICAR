@@ -40,7 +40,7 @@ jobs:
     env:
       HICAR_MODE: debug
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
@@ -56,7 +56,7 @@ jobs:
 
       - name: Upload valgrind log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: valgrind-log
           path: build/valgrind.log
@@ -71,7 +71,7 @@ jobs:
     env:
       STATE: ${{ needs.memcheck.result == 'success' && 'success' || 'failure' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/sign-commit
         with:
           sha: ${{ github.event.workflow_run.head_sha || github.sha }}

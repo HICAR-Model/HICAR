@@ -18,6 +18,6 @@ jobs:
       pull-requests: read     # read merged PRs for the notes
     runs-on: ubuntu-22.04
     steps:
-      - uses: release-drafter/release-drafter@v6
+      - uses: release-drafter/release-drafter@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
